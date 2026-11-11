@@ -1,11 +1,20 @@
 extends Control
-## The dialogue box: bottom of the screen, about 40% of its height (tuning
-## "dialogue.box_height"), inside the safe area. A name plate and a plain
-## coloured square portrait (with a tiny face for the expression) sit on the
+## The dialogue box, drawn at the world's pixel scale: everything (box,
+## text, portrait, choices) is laid out in world pixels inside its own
+## transparent SubViewport the size of the world view, which is shown at the
+## same whole-number scale k as the world. So one font pixel is one world
+## pixel is k x k device pixels, and nothing is ever blurry.
+##
+## Layout (tuning.json "dialogue", in world px): a box along the bottom of
+## the safe area, `lines` lines of `font_px` Pixelify Sans tall (never more
+## than `max_height` of the screen), a `portrait_px` square portrait (a plain
+## colour with a tiny pixel face for the expression) and a name plate on the
 ## speaker's side: Fern on the right, everyone else on the left. Text types
 ## out (scripts/core/typewriter.gd) with voice blips; a blinking arrow shows
-## when the line is done. Choices appear as rows above the box, on Fern's
-## side, each at least `min_choice_css` CSS px tall.
+## when the line is done. Choices are a compact stack just above the box on
+## the right, each only as wide as its text, with a cursor on the selected
+## one; on touch screens they are `touch_choice_css` CSS px tall for thumbs.
+## The box slides and fades in and out over `anim_s` seconds.
 ##
 ## Input: game.gd forwards Interact (finish the line, then advance / pick)
 ## and up/down (move the choice). Taps and clicks are read here: a tap
@@ -13,16 +22,23 @@ extends Control
 ## InputEventScreenTouch; mouse clicks only count when they are real (not the
 ## browser's emulated mouse for a touch), so a tap never counts twice.
 ## The box only shows lines; DialogueManager runs the conversation.
+## The rects below are in UI units (for input, tests and the camera); the
+## _bp_* ones are the same in box pixels (= world pixels).
 
 signal advance_requested
 signal choice_made(index: int)
+## "open", "move", "confirm", "advance": for UI sounds.
+signal ui_event(kind: String)
 
 const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
 const Typewriter := preload("res://scripts/core/typewriter.gd")
-const INK := Color(0.11, 0.094, 0.141)
-const PAPER := Color("#f6eedb")
-const SELECT := Color("#ffd873")
-const BORDER := 3.0
+const JsonData := preload("res://scripts/core/json_data.gd")
+const PALETTE_PATH := "res://data/palette.json"
+static var INK := Color("#1c1824")
+static var PAPER := Color("#f6eedb")
+static var SELECT := Color("#ffd873")
+## Border width in box pixels.
+const BORDER := 1
 
 var t: Dictionary = {}
 var speakers: Dictionary = {}
@@ -36,9 +52,11 @@ var selected := 0
 ## Highlight the selected choice (keyboard / gamepad players). Touch
 ## players just tap.
 var show_selection := true
+## Touch layout: taller choice rows.
+var touch_rows := false
 var metrics
 var font: Font
-var font_size := 18
+var font_size := 12
 
 ## Layout, UI units.
 var box_rect := Rect2()
@@ -46,28 +64,37 @@ var portrait_rect := Rect2()
 var plate_rect := Rect2()
 var text_rect := Rect2()
 var choice_rects: Array[Rect2] = []
-var choice_row_h := 44.0
+## UI units per box pixel (k / px_per_unit).
+var unit := 1.0
+## Device pixels per box pixel (the world's k).
+var k := 1
 
+var viewport: SubViewport
+var canvas: Node2D
+var view: Sprite2D
 var text_label: Label
 var name_label: Label
 var choice_labels: Array[Label] = []
 
-var _pad := 12.0
-var _plate_h := 24.0
+## Layout, box pixels.
+var _bp_box := Rect2i()
+var _bp_portrait := Rect2i()
+var _bp_plate := Rect2i()
+var _bp_text := Rect2i()
+var _bp_choices: Array[Rect2i] = []
+var _bp_safe := Rect2i()
+var _view_rect := Rect2()
 var _blink := 0.0
 var _opened_frame := -1
 var _pressed_choice := -1
-var _box_style := StyleBoxFlat.new()
+## 0 = hidden, 1 = fully shown; eases towards `is_open`.
+var _anim := 0.0
 
 
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	visible = false
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_box_style.bg_color = PAPER
-	_box_style.border_color = INK
-	_box_style.set_border_width_all(int(BORDER))
-	_box_style.set_corner_radius_all(6)
 
 
 func configure(tuning: Dictionary, speaker_data: Dictionary, voice_node: Node) -> void:
@@ -75,26 +102,59 @@ func configure(tuning: Dictionary, speaker_data: Dictionary, voice_node: Node) -
 	speakers = speaker_data
 	voice = voice_node
 	typewriter.configure(t)
+	var ui: Dictionary = JsonData.load_dict(PALETTE_PATH).get("ui", {})
+	INK = Color(str(ui.get("ink", INK.to_html())))
+	PAPER = Color(str(ui.get("paper", PAPER.to_html())))
+	SELECT = Color(str(ui.get("select", SELECT.to_html())))
+	font_size = int(t.get("font_px", 12))
 	var base := AssetCatalog.font("font.dialogue")
 	if base == null:
 		base = get_theme_default_font()
+	if base is FontFile:
+		# Pixel-exact: no smoothing, rasterised at its own size (the box's
+		# SubViewport is scaled up by k afterwards).
+		var ff := base as FontFile
+		ff.antialiasing = TextServer.FONT_ANTIALIASING_NONE
+		ff.oversampling = 1.0
+		ff.hinting = TextServer.HINTING_NONE
+		ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
 	# No ligatures: Pixelify Sans' "fi" ligature reads as an "A" ("Arst").
 	var fv := FontVariation.new()
 	fv.base_font = base
 	fv.opentype_features = {TextServerManager.get_primary_interface().name_to_tag("liga"): 0}
 	font = fv
+
+	viewport = SubViewport.new()
+	viewport.name = "BoxViewport"
+	viewport.transparent_bg = true
+	viewport.disable_3d = true
+	viewport.snap_2d_transforms_to_pixel = true
+	viewport.snap_2d_vertices_to_pixel = true
+	viewport.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+	viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	viewport.gui_disable_input = true
+	add_child(viewport)
+	canvas = Node2D.new()
+	canvas.name = "Canvas"
+	canvas.draw.connect(_draw_box)
+	viewport.add_child(canvas)
+	view = Sprite2D.new()
+	view.name = "View"
+	view.centered = false
+	view.texture = viewport.get_texture()
+	view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	add_child(view)
+
 	text_label = _label("Text")
 	text_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	# Wrap the whole line up front so words don't jump lines while typing.
 	text_label.visible_characters_behavior = TextServer.VC_CHARS_AFTER_SHAPING
 	text_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	text_label.add_theme_constant_override("line_spacing", int(t.get("line_px", 13)) - _font_height())
 	name_label = _label("Name")
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	for i in 3:
 		var l := _label("Choice%d" % i)
-		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		choice_labels.append(l)
 
 
@@ -103,32 +163,48 @@ func _label(n: String) -> Label:
 	l.name = n
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	l.add_theme_font_override("font", font)
+	l.add_theme_font_size_override("font_size", font_size)
 	l.add_theme_color_override("font_color", INK)
-	add_child(l)
+	viewport.add_child(l)
 	return l
 
 
-func layout(m) -> void:
+func _font_height() -> int:
+	return int(font.get_height(font_size))
+
+
+## Lays the box out over the world view: `view_rect` (UI units) shows
+## `view_size` world pixels at `scale` device pixels each.
+func layout(m, view_rect: Rect2 = Rect2(), view_size: Vector2i = Vector2i.ZERO, scale: int = 0) -> void:
 	metrics = m
-	var safe: Rect2 = m.safe_rect
-	var margin := float(t.get("margin", 8))
-	_pad = float(t.get("padding", 12))
-	var box_h := roundf(m.ui_size.y * float(t.get("box_height", 0.4)))
-	font_size = clampi(roundi(box_h * float(t.get("font_size_of_box", 0.13))), int(t.get("font_size_min", 14)), int(t.get("font_size_max", 28)))
-	_plate_h = roundf(font_size * 1.5)
-	box_h = minf(box_h, safe.size.y - margin * 2.0 - _plate_h)
-	box_rect = Rect2(Vector2(safe.position.x + margin, safe.end.y - margin - box_h).round(),
-		Vector2(safe.size.x - margin * 2.0, box_h).round())
-	# 44 CSS px in UI units.
-	var min_row := float(t.get("min_choice_css", 44)) * float(m.dpr) / float(m.px_per_unit.y)
-	choice_row_h = ceilf(maxf(min_row, font_size * 1.8))
-	for l: Label in [text_label, name_label] + choice_labels:
-		l.add_theme_font_size_override("font_size", font_size)
+	if scale <= 0:
+		# No world view (tests of the box alone): box pixels = 2 device px.
+		scale = 2
+		view_size = Vector2i((Vector2(m.px_size) / scale).ceil())
+		view_rect = Rect2(Vector2.ZERO, m.px_to_ui(Vector2(view_size) * scale))
+	k = scale
+	_view_rect = view_rect
+	unit = float(k) / float(m.px_per_unit.y)
+	viewport.size = view_size
+	view.position = view_rect.position
+	view.scale = Vector2(k, k) / m.px_per_unit
+	# Safe area in box pixels, shrunk to whole pixels.
+	var s0: Vector2 = ((m.safe_rect.position - view_rect.position) / unit).ceil()
+	var s1: Vector2 = ((m.safe_rect.end - view_rect.position) / unit).floor()
+	s0 = s0.max(Vector2.ZERO)
+	s1 = s1.min(Vector2(view_size))
+	_bp_safe = Rect2i(Vector2i(s0), Vector2i(s1 - s0))
 	_relayout()
+
+
+## Box pixels -> UI units.
+func _ui(r: Rect2i) -> Rect2:
+	return Rect2(_view_rect.position + Vector2(r.position) * unit, Vector2(r.size) * unit)
 
 
 ## Shows a line (a "line" event) and starts typing it.
 func show_line(ev: Dictionary) -> void:
+	var was_open := is_open
 	line = ev
 	is_open = true
 	visible = true
@@ -141,16 +217,21 @@ func show_line(ev: Dictionary) -> void:
 	text_label.visible_characters = 0
 	var sp := speaker()
 	name_label.text = str(sp.get("name", ev.get("speaker", "")))
-	var col := speaker_color()
-	name_label.add_theme_color_override("font_color", _ink_on(col))
+	name_label.add_theme_color_override("font_color", _ink_on(speaker_color()))
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	if not was_open:
+		ui_event.emit("open")
 	_relayout()
 
 
 func close() -> void:
 	is_open = false
-	visible = false
-	line = {}
 	_pressed_choice = -1
+
+
+## True while the open / close slide is still running.
+func animating() -> bool:
+	return _anim != (1.0 if is_open else 0.0)
 
 
 func speaker() -> Dictionary:
@@ -187,8 +268,10 @@ func press() -> void:
 		typewriter.finish()
 		_sync_text()
 	elif choices_shown():
+		ui_event.emit("confirm")
 		choice_made.emit(selected)
 	else:
+		ui_event.emit("advance")
 		advance_requested.emit()
 
 
@@ -198,10 +281,21 @@ func move_selection(delta: int) -> void:
 	var n: int = line["choices"].size()
 	selected = posmod(selected + delta, n)
 	show_selection = true
-	queue_redraw()
+	ui_event.emit("move")
+	canvas.queue_redraw()
 
 
 func _process(dt: float) -> void:
+	var target := 1.0 if is_open else 0.0
+	if _anim != target:
+		var step := dt / maxf(0.001, float(t.get("anim_s", 0.15)))
+		_anim = move_toward(_anim, target, step)
+		_place_view()
+		if _anim == 0.0 and not is_open:
+			visible = false
+			line = {}
+			viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+			return
 	if not is_open:
 		return
 	var was_typing := is_typing()
@@ -212,7 +306,15 @@ func _process(dt: float) -> void:
 	_sync_text()
 	_blink += dt
 	if was_typing or choices_shown() or not is_typing():
-		queue_redraw()
+		canvas.queue_redraw()
+
+
+## Slide (whole box pixels, so k x k device pixels) and fade.
+func _place_view() -> void:
+	var e := ease(_anim, 0.5)
+	var slide := roundf((1.0 - e) * float(t.get("anim_slide_px", 6)))
+	view.position = _view_rect.position + Vector2(0, slide * unit)
+	view.modulate.a = e
 
 
 func _sync_text() -> void:
@@ -246,7 +348,8 @@ func _input(event: InputEvent) -> void:
 		var hover := _choice_at(_local(event.position))
 		if hover >= 0 and hover != selected:
 			selected = hover
-			queue_redraw()
+			ui_event.emit("move")
+			canvas.queue_redraw()
 		return
 	else:
 		return
@@ -259,13 +362,14 @@ func _input(event: InputEvent) -> void:
 			_pressed_choice = _choice_at(p)
 			if _pressed_choice >= 0:
 				selected = _pressed_choice
-				queue_redraw()
+				canvas.queue_redraw()
 		else:
 			press()
 	elif up and _pressed_choice >= 0:
 		var i := _pressed_choice
 		_pressed_choice = -1
 		if _choice_at(p) == i and choices_shown():
+			ui_event.emit("confirm")
 			choice_made.emit(i)
 
 
@@ -280,122 +384,149 @@ func _choice_at(p: Vector2) -> int:
 	return -1
 
 
+## Height of the box for `lines` lines of text (box pixels).
+func box_height() -> int:
+	var lines := int(t.get("lines", 3))
+	var text_h := lines * _font_height() + (lines - 1) * (int(t.get("line_px", 13)) - _font_height())
+	var inner := maxi(text_h, int(t.get("portrait_px", 32)))
+	return inner + int(t.get("padding_px", 4)) * 2 + BORDER * 2
+
+
 func _relayout() -> void:
 	if metrics == null:
 		return
 	var right := on_right()
-	var b := box_rect
-	var side := clampf(b.size.y - _pad * 2.0, 0.0, float(t.get("portrait_max", 180)))
-	portrait_rect = Rect2(Vector2(b.end.x - _pad - side if right else b.position.x + _pad, b.position.y + _pad), Vector2(side, side))
-	var tx0 := b.position.x + _pad if right else portrait_rect.end.x + _pad
-	var tx1 := portrait_rect.position.x - _pad if right else b.end.x - _pad
-	text_rect = Rect2(tx0, b.position.y + _pad, maxf(0.0, tx1 - tx0), maxf(0.0, b.size.y - _pad * 2.0))
-	text_label.position = text_rect.position
-	text_label.size = text_rect.size
+	var margin := int(t.get("margin_px", 4))
+	var pad := int(t.get("padding_px", 4))
+	var safe := _bp_safe
+	var h := box_height()
+	var w := safe.size.x - margin * 2
+	_bp_box = Rect2i(safe.position.x + margin, safe.end.y - margin - h, w, h)
+	var b := _bp_box
+	var side := int(t.get("portrait_px", 32))
+	var inner_y := b.position.y + BORDER + pad
+	_bp_portrait = Rect2i(b.end.x - BORDER - pad - side if right else b.position.x + BORDER + pad, inner_y, side, side)
+	var tx0 := b.position.x + BORDER + pad if right else _bp_portrait.end.x + pad
+	var tx1 := _bp_portrait.position.x - pad if right else b.end.x - BORDER - pad
+	_bp_text = Rect2i(tx0, inner_y - 1, maxi(0, tx1 - tx0), b.size.y - BORDER * 2 - pad * 2 + 2)
+	text_label.position = _bp_text.position
+	text_label.size = _bp_text.size
 
-	var name_w := font.get_string_size(name_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-	var plate_w := ceilf(name_w + _pad * 2.0)
-	var plate_x := b.end.x - _pad - plate_w if right else b.position.x + _pad
-	plate_rect = Rect2(plate_x, b.position.y - _plate_h + BORDER, plate_w, _plate_h)
-	name_label.position = plate_rect.position
-	name_label.size = plate_rect.size
+	var fh := _font_height()
+	var name_w := int(font.get_string_size(name_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
+	var plate_h := int(t.get("plate_px", 12)) + BORDER
+	var plate_w := name_w + pad * 2 + BORDER * 2
+	var plate_x := b.end.x - pad - plate_w if right else b.position.x + pad
+	_bp_plate = Rect2i(plate_x, b.position.y - plate_h + BORDER, plate_w, plate_h)
+	name_label.position = Vector2(_bp_plate.position.x + BORDER, _bp_plate.position.y + BORDER + (plate_h - BORDER - fh) / 2 + 1)
+	name_label.size = Vector2(_bp_plate.size.x - BORDER * 2, fh)
 
-	# Choices: rows stacked upwards from the box, right-aligned (Fern's side).
+	# Choices: rows only as wide as their text, stacked up from the box's
+	# top right, above the name plate when that is on the right too.
 	var texts: Array = line.get("choices", [])
-	choice_rects = []
-	var gap := float(t.get("choice_gap", 6))
-	var widest := 0.0
-	for c in texts:
-		widest = maxf(widest, font.get_string_size(str(c), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
-	var marker := font_size * 1.2
-	var w := clampf(ceilf(widest + marker + _pad * 2.0), b.size.x * 0.35, b.size.x * 0.75)
-	var bottom := b.position.y - gap
-	if right:
-		bottom = plate_rect.position.y - gap
-	var top_limit: float = metrics.safe_rect.position.y + float(t.get("top_reserved", 56))
+	var cpad := int(t.get("choice_pad_px", 4))
+	var gap := int(t.get("choice_gap_px", 2))
+	var cursor := 6
+	var row_h := fh - 2 + BORDER * 2
+	if touch_rows:
+		var css := clampf(float(t.get("touch_choice_css", 38)), float(t.get("min_choice_css", 36)), float(t.get("max_choice_css", 40)))
+		row_h = maxi(row_h, ceili(css * float(metrics.dpr) / float(k)))
+	var bottom := (_bp_plate.position.y if right else b.position.y) - gap
+	var top_limit := safe.position.y + int(t.get("top_reserved_px", 20))
 	var n := texts.size()
-	var total := n * choice_row_h + maxf(0.0, n - 1) * gap
+	var total := n * row_h + maxi(0, n - 1) * gap
 	if bottom - total < top_limit:
-		bottom = minf(top_limit + total, b.end.y - _pad)
+		bottom = top_limit + total
+	_bp_choices = []
 	for i in n:
-		var y := bottom - (n - i) * choice_row_h - (n - 1 - i) * gap
-		choice_rects.append(Rect2(Vector2(b.end.x - w, y).round(), Vector2(w, choice_row_h).round()))
+		var tw := int(font.get_string_size(str(texts[i]), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
+		# +2: Labels draw a pixel or two wider than get_string_size says.
+		var cw := mini(tw + 2 + cpad * 2 + cursor + BORDER * 2, w)
+		var y := bottom - (n - i) * row_h - (n - 1 - i) * gap
+		_bp_choices.append(Rect2i(b.end.x - cw, y, cw, row_h))
 	for i in choice_labels.size():
-		if i < choice_rects.size():
-			var r := choice_rects[i]
-			choice_labels[i].position = r.position + Vector2(_pad + marker, 0)
-			choice_labels[i].size = Vector2(r.size.x - _pad * 2.0 - marker, r.size.y)
+		if i < _bp_choices.size():
+			var r := _bp_choices[i]
+			choice_labels[i].position = Vector2(r.position.x + BORDER + cpad + cursor, r.position.y + (row_h - fh) / 2 + 1)
+			choice_labels[i].size = Vector2(r.size.x - BORDER * 2 - cpad * 2 - cursor + 2, fh)
+
+	box_rect = _ui(_bp_box)
+	portrait_rect = _ui(_bp_portrait)
+	plate_rect = _ui(_bp_plate)
+	text_rect = _ui(_bp_text)
+	choice_rects = []
+	for r in _bp_choices:
+		choice_rects.append(_ui(r))
+	_place_view()
 	_sync_text()
-	queue_redraw()
+	canvas.queue_redraw()
 
 
-func _draw() -> void:
-	if not is_open:
+func _draw_box() -> void:
+	if line.is_empty():
 		return
 	var col := speaker_color()
-	# Name plate (behind the box's top border), box, portrait.
-	var plate := StyleBoxFlat.new()
-	plate.bg_color = col
-	plate.border_color = INK
-	plate.set_border_width_all(int(BORDER))
-	plate.corner_radius_top_left = 6
-	plate.corner_radius_top_right = 6
-	draw_style_box(plate, plate_rect)
-	draw_style_box(_box_style, box_rect)
-	draw_rect(portrait_rect, col)
-	draw_rect(portrait_rect, INK, false, BORDER)
-	_draw_face(portrait_rect, str(line.get("expression", "neutral")), _ink_on(col))
+	_panel(_bp_plate, col)
+	_panel(_bp_box, PAPER)
+	# Square plate corners into the box: the plate sits on its top border.
+	canvas.draw_rect(Rect2(_bp_plate.position.x + BORDER, _bp_box.position.y, _bp_plate.size.x - BORDER * 2, BORDER), col)
+	canvas.draw_rect(Rect2(_bp_portrait), col)
+	canvas.draw_rect(Rect2(_bp_portrait).grow(-0.5), INK, false, 1.0)
+	_draw_face(_bp_portrait, str(line.get("expression", "neutral")), _ink_on(col))
 	# "Line done" arrow, blinking.
-	if not is_typing() and not choices_shown() and fmod(_blink, float(t.get("arrow_blink", 0.5)) * 2.0) < float(t.get("arrow_blink", 0.5)):
-		var s := maxf(6.0, font_size * 0.4)
-		var tip := Vector2(text_rect.end.x - s, text_rect.end.y - s * 0.4)
-		draw_colored_polygon(PackedVector2Array([tip + Vector2(-s, -s), tip + Vector2(s, -s), tip]), INK)
-	# Choice rows.
+	var blink := float(t.get("arrow_blink", 0.5))
+	if is_open and not is_typing() and not choices_shown() and fmod(_blink, blink * 2.0) < blink:
+		var tip := Vector2i(_bp_box.end.x - BORDER - 4, _bp_box.end.y - BORDER - 3)
+		for row in 3:
+			canvas.draw_rect(Rect2(tip.x - 2 + row, tip.y - 3 + row, 5 - row * 2, 1), INK)
 	if choices_shown():
-		for i in choice_rects.size():
-			var r := choice_rects[i]
+		for i in _bp_choices.size():
+			var r := _bp_choices[i]
 			var on := show_selection and i == selected
-			var st := StyleBoxFlat.new()
-			st.bg_color = SELECT if on else PAPER
-			st.border_color = INK
-			st.set_border_width_all(int(BORDER))
-			st.set_corner_radius_all(6)
-			draw_style_box(st, r)
+			_panel(r, SELECT if on else PAPER)
 			if on:
-				var s := font_size * 0.35
-				var c := Vector2(r.position.x + _pad + s, r.get_center().y)
-				draw_colored_polygon(PackedVector2Array([c + Vector2(-s, -s), c + Vector2(s, 0), c + Vector2(-s, s)]), INK)
+				# A small "▶" cursor.
+				var cx := r.position.x + BORDER + int(t.get("choice_pad_px", 4)) - 1
+				var cy := r.position.y + r.size.y / 2
+				for col_i in 3:
+					canvas.draw_rect(Rect2(cx + col_i, cy - 2 + col_i, 1, 5 - col_i * 2), INK)
 
 
-## A tiny placeholder face, so expressions are visible before real portraits.
-func _draw_face(r: Rect2, expression: String, ink: Color) -> void:
-	var s := r.size.x
-	var w := maxf(2.0, roundf(s * 0.05))
-	var le := r.position + Vector2(s * 0.32, s * 0.45)
-	var re := r.position + Vector2(s * 0.68, s * 0.45)
-	var mouth := r.position + Vector2(s * 0.5, s * 0.7)
-	var e := s * 0.07
+## A filled rect with a 1 px ink border and clipped corners.
+func _panel(r: Rect2i, fill: Color) -> void:
+	canvas.draw_rect(Rect2(r.grow(-BORDER)), fill)
+	canvas.draw_rect(Rect2(r.position.x + 1, r.position.y, r.size.x - 2, BORDER), INK)
+	canvas.draw_rect(Rect2(r.position.x + 1, r.end.y - BORDER, r.size.x - 2, BORDER), INK)
+	canvas.draw_rect(Rect2(r.position.x, r.position.y + 1, BORDER, r.size.y - 2), INK)
+	canvas.draw_rect(Rect2(r.end.x - BORDER, r.position.y + 1, BORDER, r.size.y - 2), INK)
+
+
+## A tiny placeholder face in whole pixels, so expressions read before real
+## portraits exist.
+func _draw_face(r: Rect2i, expression: String, ink: Color) -> void:
+	var o := Vector2(r.position)
+	var s := r.size.x / 32.0
+	var px := func(x: float, y: float, w: float = 1, h: float = 1) -> void:
+		canvas.draw_rect(Rect2((o + Vector2(x, y) * s).round(), (Vector2(w, h) * s).round().max(Vector2.ONE)), ink)
 	match expression:
 		"happy":
-			for c in [le, re]:
-				draw_polyline(PackedVector2Array([c + Vector2(-e, e * 0.5), c + Vector2(0, -e * 0.5), c + Vector2(e, e * 0.5)]), ink, w)
-			draw_polyline(PackedVector2Array([mouth + Vector2(-e * 2, -e * 0.5), mouth + Vector2(0, e * 0.8), mouth + Vector2(e * 2, -e * 0.5)]), ink, w)
+			for ex in [9, 20]:
+				px.call(ex, 14); px.call(ex + 1, 13, 1, 1); px.call(ex + 2, 14)
+			px.call(12, 21); px.call(13, 22, 6, 1); px.call(19, 21)
 		"sad":
-			for c in [le, re]:
-				draw_rect(Rect2(c - Vector2(w, w) * 0.75, Vector2(w, w) * 1.5), ink)
-			draw_line(le + Vector2(-e * 1.4, -e * 0.8), le + Vector2(e * 0.8, -e * 1.8), ink, w)
-			draw_line(re + Vector2(e * 1.4, -e * 0.8), re + Vector2(-e * 0.8, -e * 1.8), ink, w)
-			draw_polyline(PackedVector2Array([mouth + Vector2(-e * 2, e * 0.6), mouth + Vector2(0, -e * 0.6), mouth + Vector2(e * 2, e * 0.6)]), ink, w)
+			for ex in [10, 20]:
+				px.call(ex, 14, 2, 2)
+			px.call(8, 12, 3, 1); px.call(21, 12, 3, 1)
+			px.call(12, 23); px.call(13, 22, 6, 1); px.call(19, 23)
 		"annoyed":
-			for c in [le, re]:
-				draw_line(c + Vector2(-e, 0), c + Vector2(e, 0), ink, w)
-			draw_line(le + Vector2(-e * 1.4, -e * 1.8), le + Vector2(e * 1.2, -e * 0.9), ink, w)
-			draw_line(re + Vector2(e * 1.4, -e * 1.8), re + Vector2(-e * 1.2, -e * 0.9), ink, w)
-			draw_line(mouth + Vector2(-e * 1.4, 0), mouth + Vector2(e * 1.4, 0), ink, w)
+			for ex in [9, 20]:
+				px.call(ex, 15, 3, 1)
+			px.call(9, 12, 2, 1); px.call(11, 13, 1, 1); px.call(21, 12, 2, 1); px.call(20, 13, 1, 1)
+			px.call(13, 22, 6, 1)
 		_:
-			for c in [le, re]:
-				draw_rect(Rect2(c - Vector2(w, w) * 0.75, Vector2(w, w) * 1.5), ink)
-			draw_line(mouth + Vector2(-e * 1.6, 0), mouth + Vector2(e * 1.6, 0), ink, w)
+			for ex in [10, 20]:
+				px.call(ex, 14, 2, 2)
+			px.call(13, 22, 6, 1)
 
 
 ## Dark ink on light colours, light ink on dark ones.
