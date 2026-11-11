@@ -11,6 +11,7 @@ cd "$ROOT"
 
 SHA="$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
 if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then SHA="${SHA}+"; fi
+SHA="${BUILD_SHA:-$SHA}"  # override for local tests of the update path
 DATE="$(date -u +%Y-%m-%d)"
 
 rm -rf "$OUT"
@@ -43,6 +44,19 @@ sed -i 's|<meta name="viewport" content="\([^"]*\)"|<meta name="viewport" conten
 expect 'viewport-fit=cover' "viewport-fit"
 
 expect 'name="robots" content="noindex, nofollow"' "robots meta from export preset"
+expect 'name="apple-mobile-web-app-capable" content="yes"' "home-screen meta from export preset"
+expect '<link rel="manifest" href="index.manifest.json">' "PWA manifest link"
+expect '"serviceWorker":"index.service.worker.js"' "service worker in engine config"
+
+# PWA: check the manifest, then swap Godot's cache-first service worker for
+# ours (network-first, see tools/web/service_worker.js).
+MANIFEST="$OUT/index.manifest.json"
+[[ -f "$MANIFEST" ]] || { echo "build_web: index.manifest.json missing (PWA export off?)" >&2; exit 1; }
+grep -q '"display":"fullscreen"' "$MANIFEST" || { echo "build_web: manifest display is not fullscreen" >&2; exit 1; }
+grep -q '"orientation":"landscape"' "$MANIFEST" || { echo "build_web: manifest orientation is not landscape" >&2; exit 1; }
+[[ -f "$OUT/index.service.worker.js" ]] || { echo "build_web: index.service.worker.js missing" >&2; exit 1; }
+grep -q 'CACHED_FILES' "$OUT/index.service.worker.js" || { echo "build_web: Godot service worker changed shape; review tools/web/service_worker.js" >&2; exit 1; }
+cp "$ROOT/tools/web/service_worker.js" "$OUT/index.service.worker.js"
 
 printf 'User-agent: *\nDisallow: /\n' > "$OUT/robots.txt"
 touch "$OUT/.nojekyll"
