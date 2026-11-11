@@ -1,0 +1,20 @@
+{
+	"start": "start",
+	"nodes": {
+		"start": {"branch": [
+			{"if": {"talked_bram": true}, "next": "repeat"},
+			{"next": "there_you_are"}
+		]},
+		"there_you_are": {"speaker": "bram", "expression": "neutral", "text": "There you are. Sun's nearly down and you're still blinking sleep out of your eyes.", "next": "dawn_patrol"},
+		"dawn_patrol": {"speaker": "bram", "expression": "neutral", "text": "Dawn patrol. You, me and Wick. We walk the north edge before the mist lifts.", "choices": [
+			{"text": "I'll be up first.", "next": "fern_eager", "set": {"bram_reply": "eager"}, "bond": {"bram": 1}},
+			{"text": "What if I mess it up?", "next": "fern_nervous", "set": {"bram_reply": "nervous"}}
+		]},
+		"fern_eager": {"speaker": "fern", "expression": "happy", "text": "I'll be up first.", "next": "bram_eager"},
+		"bram_eager": {"speaker": "bram", "expression": "happy", "text": "Good. Keep that fire. Just don't let it outrun your nose.", "next": "sharp"},
+		"fern_nervous": {"speaker": "fern", "expression": "sad", "text": "What if I mess it up?", "next": "bram_nervous"},
+		"bram_nervous": {"speaker": "bram", "expression": "neutral", "text": "Then you mess it up with me beside you. That's what a mentor is for.", "next": "sharp"},
+		"sharp": {"speaker": "bram", "expression": "neutral", "text": "Eat. Sleep. I want you sharp.", "set": {"talked_bram": true}, "end": true},
+		"repeat": {"speaker": "bram", "expression": "neutral", "text": "Sleep, Fern. Dawn comes early.", "end": true}
+	}
+}

@@ -23,8 +23,20 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Import
         run: godot --headless --path . --import || true
-      - name: Run tests
+      - name: Validate dialogue
+        run: godot --headless --path . --script res://tools/validate_dialogue.gd
+      - name: Run tests (headless)
         run: tools/run_tests.sh godot
+      - name: Install a virtual display
+        run: sudo apt-get update -q && sudo apt-get install -y -q xvfb libgl1 libgl1-mesa-dri
+      - name: Run tests with a renderer (pixel checks, screenshots)
+        run: xvfb-run -a tools/run_tests.sh godot -- --shots="$PWD/shots"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: shots
+          if-no-files-found: ignore
 
   build:
     needs: test

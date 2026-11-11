@@ -5,17 +5,21 @@ extends Control
 ## *expands* to fill the rest of the screen at that k (stretch aspect
 ## "expand"), up to view.max in tuning.json, so wider screens see more
 ## meadow. A Camera2D follows the cat, limited to the world's edges.
-## Text, bubbles and touch controls are drawn at full resolution on top, in
-## UI units (about 1 CSS px).
+## Text, the dialogue box and touch controls are drawn at full resolution on
+## top, in UI units (about 1 CSS px).
+##
+## Talking: Interact next to an NPC starts its conversation (DialogueManager
+## autoload); the box shows it, movement is locked, the joystick hides and
+## the camera eases so both cats sit above the box.
 
 const World := preload("res://scripts/core/world.gd")
 const JsonData := preload("res://scripts/core/json_data.gd")
-const GameStrings := preload("res://scripts/core/game_strings.gd")
 const ScreenMetrics := preload("res://scripts/view/screen_metrics.gd")
 const GameInput := preload("res://scripts/view/game_input.gd")
 const WorldView := preload("res://scripts/view/world_view.gd")
 const TouchControls := preload("res://scripts/view/touch_controls.gd")
-const SpeechBubble := preload("res://scripts/view/speech_bubble.gd")
+const DialogueBox := preload("res://scripts/view/dialogue_box.gd")
+const Voice := preload("res://scripts/view/voice.gd")
 
 var world
 var tuning: Dictionary = {}
@@ -38,9 +42,12 @@ var world_view: Node2D
 var camera: Camera2D
 var view: Sprite2D
 var touch: Control
-var bubble: Control
-var prompt: Control
-var _bubble_npc := ""
+var dialogue: Control
+var voice: Node
+## Where the camera centres (world px) while easing to / from a conversation.
+var _cam_center := Vector2.INF
+var _cam_easing := false
+var _stick_y_held := false
 
 
 func _ready() -> void:
@@ -49,6 +56,9 @@ func _ready() -> void:
 	GameInput.ensure_actions()
 	tuning = JsonData.load_dict("res://data/tuning.json")
 	world = World.new()
+	# A new game: fresh flags and bonds, nothing mid-conversation.
+	GameState.reset()
+	DialogueManager.stop()
 
 	viewport = SubViewport.new()
 	viewport.name = "WorldViewport"
@@ -83,14 +93,6 @@ func _ready() -> void:
 	view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(view)
 
-	prompt = SpeechBubble.new()
-	prompt.name = "Prompt"
-	prompt.font_size = 14
-	add_child(prompt)
-	bubble = SpeechBubble.new()
-	bubble.name = "Bubble"
-	add_child(bubble)
-
 	touch = TouchControls.new()
 	touch.name = "TouchControls"
 	touch.configure(tuning.get("touch", {}))
@@ -98,12 +100,21 @@ func _ready() -> void:
 	touch.visible = ScreenMetrics.is_touch()
 	add_child(touch)
 
+	# Created here, after tap-to-start: no sound can play before it.
+	voice = Voice.new()
+	voice.jitter = float(tuning.get("dialogue", {}).get("pitch_jitter", 0.05))
+	add_child(voice)
+	# After the touch controls: it gets taps first and swallows them.
+	dialogue = DialogueBox.new()
+	dialogue.name = "Dialogue"
+	dialogue.configure(tuning.get("dialogue", {}), JsonData.load_dict("res://data/speakers.json"), voice)
+	dialogue.advance_requested.connect(_on_advance)
+	dialogue.choice_made.connect(_on_choice)
+	add_child(dialogue)
+
 
 func layout(m) -> void:
 	metrics = m
-	var gap := float(tuning.get("ui", {}).get("bubble_gap", 6))
-	bubble.gap = gap
-	prompt.gap = gap
 	var v: Dictionary = tuning.get("view", {})
 	var base := _vec(v.get("base", [480, 270]))
 	var max_view := _vec(v.get("max", [640, 400]))
@@ -119,8 +130,9 @@ func layout(m) -> void:
 	view_rect = Rect2(m.px_to_ui(pos_px), m.px_to_ui(size_px))
 	view.position = view_rect.position
 	view.scale = Vector2(view_scale, view_scale) / m.px_per_unit
-	_update_camera()
 	touch.layout(m)
+	dialogue.layout(m)
+	_update_camera(0.0)
 	_place_overlays()
 
 
@@ -135,9 +147,39 @@ func world_to_ui(p: Vector2) -> Vector2:
 	return view_rect.position + (p - camera_rect.position) * view_rect.size / Vector2(view_size)
 
 
-func _update_camera() -> void:
-	camera_rect = world.camera_rect(Vector2(view_size))
+func is_talking() -> bool:
+	return dialogue.is_open
+
+
+## Follows the cat. While talking, eases so the middle of the two cats sits
+## in the middle of the world left visible above the dialogue box, then
+## eases back afterwards.
+func _update_camera(dt: float) -> void:
+	var follow: Rect2 = world.camera_rect(Vector2(view_size))
+	var target := follow.get_center()
+	if world.is_talking():
+		target = _talk_center()
+		_cam_easing = true
+	if _cam_easing and _cam_center != Vector2.INF:
+		var k := 1.0 - exp(-float(tuning.get("dialogue", {}).get("camera_ease", 10)) * dt)
+		_cam_center = _cam_center.lerp(target, k) if dt > 0.0 else target
+		if not world.is_talking() and _cam_center.distance_to(target) < 0.5:
+			_cam_easing = false
+	else:
+		_cam_center = target
+	camera_rect = world.camera_rect(Vector2(view_size), _cam_center) if _cam_easing else follow
 	camera.position = camera_rect.position
+
+
+func _talk_center() -> Vector2:
+	var npc: Dictionary = world.npc_by_id(world.talk_id)
+	var feet: Vector2 = (world.player_pos + npc["pos"]) / 2.0
+	var mid := feet - Vector2(0, 10)
+	# World y of the box's top edge, if the camera were at the top (offset
+	# within the view is all that matters).
+	var box_top_view: float = (dialogue.box_rect.position.y - view_rect.position.y) * float(view_size.y) / view_rect.size.y
+	var free_mid := clampf(box_top_view, 0.0, float(view_size.y)) / 2.0
+	return mid + Vector2(0, float(view_size.y) / 2.0 - free_mid)
 
 
 static func _vec(a: Variant) -> Vector2:
@@ -150,11 +192,9 @@ func _process(dt: float) -> void:
 	var inp := GameInput.read(touch)
 	if touch.stick_vector != Vector2.ZERO:
 		_set_last_input("touch")
-	for ev in world.step(dt, inp["move"], inp["run"]):
-		if ev["type"] == "focus" and ev["id"] != _bubble_npc:
-			bubble.hide_bubble()
-	world_view.sync()
-	_update_camera()
+	world.step(dt, inp["move"], inp["run"])
+	world_view.sync(dt)
+	_update_camera(dt)
 	_place_overlays()
 
 
@@ -168,9 +208,37 @@ func _input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if paused:
 		return
+	if is_talking():
+		_dialogue_input(event)
+		return
 	if event.is_action_pressed("interact") and not event.is_echo():
 		interact()
 		get_viewport().set_input_as_handled()
+
+
+## Keyboard / gamepad while the box is open: Interact finishes or advances,
+## up/down pick a choice (the left stick counts once per push).
+func _dialogue_input(event: InputEvent) -> void:
+	if event.is_echo():
+		return
+	if event is InputEventJoypadMotion:
+		if event.axis == JOY_AXIS_LEFT_Y:
+			if absf(event.axis_value) > 0.6 and not _stick_y_held:
+				_stick_y_held = true
+				dialogue.move_selection(1 if event.axis_value > 0.0 else -1)
+			elif absf(event.axis_value) < 0.3:
+				_stick_y_held = false
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("interact"):
+		dialogue.press()
+	elif event.is_action_pressed("move_up") or event.is_action_pressed("ui_up"):
+		dialogue.move_selection(-1)
+	elif event.is_action_pressed("move_down") or event.is_action_pressed("ui_down"):
+		dialogue.move_selection(1)
+	else:
+		return
+	get_viewport().set_input_as_handled()
 
 
 func _on_touch_interact() -> void:
@@ -180,11 +248,31 @@ func _on_touch_interact() -> void:
 
 ## Talks to whoever is in range (if anyone).
 func interact() -> void:
+	if is_talking():
+		return
 	for ev in world.interact():
-		if ev["type"] == "say":
-			_bubble_npc = ev["id"]
-			bubble.show_text(GameStrings.text(ev["text_key"]), float(tuning.get("game", {}).get("bubble_seconds", 1.5)))
+		if ev["type"] == "talk":
+			_show(DialogueManager.start(ev["dialogue"]))
 	world_view.sync()
+	_place_overlays()
+
+
+func _on_advance() -> void:
+	_show(DialogueManager.advance())
+
+
+func _on_choice(index: int) -> void:
+	_show(DialogueManager.choose(index))
+
+
+func _show(ev: Dictionary) -> void:
+	if ev["type"] == "line":
+		dialogue.show_selection = last_input != "touch" and not touch.visible
+		dialogue.show_line(ev)
+	else:
+		dialogue.close()
+		world.end_talk()
+	_update_touch_visibility()
 	_place_overlays()
 
 
@@ -192,27 +280,24 @@ func _set_last_input(kind: String) -> void:
 	if kind == last_input:
 		return
 	last_input = kind
-	var show := kind == "touch" or (kind == "" and ScreenMetrics.is_touch())
+	_update_touch_visibility()
+	_place_overlays()
+
+
+## Touch controls: on touch devices (or after touch input), hidden while a
+## keyboard is used and while a conversation is open (a tap advances then).
+func _update_touch_visibility() -> void:
+	var show := last_input == "touch" or (last_input == "" and ScreenMetrics.is_touch())
+	if is_talking():
+		show = false
 	if touch.visible != show:
 		touch.visible = show
 		touch.reset()
-	_place_overlays()
 
 
 func _place_overlays() -> void:
 	if metrics == null:
 		return
-	var bounds: Rect2 = metrics.safe_rect
-	var focus: String = world.focus_id
-	touch.highlight = focus != ""
-	if bubble.visible and _bubble_npc != "":
-		bubble.point_at(world_to_ui(world_view.npc_head(_bubble_npc)), bounds)
-	# Prompt: a small "E" over whoever you can talk to (keyboard players only;
-	# on touch the paw button lights up instead).
-	var show_prompt := focus != "" and not bubble.visible and not touch.visible
-	if show_prompt:
-		if not prompt.visible:
-			prompt.show_text(GameStrings.text("hint.interact_desktop"), 0.0)
-		prompt.point_at(world_to_ui(world_view.npc_head(focus)), bounds)
-	elif prompt.visible:
-		prompt.hide_bubble()
+	# The paw button lights up when someone is in range (the world view
+	# shows the paw-print prompt over them).
+	touch.highlight = world.focus_id != "" and not world.is_talking()

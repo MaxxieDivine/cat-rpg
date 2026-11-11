@@ -6,8 +6,6 @@
 	"title.controls_touch": "Left thumb: move (push far to trot)   Paw: interact",
 	"rotate.touch": "Rotate your phone",
 	"rotate.desktop": "Make the window wider",
-	"hint.interact_desktop": "E",
-	"cow.moo": "Moo!",
 	"build.label": "build {sha} {date}",
 	"build.dev": "dev",
 	"hud.fps": "{fps} fps (low {low})",

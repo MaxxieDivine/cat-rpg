@@ -1,0 +1,7 @@
+{
+	"fern": {"name": "Fern", "color": "#e8964a", "side": "right", "voice": {"pitch": 1.0, "volume_db": -12, "blip_ms": 45}},
+	"bram": {"name": "Bram", "color": "#62422e", "side": "left", "voice": {"pitch": 0.6, "volume_db": -10, "blip_ms": 55}},
+	"sorrel": {"name": "Sorrel", "color": "#9698a0", "side": "left", "voice": {"pitch": 0.85, "volume_db": -19, "blip_ms": 95}},
+	"wick": {"name": "Wick", "color": "#d6c496", "side": "left", "voice": {"pitch": 1.45, "volume_db": -12, "blip_ms": 35}},
+	"cow": {"name": "Cow", "color": "#f6f2ea", "side": "left", "voice": {"pitch": 0.42, "volume_db": -10, "blip_ms": 90}}
+}

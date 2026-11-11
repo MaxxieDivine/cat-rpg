@@ -7,7 +7,13 @@
 		"footprint": [12, 5]
 	},
 	"npcs": [
-		{"id": "cow", "art": "cow.idle", "pos": [470, 200], "footprint": [30, 8], "talk_radius": 16, "say": "cow.moo"}
+		{"id": "bram", "art": "cat.bram", "frames": 2, "pos": [292, 196], "footprint": [22, 7], "talk_radius": 22, "behavior": "sit", "facing": -1, "dialogue": "res://data/dialogue/bram.json"},
+		{"id": "sorrel", "art": "cat.sorrel", "frames": 2, "pos": [172, 128], "footprint": [28, 6], "talk_radius": 22, "behavior": "lie", "facing": 1, "dialogue": "res://data/dialogue/sorrel.json"},
+		{"id": "wick", "art": "cat.wick", "frames": 3, "path": [[542, 224], [584, 224], [584, 236], [542, 236]], "speed": 18, "pause": 0.7, "footprint": [12, 5], "talk_radius": 22, "behavior": "pace", "dialogue": "res://data/dialogue/wick.json"},
+		{"id": "cow", "art": "cow.idle", "pos": [470, 200], "footprint": [30, 8], "talk_radius": 22, "behavior": "stand", "dialogue": "res://data/dialogue/cow.json"}
+	],
+	"ground": [
+		{"art": "decor.sunspot", "pos": [170, 126]}
 	],
 	"props": [
 		{"art": "prop.bush", "pos": [64, 72], "footprint": [26, 7]},

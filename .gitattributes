@@ -7,3 +7,4 @@
 *.cfg text eol=lf
 *.import text eol=lf
 *.godot text eol=lf
+*.ttf binary
