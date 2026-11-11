@@ -1,0 +1,5 @@
+{
+	"hello.moo": "Moo!",
+	"build.label": "build {sha} {date}",
+	"build.dev": "dev"
+}
