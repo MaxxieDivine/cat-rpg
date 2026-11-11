@@ -4,6 +4,8 @@ Godot 4.3 (GDScript) prototype: a pixel-art cat (480x270, landscape) walking a m
 
 Controls: WASD/arrows to move, Shift to trot, E/Space to interact. On a phone: left thumb moves (push far to trot), paw button interacts.
 
+Starting the game goes fullscreen (landscape-locked on Android). On iPhone, Safari can't do fullscreen for web pages: tap Share → **Add to Home Screen** and launch it from there for a full-screen, app-like game.
+
 See [CLAUDE.md](CLAUDE.md) for goals, rules and structure.
 
 ```sh
