@@ -1,8 +1,12 @@
 extends Control
-## The game screen. The world renders into a 480x270 SubViewport (cheap on
-## phones) that is shown at the largest whole-number scale, in device pixels,
-## that fits the safe area. Text, bubbles and touch controls are drawn at full
-## resolution on top, in UI units (about 1 CSS px).
+## The game screen. The world renders into a small SubViewport (cheap on
+## phones) shown at a whole-number scale k in device pixels. k is the largest
+## scale at which the 480x270 base view fits the screen; the view then
+## *expands* to fill the rest of the screen at that k (stretch aspect
+## "expand"), up to view.max in tuning.json, so wider screens see more
+## meadow. A Camera2D follows the cat, limited to the world's edges.
+## Text, bubbles and touch controls are drawn at full resolution on top, in
+## UI units (about 1 CSS px).
 
 const World := preload("res://scripts/core/world.gd")
 const JsonData := preload("res://scripts/core/json_data.gd")
@@ -20,6 +24,10 @@ var metrics
 var view_scale := 1
 ## Where the world is drawn, in UI units.
 var view_rect := Rect2()
+## World pixels the camera shows (SubViewport size).
+var view_size := Vector2i(480, 270)
+## The part of the world on screen (world pixels).
+var camera_rect := Rect2()
 var paused := false
 ## "touch" or "keys": the last kind of input used. Touch controls hide while
 ## the player uses a keyboard or gamepad.
@@ -27,6 +35,7 @@ var last_input := ""
 
 var viewport: SubViewport
 var world_view: Node2D
+var camera: Camera2D
 var view: Sprite2D
 var touch: Control
 var bubble: Control
@@ -43,7 +52,7 @@ func _ready() -> void:
 
 	viewport = SubViewport.new()
 	viewport.name = "WorldViewport"
-	viewport.size = Vector2i(world.size)
+	viewport.size = view_size
 	viewport.disable_3d = true
 	viewport.snap_2d_transforms_to_pixel = true
 	viewport.snap_2d_vertices_to_pixel = true
@@ -54,6 +63,15 @@ func _ready() -> void:
 	world_view.name = "WorldView"
 	viewport.add_child(world_view)
 	world_view.setup(world, tuning)
+	camera = Camera2D.new()
+	camera.name = "Camera"
+	camera.anchor_mode = Camera2D.ANCHOR_MODE_FIXED_TOP_LEFT
+	camera.limit_left = 0
+	camera.limit_top = 0
+	camera.limit_right = int(world.size.x)
+	camera.limit_bottom = int(world.size.y)
+	viewport.add_child(camera)
+	camera.make_current()
 
 	# A Sprite2D, not a TextureRect: Controls are snapped to whole UI units
 	# (gui/common/snap_controls_to_pixels), which is a fraction of a device
@@ -86,13 +104,22 @@ func layout(m) -> void:
 	var gap := float(tuning.get("ui", {}).get("bubble_gap", 6))
 	bubble.gap = gap
 	prompt.gap = gap
-	var safe_px: Rect2i = m.safe_rect_px()
-	view_scale = ScreenMetrics.integer_fit(world.size, Vector2(safe_px.size))
-	var size_px: Vector2 = world.size * view_scale
-	var pos_px := (Vector2(safe_px.position) + (Vector2(safe_px.size) - size_px) / 2.0).floor()
+	var v: Dictionary = tuning.get("view", {})
+	var base := _vec(v.get("base", [480, 270]))
+	var max_view := _vec(v.get("max", [640, 400]))
+	var screen_px := Vector2(m.px_size)
+	view_scale = ScreenMetrics.integer_fit(base, screen_px)
+	# Expand: fill the whole screen at this scale (ceil, so no gap at the
+	# edges), but never more than max_view (then letterbox, centred).
+	var want := (screen_px / view_scale).ceil().min(max_view)
+	view_size = Vector2i(want)
+	viewport.size = view_size
+	var size_px := Vector2(view_size) * view_scale
+	var pos_px := ((screen_px - size_px) / 2.0).floor()
 	view_rect = Rect2(m.px_to_ui(pos_px), m.px_to_ui(size_px))
 	view.position = view_rect.position
 	view.scale = Vector2(view_scale, view_scale) / m.px_per_unit
+	_update_camera()
 	touch.layout(m)
 	_place_overlays()
 
@@ -105,7 +132,16 @@ func set_paused(p: bool) -> void:
 
 ## World pixels -> UI units.
 func world_to_ui(p: Vector2) -> Vector2:
-	return view_rect.position + p * view_rect.size / world.size
+	return view_rect.position + (p - camera_rect.position) * view_rect.size / Vector2(view_size)
+
+
+func _update_camera() -> void:
+	camera_rect = world.camera_rect(Vector2(view_size))
+	camera.position = camera_rect.position
+
+
+static func _vec(a: Variant) -> Vector2:
+	return Vector2(float(a[0]), float(a[1])) if a is Array and a.size() >= 2 else Vector2.ZERO
 
 
 func _process(dt: float) -> void:
@@ -118,6 +154,7 @@ func _process(dt: float) -> void:
 		if ev["type"] == "focus" and ev["id"] != _bubble_npc:
 			bubble.hide_bubble()
 	world_view.sync()
+	_update_camera()
 	_place_overlays()
 
 

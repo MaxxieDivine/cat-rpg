@@ -8,6 +8,7 @@ const JsonData := preload("res://scripts/core/json_data.gd")
 const TitleScreen := preload("res://scripts/view/title.gd")
 const GameScreen := preload("res://scripts/view/game.gd")
 const RotateOverlay := preload("res://scripts/view/rotate_overlay.gd")
+const FullscreenButton := preload("res://scripts/view/fullscreen_button.gd")
 const BUILD_PATH := "res://data/build.json"
 
 var metrics := ScreenMetrics.new()
@@ -15,6 +16,7 @@ var title: Control
 var game: Control
 var rotate: Control
 var hud: Label
+var fullscreen_button: Control
 var build_text := ""
 ## Frame stats for the hud, refreshed twice a second.
 var fps := 0
@@ -67,6 +69,8 @@ func _ready() -> void:
 	hud.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
 	hud.add_theme_constant_override("outline_size", 3)
 	add_child(hud)
+	fullscreen_button = FullscreenButton.new()
+	add_child(fullscreen_button)
 	build_text = read_build_text()
 	_update_hud()
 
@@ -86,7 +90,7 @@ func start_game() -> void:
 	game = GameScreen.new()
 	game.name = "Game"
 	add_child(game)
-	move_child(game, title.get_index())
+	move_child(game, title.get_index())  # below the overlays, hud and button
 	title.queue_free()
 	title = null
 	relayout()
@@ -106,6 +110,8 @@ func relayout() -> void:
 		game.layout(metrics)
 		game.set_paused(portrait)
 	_place_hud()
+	fullscreen_button.refresh()
+	fullscreen_button.place(metrics.safe_rect, 4.0)
 	_laying_out = false
 
 
@@ -136,6 +142,7 @@ func _process(dt: float) -> void:
 		_frame_time = 0.0
 		_worst_dt = 0.0
 		_update_hud()
+		fullscreen_button.refresh()  # also catches leaving fullscreen with Esc / back
 
 
 func _update_hud() -> void:

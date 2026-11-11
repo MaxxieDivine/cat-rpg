@@ -62,7 +62,9 @@ Run `tools/setup_godot.sh` before tests (`tools/setup_godot.sh --web` before a l
 - **Compatibility renderer only.** It's the only renderer Godot's web export supports; don't build lighting or effects that need Forward+/Mobile.
 - **Threads off** (no-threads templates, Godot 4.3+). GitHub Pages can't send the cross-origin isolation headers threaded builds need.
 - **Particles: `CPUParticles2D`, never `GPUParticles2D`** (e.g. for fireflies). More reliable in browsers, especially on phones.
-- **The world renders into a 480x270 `SubViewport`** shown at the largest whole-number scale (in device pixels) that fits the safe area, letterboxed. That keeps fill cost tiny on phones. Text, bubbles and touch controls draw at full resolution on top, in UI units.
+- **The world renders into a small `SubViewport`, stretch aspect "expand" with integer scaling.** k = the largest whole number at which the 480x270 base view (`view.base` in tuning.json) fits the whole screen, in device pixels; the view then grows to fill the screen at that k, up to `view.max` (640x400), letterboxed beyond that. Wider screens see more meadow, never a blurry or uneven pixel. The world (`world.json` size, 720x405) must be at least `view.max` so a `Camera2D` (top-left anchored, limits = world edges, whole pixels) never shows past the edge; a test enforces it. Fill cost stays tiny on phones. Text, bubbles and touch controls draw at full resolution on top, in UI units.
+- **Fullscreen:** the tap/click/key that starts the game calls `ScreenMetrics.request_fullscreen()` from inside the input handler (browsers allow it nowhere else), then locks orientation to landscape; failures are ignored. A small corner button (`fullscreen_button.gd`) does the same and hides while fullscreen or when launched from the home screen. iPhone Safari has no fullscreen for web pages: there the button is hidden and players use Add to Home Screen.
+- **PWA on:** manifest with `display: fullscreen`, `orientation: landscape`, icons baked by `make_art.gd`; iPhone home-screen meta tags in `html/head_include`. `build_web.sh` **replaces Godot's service worker** with `tools/web/service_worker.js`: Godot's serves `index.html` cache-first and only updates after every tab closes, which would show the previous build after each push. Ours is network-first, revalidates the page, takes over immediately and caches only the offline page.
 
 ## Foundation rules (keep these from day one)
 - **Logic is plain data, separate from Nodes.** Game state lives in `RefCounted` classes under `scripts/core/` with no Nodes, so it runs and tests headless. The view sends commands, the core validates and mutates state and returns events; the view only shows them.
@@ -74,12 +76,12 @@ Run `tools/setup_godot.sh` before tests (`tools/setup_godot.sh --web` before a l
 - **One command runs every headless test** and exits non-zero on any failure.
 
 ## Input and layout rules (PC + phone browser)
-- **Landscape only, 480x270 world.** Portrait shows the "rotate your phone" overlay and pauses the game.
+- **Landscape only**, base view 480x270 (expands on wider screens, see above). Portrait shows the "rotate your phone" overlay and pauses the game.
 - **PC: keyboard** (WASD/arrows move, Shift trots, E/Space/Enter interacts; a gamepad works too). Actions are registered in `scripts/view/game_input.gd`, the one place that merges keyboard, gamepad and touch into a move vector + run + interact.
 - **Phone: touch controls** (`scripts/view/touch_controls.gd`), shown only on touch devices and hidden while a keyboard is used. The joystick base jumps to wherever the left thumb lands (left half); pushing past `stick_trot` trots. The paw button (right) interacts and lights up when something is in range.
 - **No double events:** `emulate_mouse_from_touch` stays on so ordinary UI buttons (title, fullscreen) work by touch. The touch controls read only `InputEventScreenTouch`/`Drag` and ignore mouse events. Game-screen nodes ignore mouse events. Never handle both for the same widget.
 - **Browsers need a tap first** for audio and fullscreen: the game starts on the title screen. Fullscreen/orientation-lock calls must happen inside an input handler (`ScreenMetrics.toggle_fullscreen`).
-- **Touch targets at least 48 CSS px**, kept `edge_margin` (data/tuning.json) inside the safe area, away from edges, notches and gesture bars.
+- **Touch targets at least 48 CSS px**, kept `edge_margin` (data/tuning.json) inside the safe area, away from edges, notches and gesture bars. The world may draw under notches; controls, text and the fullscreen button never do. Everything re-lays out on resize, including mid-touch when the browser enters fullscreen.
 - **Pixel art stays crisp**: nearest filtering, whole-number scaling, positions snapped to whole pixels.
 - No pinch zoom, no browser scrolling: the canvas owns the whole page.
 
@@ -87,10 +89,10 @@ Run `tools/setup_godot.sh` before tests (`tools/setup_godot.sh --web` before a l
 - `data/*.json`: content, strings and tuning (`assets.json`, `strings.json`, `tuning.json`, `world.json` = meadow layout; `build.json` is generated, never committed)
 - `art/`: PNGs referenced by key
 - `scripts/core/`: headless logic: `world.gd` (movement, collision, focus, interact; the seeded RNG), `asset_catalog.gd`, `game_strings.gd` (text from `strings.json`), `json_data.gd`. No Nodes.
-- `scripts/view/`: `app.gd` (screens, rotate overlay, build/fps label), `title.gd`, `game.gd` (SubViewport + overlays), `world_view.gd` (draws the world), `touch_controls.gd`, `game_input.gd`, `speech_bubble.gd`, `rotate_overlay.gd`, `screen_metrics.gd`
+- `scripts/view/`: `app.gd` (screens, rotate overlay, build/fps label, fullscreen button), `fullscreen_button.gd`, `title.gd`, `game.gd` (SubViewport + overlays), `world_view.gd` (draws the world), `touch_controls.gd`, `game_input.gd`, `speech_bubble.gd`, `rotate_overlay.gd`, `screen_metrics.gd`
 - `scenes/`: `app.tscn` is the main scene; its children are built in code
 - `tests/`: `run_tests.gd` (runner, `SUITES` list), `test_base.gd`, `test_*.gd` suites, `*_smoke.gd` real-scene tests
-- `tools/`: `setup_godot.sh`, `build_web.sh`, `run_tests.sh`, `make_art.gd` (bakes every PNG in `art/` from character grids), `perf_probe.gd`
+- `tools/`: `setup_godot.sh`, `build_web.sh` (`BUILD_SHA=x` overrides the label for local update tests), `run_tests.sh`, `make_art.gd` (bakes every PNG in `art/`, including the web-app icons, from character grids), `perf_probe.gd`, `web/service_worker.js`
 - `.github/workflows/ci.yml`, `export_presets.cfg`
 
 ## Running tests
@@ -101,7 +103,7 @@ tools/run_tests.sh                                              # all tests; non
 ```
 `tools/run_tests.sh` wraps `godot --headless --path . --script res://tests/run_tests.gd` and also fails when Godot prints `SCRIPT ERROR`: a test that crashes mid-way would otherwise be reported as PASS. With a display (`xvfb-run -a tools/run_tests.sh -- --shots=<dir>`) the smoke tests also save phone and desktop screenshots. **Look at them** before saying a visual change works. Headless runs have no renderer, so smoke tests must skip pixel checks (not fail) when `DisplayServer.get_name() == "headless"`.
 
-Arguments for the runner go after `--` (`-- --shots=<dir>`, `-- --only=<substring>`). Smoke tests fake DPR, safe-area insets and touch through `ScreenMetrics.override_dpr` / `override_insets_css` / `override_touch`, drive touch with `InputEventScreenTouch`/`Drag` and keys with `Input.action_press`; with a display they also check that the on-screen world is the SubViewport image scaled by exactly k (every world pixel covers k x k device pixels of its colour).
+Arguments for the runner go after `--` (`-- --shots=<dir>`, `-- --only=<substring>`). Smoke tests fake DPR, safe-area insets, touch and fullscreen through `ScreenMetrics.override_dpr` / `override_insets_css` / `override_touch` / `override_fullscreen` (requests are then only counted in `fullscreen_requests`, never sent to the OS), drive touch with `InputEventScreenTouch`/`Drag` and keys with `Input.action_press`; with a display they also check that the on-screen world is the SubViewport image scaled by exactly k (every world pixel covers k x k device pixels of its colour).
 
 Add `test_*` methods to a suite (register new suites in `SUITES`). Each test records failures instead of stopping, and the runner prints `PASS`/`FAIL` per test.
 
@@ -129,3 +131,5 @@ To try the web build locally: `tools/setup_godot.sh --web && tools/build_web.sh 
 - **`set_anchors_preset()` keeps old offsets**; for nodes built in code use `set_anchors_and_offsets_preset()`.
 - **GDScript keeps running after a runtime error**, so the runner can't see a crashed test. That's why CI runs `tools/run_tests.sh`.
 - **`Performance.TIME_PROCESS` isn't per-frame script time**; measure with timestamps (see `app.gd` / `perf_probe.gd`).
+- **Godot's PWA service worker is cache-first**: with it, every push shows the *previous* build once (or until all tabs close). Keep `build_web.sh`'s swap to `tools/web/service_worker.js`.
+- **Fullscreen and orientation lock only work inside a tap/click/key handler**, and iPhone Safari doesn't support fullscreen for pages at all (home screen instead). Headless Chromium grants fullscreen but doesn't resize the page; test the resize in Godot smoke tests (`_resize`).

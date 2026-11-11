@@ -31,8 +31,8 @@ func _run() -> void:
 	var failed := 0
 	for path in SUITES:
 		var script: GDScript = load(path)
-		if script == null:
-			print("FAIL %s (could not load)" % path)
+		if script == null or not script.can_instantiate():
+			print("FAIL %s (could not load: parse error?)" % path)
 			failed += 1
 			continue
 		for m in script.get_script_method_list():

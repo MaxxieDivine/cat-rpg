@@ -27,6 +27,8 @@ func after_each() -> void:
 	ScreenMetrics.override_dpr = 0.0
 	ScreenMetrics.override_insets_css = []
 	ScreenMetrics.override_touch = -1
+	ScreenMetrics.override_fullscreen = -1
+	ScreenMetrics.fullscreen_requests = 0
 	for a in ["move_left", "move_right", "move_up", "move_down", "run", "interact"]:
 		if InputMap.has_action(a):
 			Input.action_release(a)
@@ -70,10 +72,104 @@ func test_portrait_shows_rotate_message_and_pauses() -> void:
 	_close(app)
 
 
+## Windowed browser -> fullscreen (or home-screen app), with a thumb on the
+## stick during the switch. name, windowed CSS size, fullscreen CSS size, DPR,
+## windowed insets, fullscreen insets.
+const FULLSCREEN_SWITCHES := [
+	["iphone", Vector2i(750, 342), Vector2i(844, 390), 3.0, [0.0, 47.0, 0.0, 47.0], [0.0, 47.0, 21.0, 47.0]],
+	["android", Vector2i(780, 312), Vector2i(873, 393), 2.75, [0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]],
+]
+
+
+func test_touch_controls_after_entering_fullscreen_iphone() -> void:
+	await _fullscreen_switch(FULLSCREEN_SWITCHES[0])
+
+
+func test_touch_controls_after_entering_fullscreen_android() -> void:
+	await _fullscreen_switch(FULLSCREEN_SWITCHES[1])
+
+
+func _fullscreen_switch(sw: Array) -> void:
+	var name: String = "fullscreen_" + sw[0]
+	var dpr: float = sw[3]
+	var app: Control = await _open([name, sw[1], dpr, sw[4], true])
+	check(app.fullscreen_button.visible, "%s: fullscreen button shown in the browser window" % name)
+	await _tap(app, app.metrics.safe_rect.get_center(), app.metrics)
+	check_eq(ScreenMetrics.fullscreen_requests, 1, "%s: tap to start requests fullscreen" % name)
+	var g: Control = app.game
+	var tc: Control = g.touch
+	var w = g.world
+	w.player_pos = Vector2(150, 175)
+	w.player_vel = Vector2.ZERO
+	var old_rest: Vector2 = tc.stick_rest
+	var old_button: Vector2 = tc.button_center
+	var radius := float(tuning["touch"]["stick_radius"])
+	# Thumb on the stick, pushing right...
+	_touch(app, 0, old_rest, true)
+	_drag(app, 0, old_rest + Vector2(radius * 0.6, 0))
+	await tree.create_timer(0.2).timeout
+	# ...while the browser goes fullscreen (the page resizes).
+	await _resize(app, sw[2], dpr, sw[5])
+	var m = app.metrics
+	var safe: Rect2 = m.safe_rect
+	check_near(m.ui_size.x, sw[2].x, 1.0, "%s: now fullscreen size" % name)
+	check(not app.fullscreen_button.visible, "%s: fullscreen button hidden while fullscreen" % name)
+	_check_view(app, name)
+	_check_hud(app, name)
+
+	# Controls re-laid out for the new safe area.
+	var t: Dictionary = tuning["touch"]
+	var margin := float(t["edge_margin"])
+	var br := float(t["button_radius"])
+	check_eq(tc.stick_rest, Vector2(safe.position.x + margin + radius, safe.end.y - margin - radius), "%s: stick rest moved to the new bottom-left" % name)
+	check_eq(tc.button_center, Vector2(safe.end.x - margin - br, safe.end.y - margin - br), "%s: paw moved to the new bottom-right" % name)
+	check(tc.button_center != old_button, "%s: paw button actually moved" % name)
+	for r: Rect2 in [Rect2(tc.stick_rest - Vector2.ONE * radius, Vector2.ONE * radius * 2.0), tc.button_rect()]:
+		check(safe.grow(-margin + 0.01).encloses(r), "%s: control %s keeps %s px inside the safe area %s" % [name, r, margin, safe])
+		check(r.size.x * m.px_per_unit.x / m.dpr >= float(t["min_target"]) - 0.01, "%s: control >= %s CSS px" % [name, t["min_target"]])
+	check(not tc.button_rect().intersects(app.fullscreen_button.get_global_rect()), "%s: paw clear of the fullscreen button" % name)
+
+	# The thumb that was down during the switch still steers, then lets go.
+	var x0: float = w.player_pos.x
+	_drag(app, 0, tc.stick_base + Vector2(radius * 0.6, 0))
+	await tree.create_timer(0.3).timeout
+	check(w.player_pos.x > x0 + 5.0, "%s: held stick still moves the cat after the switch" % name)
+	_touch(app, 0, tc.stick_base + Vector2(radius * 0.6, 0), false)
+	await tree.create_timer(0.3).timeout
+	check_eq(tc.stick_vector, Vector2.ZERO, "%s: stick released" % name)
+	check_eq(tc.stick_base, tc.stick_rest, "%s: stick returns to the new rest position" % name)
+	check_eq(w.speed(), 0.0, "%s: cat stopped" % name)
+
+	# A fresh thumb anywhere on the left still grabs the stick.
+	_touch(app, 3, Vector2(safe.position.x + 120, safe.get_center().y), true)
+	_drag(app, 3, Vector2(safe.position.x + 120 - radius, safe.get_center().y))
+	await tree.process_frame
+	check(tc.stick_vector.x < -0.5, "%s: new thumb on the left drives the stick" % name)
+	_touch(app, 3, Vector2(safe.position.x + 120 - radius, safe.get_center().y), false)
+	await tree.process_frame
+
+	# The paw at its new spot talks to the cow.
+	_place_next_to_cow(w)
+	await tree.process_frame
+	await tree.process_frame
+	_touch(app, 1, tc.button_center, true)
+	_touch(app, 1, tc.button_center, false)
+	await tree.process_frame
+	_check_bubble(app, name)
+	if not is_headless():
+		await _check_view_pixels(app, name)
+		if shots_dir != "":
+			await _shot(app, name)
+	_close(app)
+
+
 func _open(cfg: Array) -> Control:
 	ScreenMetrics.override_dpr = cfg[2]
 	ScreenMetrics.override_insets_css = cfg[3]
 	ScreenMetrics.override_touch = 1 if cfg[4] else 0
+	# Pretend "not fullscreen" so requests are counted, not sent to the OS.
+	ScreenMetrics.override_fullscreen = 0
+	ScreenMetrics.fullscreen_requests = 0
 	tree.root.size = Vector2i((Vector2(cfg[1]) * float(cfg[2])).round())
 	await tree.process_frame
 	var app: Control = (load(MAIN_SCENE) as PackedScene).instantiate()
@@ -113,10 +209,12 @@ func _run_config(cfg: Array) -> void:
 	check_eq(t.start_label.text, str(strings["title.start_touch" if touch_device else "title.start_desktop"]), "%s: start text" % name)
 	for l: Control in [t.title_label, t.start_label, t.controls_label]:
 		check(safe.encloses(l.get_global_rect()), "%s: title text inside safe area" % name)
-	if t.fullscreen_button.visible:
-		var fb: Rect2 = t.fullscreen_button.get_global_rect()
-		check(safe.encloses(fb), "%s: fullscreen button inside safe area" % name)
-		check(fb.size.x * m.px_per_unit.x / dpr >= 48.0 - 0.01 and fb.size.y * m.px_per_unit.y / dpr >= 48.0 - 0.01, "%s: fullscreen button >= 48 CSS px" % name)
+	var fb_node: Control = app.fullscreen_button
+	check(fb_node.visible, "%s: fullscreen button shown while not fullscreen" % name)
+	var fb: Rect2 = fb_node.get_global_rect()
+	check(safe.encloses(fb), "%s: fullscreen button inside safe area" % name)
+	check(fb.position.x > safe.get_center().x and fb.position.y < safe.get_center().y, "%s: fullscreen button in the top-right corner" % name)
+	check(fb.size.x * m.px_per_unit.x / dpr >= 48.0 - 0.01 and fb.size.y * m.px_per_unit.y / dpr >= 48.0 - 0.01, "%s: fullscreen button >= 48 CSS px" % name)
 	check_near(t.cat.scale.x * m.px_per_unit.x, t.cat_scale, 0.001, "%s: title cat is whole-number scaled" % name)
 	_check_hud(app, name)
 	if shots_dir != "" and not is_headless():
@@ -125,24 +223,16 @@ func _run_config(cfg: Array) -> void:
 	# --- Tap to start
 	await _tap(app, Vector2(safe.get_center().x, safe.end.y - 30), m)
 	check(app.game != null, "%s: a tap starts the game" % name)
+	check_eq(ScreenMetrics.fullscreen_requests, 1, "%s: the start tap requests fullscreen (inside the tap handler)" % name)
+	app.relayout()
+	check(not app.fullscreen_button.visible, "%s: fullscreen button hidden while fullscreen" % name)
 	if app.game == null:
 		_close(app)
 		return
 	await tree.process_frame
 	var g: Control = app.game
 
-	# --- Game view: largest whole-number scale that fits the safe area
-	var safe_px: Rect2i = m.safe_rect_px()
-	var expect_k := maxi(1, floori(minf(safe_px.size.x / 480.0, safe_px.size.y / 270.0)))
-	check_eq(g.view_scale, expect_k, "%s: world view scale" % name)
-	var vp: Vector2 = g.view_rect.position * m.px_per_unit
-	var vs: Vector2 = g.view_rect.size * m.px_per_unit
-	check_near(vs.x, 480.0 * expect_k, 0.01, "%s: view width in device px" % name)
-	check_near(vs.y, 270.0 * expect_k, 0.01, "%s: view height in device px" % name)
-	check_near(vp.x, roundf(vp.x), 0.01, "%s: view x on a whole device px" % name)
-	check_near(vp.y, roundf(vp.y), 0.01, "%s: view y on a whole device px" % name)
-	check(safe.grow(0.01).encloses(g.view_rect), "%s: world view inside safe area" % name)
-	check_near(g.view_rect.get_center().x, safe.get_center().x, 1.0, "%s: view centred x" % name)
+	_check_view(app, name)
 	_check_hud(app, name)
 
 	if not is_headless():
@@ -158,6 +248,38 @@ func _run_config(cfg: Array) -> void:
 	if shots_dir != "" and not is_headless():
 		await _shot(app, name)
 	_close(app)
+
+
+## Expand with integer scaling: k is the largest whole scale at which the
+## 480x270 base fits the screen; the view then fills the screen at k (up to
+## view.max), and the camera never shows past the world's edge.
+func _check_view(app: Control, name: String) -> void:
+	var g: Control = app.game
+	var m = app.metrics
+	var v: Dictionary = tuning["view"]
+	var base := Vector2(v["base"][0], v["base"][1])
+	var max_view := Vector2(v["max"][0], v["max"][1])
+	var screen := Vector2(m.px_size)
+	var expect_k := maxi(1, floori(minf(screen.x / base.x, screen.y / base.y)))
+	check_eq(g.view_scale, expect_k, "%s: world view scale" % name)
+	var expect_size := (screen / expect_k).ceil().min(max_view)
+	check_eq(Vector2(g.view_size), expect_size, "%s: view expands to fill the screen" % name)
+	check(Vector2(g.view_size).x >= base.x and Vector2(g.view_size).y >= base.y, "%s: at least the base view is visible" % name)
+	var vp: Vector2 = g.view_rect.position * m.px_per_unit
+	var vs: Vector2 = g.view_rect.size * m.px_per_unit
+	check_near(vs.x, g.view_size.x * expect_k, 0.01, "%s: view width in device px" % name)
+	check_near(vs.y, g.view_size.y * expect_k, 0.01, "%s: view height in device px" % name)
+	check_near(vp.x, roundf(vp.x), 0.01, "%s: view x on a whole device px" % name)
+	check_near(vp.y, roundf(vp.y), 0.01, "%s: view y on a whole device px" % name)
+	var screen_ui := Rect2(Vector2.ZERO, m.ui_size)
+	if expect_size == (screen / expect_k).ceil():
+		check(g.view_rect.grow(0.01).encloses(screen_ui), "%s: no letterbox, the world fills the screen" % name)
+	check_near(g.view_rect.get_center().x, screen_ui.get_center().x, 1.0, "%s: view centred x" % name)
+	check_eq(g.viewport.size, g.view_size, "%s: SubViewport matches the view" % name)
+	var world_rect := Rect2(Vector2.ZERO, g.world.size)
+	check(world_rect.encloses(g.camera_rect), "%s: camera inside the world (camera %s)" % [name, g.camera_rect])
+	check_eq(g.camera.position, g.camera_rect.position, "%s: Camera2D at the camera rect" % name)
+	check(g.camera.limit_right == int(g.world.size.x) and g.camera.limit_bottom == int(g.world.size.y), "%s: Camera2D limits are the world's edges" % name)
 
 
 func _check_hud(app: Control, name: String) -> void:
@@ -271,6 +393,8 @@ func _place_next_to_cow(w) -> void:
 func _check_view_pixels(app: Control, name: String) -> void:
 	var g: Control = app.game
 	var touch_was: bool = g.touch.visible
+	var paused_was: bool = g.paused
+	g.paused = true  # freeze overlay updates (hiding touch would show the keyboard prompt)
 	g.touch.visible = false
 	app.hud.visible = false
 	g.prompt.hide_bubble()
@@ -291,13 +415,17 @@ func _check_view_pixels(app: Control, name: String) -> void:
 		for x in range(0, src.get_width(), 2):
 			var c := src.get_pixel(x, y)
 			for corner in [Vector2i(0, 0), Vector2i(k - 1, 0), Vector2i(0, k - 1), Vector2i(k - 1, k - 1)]:
-				var s := shot.get_pixelv(origin + Vector2i(x, y) * k + corner)
+				var sp: Vector2i = origin + Vector2i(x, y) * k + corner
+				if sp.x < 0 or sp.y < 0 or sp.x >= shot.get_width() or sp.y >= shot.get_height():
+					continue  # the expanded view may overhang the screen by < k px
+				var s := shot.get_pixelv(sp)
 				checked += 1
 				if absf(s.r - c.r) > 0.02 or absf(s.g - c.g) > 0.02 or absf(s.b - c.b) > 0.02:
 					bad_box = Rect2i(x, y, 1, 1) if bad == 0 else bad_box.expand(Vector2i(x, y)).expand(Vector2i(x + 1, y + 1))
 					bad += 1
 	check_eq(bad, 0, "%s: device pixels that don't match their world pixel (of %d checked; bad world pixels in %s; k=%d origin=%s)" % [name, checked, bad_box, k, origin])
 	g.touch.visible = touch_was
+	g.paused = paused_was
 	app.hud.visible = true
 
 

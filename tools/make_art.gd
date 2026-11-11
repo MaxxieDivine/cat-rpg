@@ -166,11 +166,39 @@ const SPRITES := {
 }
 
 
+## Web app / home-screen icons: the idle cat on meadow green, whole-number
+## scaled. Sizes are what the Web export preset asks for.
+const ICON_SIZES := [144, 180, 512]
+const ICON_BG := Color8(111, 179, 90)
+
+
 func _initialize() -> void:
 	var ok := true
 	for name: String in SPRITES:
 		ok = _bake(name, SPRITES[name]) and ok
+	for px: int in ICON_SIZES:
+		ok = _bake_icon(px) and ok
 	quit(0 if ok else 1)
+
+
+func _bake_icon(px: int) -> bool:
+	var spec: Dictionary = SPRITES["cat"]
+	var frame := 24
+	var k := floori(px * 0.72 / frame)
+	var img := Image.create(px, px, false, Image.FORMAT_RGBA8)
+	img.fill(ICON_BG)
+	var origin := Vector2i((px - frame * k) / 2, (px - frame * k) / 2 + k)
+	var grid: Array = spec["grid"]
+	for y in frame:
+		var row: String = grid[y]
+		for x in frame:
+			var c: Color = spec["palette"][row[x]]
+			if c.a > 0.0:
+				img.fill_rect(Rect2i(origin + Vector2i(x, y) * k, Vector2i(k, k)), c)
+	var path := "res://art/icon_%d.png" % px
+	var err := img.save_png(ProjectSettings.globalize_path(path))
+	print("make_art: wrote %s (%dx%d, cat x%d) err=%d" % [path, px, px, k, err])
+	return err == OK
 
 
 func _bake(name: String, spec: Dictionary) -> bool:

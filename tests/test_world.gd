@@ -139,3 +139,28 @@ func test_focus_and_interact() -> void:
 	events = _run(1.5, Vector2.LEFT)
 	check_eq(w.focus_id, "", "focus cleared when walking away")
 	check(events.any(func(e): return e["type"] == "focus" and e["id"] == ""), "focus-cleared event sent")
+
+
+func test_camera_follows_player() -> void:
+	_open_spot()
+	var view := Vector2(480, 270)
+	w.player_pos = w.size / 2.0
+	var r: Rect2 = w.camera_rect(view)
+	check(r.has_point(w.player_pos), "player on screen")
+	check_near(r.get_center().x, w.player_pos.x, 1.0, "camera centred on the player (x)")
+	check_eq(r.position, r.position.floor(), "camera on whole pixels")
+
+
+func test_camera_limits_cover_every_view() -> void:
+	# Every view the game can show (from the base size up to view.max) must
+	# stay inside the world wherever the player is: no void past the edge.
+	var v: Dictionary = tdata["view"]
+	var base := Vector2(v["base"][0], v["base"][1])
+	var biggest := Vector2(v["max"][0], v["max"][1])
+	var world_rect := Rect2(Vector2.ZERO, w.size)
+	check(w.size.x >= biggest.x and w.size.y >= biggest.y, "world %s is at least view.max %s" % [w.size, biggest])
+	for view in [base, Vector2(633, 293), Vector2(512, 384), biggest]:
+		for corner in [Vector2.ZERO, Vector2(w.size.x, 0), w.size, Vector2(0, w.size.y), w.size / 2.0]:
+			w.player_pos = corner
+			var r: Rect2 = w.camera_rect(view)
+			check(world_rect.encloses(r), "view %s with player at %s stays inside the world (got %s)" % [view, corner, r])
