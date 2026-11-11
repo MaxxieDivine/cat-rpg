@@ -1,6 +1,8 @@
 extends "res://tests/test_base.gd"
 ## Runs the real main scene at phone and desktop sizes: title, tap to start,
-## integer-scaled game view, touch controls / keyboard, interact, portrait.
+## integer-scaled game view, touch controls / keyboard, talking to the cow
+## (the dialogue system's test NPC), portrait. The conversations with the
+## cats are in dialogue_smoke.gd.
 
 const ScreenMetrics := preload("res://scripts/view/screen_metrics.gd")
 const JsonData := preload("res://scripts/core/json_data.gd")
@@ -15,12 +17,14 @@ const DESKTOP_HD := ["desktop_hd", Vector2i(1920, 1080), 1.0, [0.0, 0.0, 0.0, 0.
 var strings: Dictionary
 var tuning: Dictionary
 var world_data: Dictionary
+var cow_line: String
 
 
 func before_each() -> void:
 	strings = JsonData.load_dict("res://data/strings.json")
 	tuning = JsonData.load_dict("res://data/tuning.json")
 	world_data = JsonData.load_dict("res://data/world.json")
+	cow_line = str(JsonData.load_dict("res://data/dialogue/cow.json")["nodes"]["moo"]["text"])
 
 
 func after_each() -> void:
@@ -171,7 +175,7 @@ func _fullscreen_switch(sw: Array) -> void:
 	_touch(app, 1, tc.button_center, true)
 	_touch(app, 1, tc.button_center, false)
 	await tree.process_frame
-	_check_bubble(app, name)
+	await _check_cow_talk(app, name, true)
 	if not is_headless():
 		await _check_view_pixels(app, name)
 		if shots_dir != "":
@@ -347,13 +351,12 @@ func _check_touch(app: Control, name: String) -> void:
 	_touch(app, 1, tc.button_center, true)
 	_touch(app, 1, tc.button_center, false)
 	await tree.process_frame
-	_check_bubble(app, name)
+	await _check_cow_talk(app, name, true)
 	# A tap on the right half away from the button does nothing.
-	g.bubble.hide_bubble()
 	_touch(app, 2, Vector2(safe.end.x - 60, safe.position.y + 60), true)
 	_touch(app, 2, Vector2(safe.end.x - 60, safe.position.y + 60), false)
 	await tree.process_frame
-	check(not g.bubble.visible, "%s: tapping empty space does not interact" % name)
+	check(not g.dialogue.is_open, "%s: tapping empty space does not interact" % name)
 	check_eq(tc.stick_vector, Vector2.ZERO, "%s: right-half tap does not move the stick" % name)
 
 
@@ -373,33 +376,50 @@ func _check_keyboard(app: Control, name: String) -> void:
 	_place_next_to_cow(w)
 	await tree.process_frame
 	await tree.process_frame
-	check(g.prompt.visible, "%s: interact prompt shown next to the cow" % name)
-	check_eq(g.prompt.text(), str(strings["hint.interact_desktop"]), "%s: prompt text" % name)
-	var ev := InputEventKey.new()
-	ev.physical_keycode = KEY_E
-	ev.keycode = KEY_E
-	ev.pressed = true
-	tree.root.push_input(ev)
-	var up := ev.duplicate()
-	up.pressed = false
-	tree.root.push_input(up)
+	var paw: Sprite2D = g.world_view.paw
+	check(paw.visible, "%s: paw prompt shown next to the cow" % name)
+	var head: Vector2 = g.world_view.npc_head("cow")
+	check(paw.position.y + paw.texture.get_height() <= head.y and absf(paw.position.x + paw.texture.get_width() / 2.0 - head.x) <= 1.0, "%s: paw prompt above the cow's head" % name)
+	_key(KEY_E)
 	await tree.process_frame
-	_check_bubble(app, name)
-	check(not g.prompt.visible, "%s: prompt hidden while the cow talks" % name)
+	check(not paw.visible, "%s: paw prompt hidden while the cow talks" % name)
+	await _check_cow_talk(app, name, false)
 
 
-func _check_bubble(app: Control, name: String) -> void:
+## The cow's conversation is open: one "Moo!" line in the box, inside the
+## safe area, movement locked. Finishes and closes it with a tap or a key.
+func _check_cow_talk(app: Control, name: String, by_touch: bool) -> void:
 	var g: Control = app.game
-	check(g.bubble.visible, "%s: speech bubble shown" % name)
-	check_eq(g.bubble.text(), str(strings[world_data["npcs"][0]["say"]]), "%s: bubble text from strings.json" % name)
-	var r: Rect2 = g.bubble.get_global_rect()
-	check(app.metrics.safe_rect.encloses(r), "%s: bubble inside safe area" % name)
-	var head: Vector2 = g.world_to_ui(g.world_view.npc_head("cow"))
-	check(r.end.y <= head.y + 0.01, "%s: bubble above the cow's head" % name)
+	var box: Control = g.dialogue
+	check(box.is_open, "%s: dialogue box open" % name)
+	check_eq(str(box.line.get("speaker", "")), "cow", "%s: the cow speaks" % name)
+	check(g.world.is_talking(), "%s: talking locks movement" % name)
+	check(not g.touch.visible, "%s: touch controls hidden while talking" % name)
+	check(app.metrics.safe_rect.encloses(box.box_rect.grow(0.01)), "%s: box inside safe area" % name)
+	await tree.create_timer(0.4).timeout
+	check_eq(box.visible_text(), cow_line, "%s: cow line from cow.json" % name)
+	if by_touch:
+		_touch(app, 4, app.metrics.safe_rect.get_center(), true)
+		_touch(app, 4, app.metrics.safe_rect.get_center(), false)
+	else:
+		_key(KEY_E)
+	await tree.process_frame
+	check(not box.is_open, "%s: the box closes after the last line" % name)
+	check(not g.world.is_talking(), "%s: can move again" % name)
+	check_eq(g.touch.visible, by_touch, "%s: touch controls back after talking" % name)
+
+
+func _key(code: Key) -> void:
+	for pressed in [true, false]:
+		var ev := InputEventKey.new()
+		ev.physical_keycode = code
+		ev.keycode = code
+		ev.pressed = pressed
+		tree.root.push_input(ev)
 
 
 func _place_next_to_cow(w) -> void:
-	var cow: Rect2 = w.npcs[0]["rect"]
+	var cow: Rect2 = w.npc_by_id("cow")["rect"]
 	w.player_vel = Vector2.ZERO
 	w.player_pos = Vector2(cow.position.x - w.player_footprint.x / 2.0 - 4.0, cow.end.y)
 
@@ -413,8 +433,8 @@ func _check_view_pixels(app: Control, name: String) -> void:
 	g.paused = true  # freeze overlay updates (hiding touch would show the keyboard prompt)
 	g.touch.visible = false
 	app.hud.visible = false
-	g.prompt.hide_bubble()
-	g.bubble.hide_bubble()
+	var box_was: bool = g.dialogue.visible
+	g.dialogue.visible = false
 	await RenderingServer.frame_post_draw
 	await RenderingServer.frame_post_draw
 	var src: Image = g.viewport.get_texture().get_image()
@@ -442,6 +462,7 @@ func _check_view_pixels(app: Control, name: String) -> void:
 	check_eq(bad, 0, "%s: device pixels that don't match their world pixel (of %d checked; bad world pixels in %s; k=%d origin=%s)" % [name, checked, bad_box, k, origin])
 	g.touch.visible = touch_was
 	g.paused = paused_was
+	g.dialogue.visible = box_was
 	app.hud.visible = true
 
 

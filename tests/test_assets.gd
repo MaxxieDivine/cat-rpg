@@ -20,7 +20,10 @@ func test_listed_keys_resolve_to_data_paths() -> void:
 	check(not map.is_empty(), "assets.json has entries")
 	for key in map:
 		check_eq(AssetCatalog.path_for(key), str(map[key]), "path for %s" % key)
-		check(not AssetCatalog.is_placeholder(AssetCatalog.texture(key)), "%s loads" % key)
+		if key.begins_with("font."):
+			check(AssetCatalog.font(key) != null, "%s loads" % key)
+		else:
+			check(not AssetCatalog.is_placeholder(AssetCatalog.texture(key)), "%s loads" % key)
 
 
 func test_unlisted_key_falls_back_to_art_folder() -> void:
@@ -44,3 +47,10 @@ func test_cow_is_48x48() -> void:
 	var img := tex.get_image()
 	check_eq(img.get_pixel(0, 0).a, 0.0, "cow background is transparent")
 	check_eq(img.get_pixel(24, 24).a, 1.0, "cow centre is opaque")
+
+
+func test_dialogue_font_has_a_license() -> void:
+	var path := AssetCatalog.path_for("font.dialogue")
+	var license := path.get_basename() + "-OFL.txt"
+	check(FileAccess.file_exists(license), "font license next to the font (%s)" % license)
+	check(FileAccess.get_file_as_string(license).contains("SIL Open Font License"), "license is the OFL")

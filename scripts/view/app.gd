@@ -160,7 +160,12 @@ func _update_hud() -> void:
 			"view_scale": game.view_scale if game != null else 0,
 			"touch_controls": game.touch.visible if game != null else false,
 			"player": [game.world.player_pos.x, game.world.player_pos.y] if game != null else [],
-			"bubble": game.bubble.text() if game != null and game.bubble.visible else "",
+			"dialogue": game.dialogue.visible_text() if game != null and game.dialogue.is_open else "",
+			"speaker": str(game.dialogue.line.get("speaker", "")) if game != null and game.dialogue.is_open else "",
+			"choices": game.dialogue.line.get("choices", []) if game != null and game.dialogue.choices_shown() else [],
+			"voice_blips": game.voice.blips_played if game != null else 0,
+			"flags": GameState.state.flags,
+			"bonds": GameState.state.bonds,
 		}), true)
 
 

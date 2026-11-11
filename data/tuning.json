@@ -42,10 +42,12 @@
 		"min_choice_css": 44,
 		"choice_gap": 6,
 		"font_size_min": 14,
-		"font_size_max": 28,
-		"font_size_of_box": 0.13,
+		"font_size_max": 32,
+		"font_size_of_box": 0.15,
 		"arrow_blink": 0.5,
-		"camera_ease": 10
+		"camera_ease": 10,
+		"portrait_max": 180,
+		"top_reserved": 56
 	},
 	"prompt": {
 		"bob_px": 2,

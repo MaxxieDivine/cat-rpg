@@ -41,6 +41,22 @@ static func texture(key: String) -> Texture2D:
 	return tex
 
 
+## A font by key (data/assets.json). Missing fonts warn once and return
+## null: callers then use the theme's default font.
+static func font(key: String) -> Font:
+	if _cache.has(key):
+		return _cache[key]
+	var path := path_for(key)
+	var f: Font = null
+	if ResourceLoader.exists(path):
+		f = load(path) as Font
+	if f == null and not warned_keys.has(key):
+		warned_keys.append(key)
+		push_warning("AssetCatalog: missing font '%s' (%s)" % [key, path])
+	_cache[key] = f
+	return f
+
+
 static func is_placeholder(tex: Texture2D) -> bool:
 	return tex != null and tex == _placeholder
 

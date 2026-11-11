@@ -8,5 +8,6 @@
 	"cat.sorrel": "res://art/sorrel.png",
 	"cat.wick": "res://art/wick.png",
 	"decor.sunspot": "res://art/sunspot.png",
-	"ui.paw": "res://art/paw.png"
+	"ui.paw": "res://art/paw.png",
+	"font.dialogue": "res://fonts/PixelifySans.ttf"
 }
