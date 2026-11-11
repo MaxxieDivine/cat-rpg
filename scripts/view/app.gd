@@ -154,6 +154,8 @@ func _update_hud() -> void:
 		JavaScriptBridge.eval("window.catRpgStats = %s;" % JSON.stringify({
 			"fps": fps, "low": fps_low, "build": build_text,
 			"logic_ms": snappedf(logic_ms, 0.01),
+			"fullscreen_button": fullscreen_button.visible,
+			"fullscreen": ScreenMetrics.is_fullscreen(),
 			"screen": "game" if game != null else "title",
 			"view_scale": game.view_scale if game != null else 0,
 			"touch_controls": game.touch.visible if game != null else false,

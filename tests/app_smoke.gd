@@ -50,6 +50,22 @@ func test_desktop_hd() -> void:
 	await _run_config(DESKTOP_HD)
 
 
+func test_fullscreen_button_on_title_does_not_start_the_game() -> void:
+	for cfg in [PHONE, DESKTOP]:
+		var app: Control = await _open(cfg)
+		var fb: Rect2 = app.fullscreen_button.get_global_rect()
+		check(app.fullscreen_button.visible, "%s: button visible on the title" % cfg[0])
+		# Finger / mouse down and up on the button, as separate frames.
+		await _tap(app, fb.get_center(), app.metrics)
+		await tree.process_frame
+		await tree.process_frame
+		check_eq(ScreenMetrics.fullscreen_requests, 1, "%s: button requests fullscreen" % cfg[0])
+		check(app.game == null, "%s: tapping the fullscreen button does not start the game" % cfg[0])
+		check(app.title != null, "%s: still on the title" % cfg[0])
+		_close(app)
+		after_each()
+
+
 func test_portrait_shows_rotate_message_and_pauses() -> void:
 	var app: Control = await _open(PHONE)
 	await _tap(app, app.metrics.safe_rect.get_center(), app.metrics)

@@ -17,6 +17,8 @@ var cat_scale := 1
 var title_label: Label
 var start_label: Label
 var controls_label: Label
+## Shown where the browser can't go fullscreen (iPhone): how to get it anyway.
+var home_label: Label
 var metrics
 var _t := 0.0
 var _started := false
@@ -42,6 +44,8 @@ func _ready() -> void:
 	var touch := ScreenMetrics.is_touch()
 	start_label = _label(GameStrings.text("title.start_touch" if touch else "title.start_desktop"), 22, INK)
 	controls_label = _label(GameStrings.text("title.controls_touch" if touch else "title.controls_desktop"), 13, Color(INK, 0.75))
+	home_label = _label(GameStrings.text("title.add_to_home"), 13, Color(INK, 0.75))
+	home_label.visible = ScreenMetrics.should_suggest_home_screen()
 
 
 func _label(text: String, font_size: int, color: Color) -> Label:
@@ -64,12 +68,12 @@ func layout(m) -> void:
 	cat_scale = maxi(1, floori(safe_px.size.y * 0.3 / frame.y))
 	cat.scale = Vector2(cat_scale, cat_scale) / m.px_per_unit
 	var cat_ui := frame * cat.scale
-	var block_h := cat_ui.y + 52.0 + 34.0 + 24.0
+	var block_h := cat_ui.y + 52.0 + 34.0 + 24.0 + (22.0 if home_label.visible else 0.0)
 	var top := safe.position.y + maxf(8.0, (safe.size.y - block_h) / 2.0)
 	var cat_px: Vector2 = m.ui_to_px(Vector2(safe.get_center().x - cat_ui.x / 2.0, top)).floor()
 	cat.position = m.px_to_ui(cat_px)
 	var y := cat.position.y + cat_ui.y + 4.0
-	for l: Label in [title_label, start_label, controls_label]:
+	for l: Label in [title_label, start_label, controls_label, home_label]:
 		l.size = Vector2(safe.size.x, 0)
 		l.reset_size()
 		l.size.x = safe.size.x
