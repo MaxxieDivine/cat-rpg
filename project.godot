@@ -10,6 +10,15 @@ run/main_scene="res://scenes/app.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 config/icon="res://art/icon_512.png"
 
+[autoload]
+
+GameState="*res://scripts/autoload/game_state.gd"
+DialogueManager="*res://scripts/autoload/dialogue_manager.gd"
+
+[audio]
+
+buses/default_bus_layout="res://default_bus_layout.tres"
+
 [display]
 
 window/size/viewport_width=960

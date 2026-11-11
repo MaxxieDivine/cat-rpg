@@ -1,0 +1,22 @@
+{
+	"start": "start",
+	"nodes": {
+		"start": {"branch": [
+			{"if": {"talked_sorrel": true}, "next": "repeat"},
+			{"next": "come"}
+		]},
+		"come": {"speaker": "sorrel", "expression": "neutral", "text": "Come, little one. Sit in the sun while it lasts.", "next": "river"},
+		"river": {"speaker": "sorrel", "expression": "neutral", "text": "Did I ever tell you about the summer the river ran dry?", "next": "stones"},
+		"stones": {"speaker": "sorrel", "expression": "sad", "text": "Stones where the water should be. Fish gasping in the mud. We were all so hungry.", "next": "grandmother"},
+		"grandmother": {"speaker": "sorrel", "expression": "neutral", "text": "Your grandmother walked three nights to find a spring in the high rocks. She came back with nothing but wet paws... and a path.", "next": "walk_first"},
+		"walk_first": {"speaker": "sorrel", "expression": "happy", "text": "Tomorrow you walk the edge for the first time. Remember: we eat because someone walked first.", "set": {"talked_sorrel": true}, "end": true},
+		"repeat": {"branch": [
+			{"if": {"vole": "shared", "sorrel_thanked": false}, "next": "thanks"},
+			{"if": {"vole": "kept"}, "next": "empty_pile"},
+			{"next": "dozing"}
+		]},
+		"thanks": {"speaker": "sorrel", "expression": "happy", "text": "A vole? For me? ...You remembered the old way. That warms these bones more than the sun.", "set": {"sorrel_thanked": true}, "end": true},
+		"empty_pile": {"speaker": "sorrel", "expression": "neutral", "text": "The pile's empty, I see. No matter. Old bellies learn patience.", "end": true},
+		"dozing": {"speaker": "sorrel", "expression": "neutral", "text": "Mm... I'm only dozing. Go on.", "end": true}
+	}
+}

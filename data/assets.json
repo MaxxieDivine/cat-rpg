@@ -3,5 +3,10 @@
 	"cat.sheet": "res://art/cat.png",
 	"prop.bush": "res://art/bush.png",
 	"decor.tuft": "res://art/tuft.png",
-	"decor.flower": "res://art/flower.png"
+	"decor.flower": "res://art/flower.png",
+	"cat.bram": "res://art/bram.png",
+	"cat.sorrel": "res://art/sorrel.png",
+	"cat.wick": "res://art/wick.png",
+	"decor.sunspot": "res://art/sunspot.png",
+	"ui.paw": "res://art/paw.png"
 }

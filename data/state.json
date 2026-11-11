@@ -1,0 +1,12 @@
+{
+	"flags": {
+		"talked_bram": {"type": "bool"},
+		"talked_sorrel": {"type": "bool"},
+		"talked_wick": {"type": "bool"},
+		"bram_reply": {"type": "string", "values": ["eager", "nervous"]},
+		"vole": {"type": "string", "values": ["kept", "shared"]},
+		"sorrel_thanked": {"type": "bool"}
+	},
+	"bonds": ["bram", "sorrel", "wick"],
+	"expressions": ["neutral", "happy", "sad", "annoyed"]
+}

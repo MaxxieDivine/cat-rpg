@@ -1,7 +1,4 @@
 {
-	"game": {
-		"bubble_seconds": 1.5
-	},
 	"player": {
 		"walk_speed": 70,
 		"run_speed": 125,
@@ -24,7 +21,35 @@
 		"bubble_gap": 6
 	},
 	"view": {
-		"base": [480, 270],
-		"max": [640, 400]
+		"base": [
+			480,
+			270
+		],
+		"max": [
+			640,
+			400
+		]
+	},
+	"dialogue": {
+		"cps": 40,
+		"comma_pause": 0.08,
+		"period_pause": 0.2,
+		"blip_every": 2,
+		"pitch_jitter": 0.05,
+		"box_height": 0.4,
+		"margin": 8,
+		"padding": 12,
+		"min_choice_css": 44,
+		"choice_gap": 6,
+		"font_size_min": 14,
+		"font_size_max": 28,
+		"font_size_of_box": 0.13,
+		"arrow_blink": 0.5,
+		"camera_ease": 10
+	},
+	"prompt": {
+		"bob_px": 2,
+		"bob_hz": 1.6,
+		"gap": 3
 	}
 }

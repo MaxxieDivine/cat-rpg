@@ -1,0 +1,32 @@
+{
+	"start": "start",
+	"nodes": {
+		"start": {"branch": [
+			{"if": {"talked_wick": true}, "next": "repeat"},
+			{"next": "sleepiest"}
+		]},
+		"sleepiest": {"speaker": "wick", "expression": "happy", "text": "Well, if it isn't the sleepiest apprentice in the meadow.", "next": "dawn"},
+		"dawn": {"speaker": "wick", "expression": "neutral", "text": "Bram's taking us both out at dawn. Try not to trip over your own tail.", "choices": [
+			{"text": "Says the cat who fell in the stream last moon.", "next": "fern_stream", "bond": {"wick": 1}},
+			{"text": "Are you worried about it?", "next": "fern_worried"}
+		]},
+		"fern_stream": {"speaker": "fern", "expression": "happy", "text": "Says the cat who fell in the stream last moon.", "next": "smells_wrong"},
+		"fern_worried": {"speaker": "fern", "expression": "neutral", "text": "Are you worried about it?", "next": "smells_wrong"},
+		"smells_wrong": {"speaker": "wick", "expression": "sad", "text": "...Fine. Maybe I didn't sleep last night either. The north edge smells wrong lately.", "next": "last_vole"},
+		"last_vole": {"speaker": "wick", "expression": "neutral", "text": "Here. Last vole on the pile. The elders haven't eaten yet, but... nobody's counting.", "choices": [
+			{"text": "Eat it.", "next": "fern_eat", "set": {"vole": "kept"}, "bond": {"wick": 1}},
+			{"text": "Bring it to Sorrel.", "next": "fern_share", "set": {"vole": "shared"}}
+		]},
+		"fern_eat": {"speaker": "fern", "expression": "happy", "text": "Eat it.", "next": "our_secret"},
+		"our_secret": {"speaker": "wick", "expression": "happy", "text": "Ha. Knew you had some sense. Our secret.", "set": {"talked_wick": true}, "end": true},
+		"fern_share": {"speaker": "fern", "expression": "neutral", "text": "Bring it to Sorrel.", "next": "good_one"},
+		"good_one": {"speaker": "wick", "expression": "annoyed", "text": "Ugh. Always the good one.", "next": "say_hi"},
+		"say_hi": {"speaker": "wick", "expression": "neutral", "text": "...Tell her I said hi.", "set": {"talked_wick": true}, "end": true},
+		"repeat": {"branch": [
+			{"if": {"vole": "kept"}, "next": "repeat_kept"},
+			{"next": "repeat_shared"}
+		]},
+		"repeat_kept": {"speaker": "wick", "expression": "happy", "text": "Our secret, right?", "end": true},
+		"repeat_shared": {"speaker": "wick", "expression": "neutral", "text": "Did she like it? ...Don't tell her I asked.", "end": true}
+	}
+}

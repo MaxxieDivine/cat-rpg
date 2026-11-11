@@ -3,6 +3,8 @@ extends RefCounted
 ## Nodes, so it runs and tests headless. The view calls step() every frame with
 ## the input it read and interact() when the player presses interact; both
 ## return events (Dictionaries with a "type") for the view to show.
+## While a conversation runs (begin_talk() .. end_talk()) the player can't
+## move and the NPC being talked to stops; the two face each other.
 ## preload() this script; no class_name.
 ##
 ## Positions are "feet" positions in world pixels: the bottom-centre of a
@@ -30,14 +32,21 @@ var running := false
 ## Distance walked, for the view's walk animation.
 var distance := 0.0
 
-## Each: {"id", "art", "pos", "footprint", "talk_radius", "say", "rect"}
+## Each: {"id", "art", "frames", "pos", "footprint", "talk_radius",
+## "dialogue" (file path), "behavior" (sit / lie / pace / stand), "facing",
+## "rect", and for pacers "path", "speed", "pause", "moving", "distance"}
 var npcs: Array[Dictionary] = []
+## Flat decals under everything (Sorrel's sunny spot). Each: {"art", "pos"}
+var ground: Array[Dictionary] = []
+## id of the NPC the player is talking to, or "".
+var talk_id := ""
 ## Each: {"art", "pos", "rect"}
 var props: Array[Dictionary] = []
 ## Each: {"art", "pos"}; cosmetic, placed with the seeded RNG.
 var decor: Array[Dictionary] = []
-## Collision rects (npc and prop footprints).
+## Collision rects (npc and prop footprints). Rebuilt when an NPC moves.
 var solids: Array[Rect2] = []
+var _prop_solids: Array[Rect2] = []
 ## id of the NPC the player can interact with right now, or "".
 var focus_id := ""
 
@@ -79,20 +88,38 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 		var npc := {
 			"id": str(n.get("id", "")),
 			"art": str(n.get("art", "")),
+			"frames": int(n.get("frames", 1)),
 			"pos": _vec(n.get("pos", [0, 0])),
 			"footprint": _vec(n.get("footprint", [16, 6])),
-			"talk_radius": float(n.get("talk_radius", 16)),
-			"say": str(n.get("say", "")),
+			"talk_radius": float(n.get("talk_radius", 22)),
+			"dialogue": str(n.get("dialogue", "")),
+			"behavior": str(n.get("behavior", "stand")),
+			"facing": int(n.get("facing", 1)),
+			"moving": false,
+			"distance": 0.0,
 		}
+		var path: Array[Vector2] = []
+		for pt in n.get("path", []):
+			path.append(_vec(pt))
+		if not path.is_empty():
+			npc["path"] = path
+			npc["pos"] = path[0]
+			npc["leg"] = 1 % path.size()
+			npc["speed"] = float(n.get("speed", 16))
+			npc["pause"] = float(n.get("pause", 0.8))
+			npc["wait"] = npc["pause"]
 		npc["rect"] = footprint_rect(npc["pos"], npc["footprint"])
 		npcs.append(npc)
-		solids.append(npc["rect"])
 
 	for pr: Dictionary in w.get("props", []):
 		var prop := {"art": str(pr.get("art", "")), "pos": _vec(pr.get("pos", [0, 0]))}
 		prop["rect"] = footprint_rect(prop["pos"], _vec(pr.get("footprint", [16, 6])))
 		props.append(prop)
-		solids.append(prop["rect"])
+		_prop_solids.append(prop["rect"])
+	_rebuild_solids()
+
+	for g: Dictionary in w.get("ground", []):
+		ground.append({"art": str(g.get("art", "")), "pos": _vec(g.get("pos", [0, 0]))})
 
 	var d: Dictionary = w.get("decor", {})
 	rng.seed = int(d.get("seed", 0))
@@ -112,8 +139,12 @@ static func footprint_rect(feet: Vector2, fp: Vector2) -> Rect2:
 ## player, clamped so it never shows past the world's edges (the camera
 ## limits). If the view is bigger than the world on an axis, it is centred.
 ## Whole pixels, so pixel art stays crisp.
-func camera_rect(view_size: Vector2) -> Rect2:
-	var top_left := player_pos - Vector2(0, player_footprint.y * 2.0) - view_size / 2.0
+## `center` (world px) overrides the point to centre on (the view frames a
+## conversation above the dialogue box with it).
+func camera_rect(view_size: Vector2, center: Vector2 = Vector2.INF) -> Rect2:
+	if center == Vector2.INF:
+		center = player_pos - Vector2(0, player_footprint.y * 2.0)
+	var top_left := center - view_size / 2.0
 	for axis in 2:
 		if view_size[axis] >= size[axis]:
 			top_left[axis] = (size[axis] - view_size[axis]) / 2.0
@@ -134,6 +165,10 @@ func speed() -> float:
 ## length (0..1) scales speed, so a half-pushed stick walks slowly.
 func step(dt: float, move: Vector2, run: bool) -> Array[Dictionary]:
 	dt = clampf(dt, 0.0, MAX_DT)
+	if is_talking():
+		move = Vector2.ZERO
+		run = false
+	_step_npcs(dt)
 	if move.length() > 1.0:
 		move = move.normalized()
 	running = run and move.length() > 0.0
@@ -160,14 +195,80 @@ func step(dt: float, move: Vector2, run: bool) -> Array[Dictionary]:
 	return events
 
 
-## The player pressed interact. Returns a "say" event if an NPC is in range.
+## The player pressed interact. If an NPC is in range, starts talking to it
+## and returns a "talk" event with its dialogue file.
 func interact() -> Array[Dictionary]:
-	var npc := npc_by_id(focus_id)
-	if npc.is_empty():
+	if is_talking():
 		return []
-	# Turn to face who we talk to.
+	var npc := npc_by_id(focus_id)
+	if npc.is_empty() or npc["dialogue"] == "":
+		return []
+	begin_talk(npc["id"])
+	return [{"type": "talk", "id": npc["id"], "dialogue": npc["dialogue"]}]
+
+
+func is_talking() -> bool:
+	return talk_id != ""
+
+
+## Locks movement, stops the cat and the NPC, and turns them to face each other.
+func begin_talk(id: String) -> void:
+	var npc := npc_by_id(id)
+	if npc.is_empty():
+		return
+	talk_id = id
+	player_vel = Vector2.ZERO
+	running = false
+	npc["moving"] = false
 	facing = 1 if npc["pos"].x >= player_pos.x else -1
-	return [{"type": "say", "id": npc["id"], "text_key": npc["say"]}]
+	npc["facing"] = -facing
+
+
+func end_talk() -> void:
+	talk_id = ""
+
+
+## Wick-style pacing: walk the path's points in a loop, pausing at each.
+## A pacer waits instead of walking into the player, and stands still while
+## being talked to.
+func _step_npcs(dt: float) -> void:
+	var moved := false
+	for npc in npcs:
+		if not npc.has("path"):
+			continue
+		npc["moving"] = false
+		if npc["id"] == talk_id:
+			continue
+		if npc["wait"] > 0.0:
+			npc["wait"] = maxf(0.0, npc["wait"] - dt)
+			continue
+		var path: Array[Vector2] = npc["path"]
+		var target: Vector2 = path[npc["leg"]]
+		var pos: Vector2 = npc["pos"]
+		var next := pos.move_toward(target, npc["speed"] * dt)
+		var r := footprint_rect(next, npc["footprint"])
+		if r.intersects(player_rect().grow(1.0)):
+			continue
+		if absf(next.x - pos.x) > 0.001:
+			npc["facing"] = 1 if next.x > pos.x else -1
+		npc["distance"] += pos.distance_to(next)
+		npc["pos"] = next
+		npc["rect"] = r
+		npc["moving"] = true
+		moved = true
+		if next.is_equal_approx(target):
+			npc["pos"] = target
+			npc["leg"] = (npc["leg"] + 1) % path.size()
+			npc["wait"] = npc["pause"]
+	if moved:
+		_rebuild_solids()
+
+
+func _rebuild_solids() -> void:
+	solids = []
+	for npc in npcs:
+		solids.append(npc["rect"])
+	solids.append_array(_prop_solids)
 
 
 func npc_by_id(id: String) -> Dictionary:
