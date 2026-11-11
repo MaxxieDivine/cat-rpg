@@ -24,18 +24,38 @@ const _JS_IS_FULLSCREEN := """(function () {
 		mm('(display-mode: fullscreen)') || mm('(display-mode: standalone)') || navigator.standalone === true);
 })()"""
 
+## Phones only count a touch as a "user activation" when the finger lifts
+## (touchend), but Godot hands us the touch when it lands. So: if the browser
+## says the gesture is already active (mouse click, key press), request now;
+## otherwise arm one-shot listeners that request inside the next
+## touchend / click / keydown, synchronously, where it is allowed.
 const _JS_REQUEST_FULLSCREEN := """(function () {
 	var lock = function () {
 		try { if (screen.orientation && screen.orientation.lock) { screen.orientation.lock('landscape').catch(function () {}); } } catch (e) {}
 	};
-	var el = document.documentElement;
-	var req = el.requestFullscreen || el.webkitRequestFullscreen;
-	if (!req) { lock(); return 'unsupported'; }
-	try {
-		var p = req.call(el, { navigationUI: 'hide' });
-		if (p && p.then) { p.then(lock, function () {}); } else { lock(); }
-		return 'requested';
-	} catch (e) { return 'error'; }
+	var go = function () {
+		if (document.fullscreenElement || document.webkitFullscreenElement) { return 'already'; }
+		var el = document.documentElement;
+		var req = el.requestFullscreen || el.webkitRequestFullscreen;
+		if (!req) { lock(); return 'unsupported'; }
+		try {
+			var p = req.call(el, { navigationUI: 'hide' });
+			if (p && p.then) { p.then(lock, function () {}); } else { lock(); }
+			return 'requested';
+		} catch (e) { return 'error'; }
+	};
+	var ua = navigator.userActivation;
+	if (ua && ua.isActive) { return go(); }
+	if (window.__catRpgFsArmed) { return 'armed'; }
+	window.__catRpgFsArmed = true;
+	var events = ['touchend', 'click', 'keydown'];
+	var once = function () {
+		events.forEach(function (t) { window.removeEventListener(t, once, true); });
+		window.__catRpgFsArmed = false;
+		go();
+	};
+	events.forEach(function (t) { window.addEventListener(t, once, true); });
+	return 'armed';
 })()"""
 
 const _JS_INSETS := """(function () {
@@ -135,6 +155,23 @@ static func is_web() -> bool:
 	return OS.has_feature("web")
 
 
+## Evaluates a JavaScript expression as a yes/no. JavaScriptBridge returns a
+## JS boolean as the number 1/0 (not "true"), so compare numbers.
+static func js_bool(expr: String) -> bool:
+	if not is_web():
+		return false
+	var v: Variant = JavaScriptBridge.eval("((%s) ? 1 : 0)" % expr, true)
+	return v != null and int(v) == 1
+
+
+## The browser can't go fullscreen and isn't already (iPhone Safari / Chrome):
+## the title tells players to add the game to the home screen instead.
+static func should_suggest_home_screen() -> bool:
+	if override_fullscreen >= 0:
+		return false
+	return is_web() and is_touch() and not can_fullscreen() and not is_fullscreen()
+
+
 ## Whether this device has a touchscreen (phones, tablets, touch laptops).
 static func is_touch() -> bool:
 	if override_touch >= 0:
@@ -148,7 +185,7 @@ static func can_fullscreen() -> bool:
 	if override_fullscreen >= 0:
 		return true
 	if is_web():
-		return str(JavaScriptBridge.eval("!!(document.fullscreenEnabled || document.webkitFullscreenEnabled)", true)) == "true"
+		return js_bool("document.fullscreenEnabled || document.webkitFullscreenEnabled")
 	return not OS.has_feature("mobile")
 
 
@@ -158,7 +195,7 @@ static func is_fullscreen() -> bool:
 	if override_fullscreen >= 0:
 		return override_fullscreen == 1
 	if is_web():
-		return str(JavaScriptBridge.eval(_JS_IS_FULLSCREEN, true)) == "true"
+		return js_bool(_JS_IS_FULLSCREEN)
 	var mode := DisplayServer.window_get_mode()
 	return mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
 
