@@ -26,8 +26,8 @@
 			270
 		],
 		"max": [
-			640,
-			400
+			1280,
+			720
 		]
 	},
 	"dialogue": {
@@ -36,22 +36,82 @@
 		"period_pause": 0.2,
 		"blip_every": 2,
 		"pitch_jitter": 0.05,
-		"box_height": 0.4,
-		"margin": 8,
-		"padding": 12,
-		"min_choice_css": 44,
-		"choice_gap": 6,
-		"font_size_min": 14,
-		"font_size_max": 32,
-		"font_size_of_box": 0.15,
+		"max_height": 0.25,
+		"lines": 3,
+		"font_px": 12,
+		"line_px": 12,
+		"margin_px": 4,
+		"padding_px": 3,
+		"portrait_px": 32,
+		"plate_px": 13,
+		"choice_pad_px": 4,
+		"choice_gap_px": 2,
+		"touch_choice_css": 38,
+		"min_choice_css": 36,
+		"max_choice_css": 40,
 		"arrow_blink": 0.5,
 		"camera_ease": 10,
-		"portrait_max": 180,
-		"top_reserved": 56
+		"camera_lift_px": 6,
+		"anim_s": 0.15,
+		"anim_slide_px": 6,
+		"top_reserved_px": 20,
+		"text_trim_px": 4,
+		"bottom_margin_px": 1
 	},
 	"prompt": {
 		"bob_px": 2,
 		"bob_hz": 1.6,
 		"gap": 3
+	},
+	"wind": {
+		"speed": 1.4,
+		"wavelength": 110,
+		"grass_px": 1.0,
+		"flower_px": 1.0,
+		"bush_px": 1.0,
+		"canopy_px": 2.0,
+		"gust_every": 7.0,
+		"rustle_s": 0.45,
+		"rustle_px": 2.0
+	},
+	"ambience": {
+		"pollen": 14,
+		"fireflies": 34,
+		"butterflies": 4,
+		"clouds": 3,
+		"cloud_speed": 5,
+		"bird_every": [
+			8,
+			16
+		],
+		"bird_speed": 95,
+		"butterfly_speed": 16,
+		"canopy_fade": 0.55
+	},
+	"time_of_day": {
+		"duration": 8,
+		"dusk_at": 0.5,
+		"after_flags": [
+			"talked_bram",
+			"talked_sorrel",
+			"talked_wick"
+		]
+	},
+	"audio": {
+		"crossfade_s": 2.5,
+		"footstep_px": 14,
+		"lap_every": [
+			1.6,
+			3.2
+		],
+		"bird_every": [
+			2.5,
+			6.0
+		],
+		"volume_steps": [
+			1.0,
+			0.5,
+			0.0
+		]
 	}
 }

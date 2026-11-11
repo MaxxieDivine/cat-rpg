@@ -33,6 +33,8 @@ func after_each() -> void:
 	ScreenMetrics.override_touch = -1
 	ScreenMetrics.override_fullscreen = -1
 	ScreenMetrics.fullscreen_requests = 0
+	AudioServer.set_bus_mute(0, false)
+	AudioServer.set_bus_volume_db(0, 0.0)
 	for a in ["move_left", "move_right", "move_up", "move_down", "run", "interact"]:
 		if InputMap.has_action(a):
 			Input.action_release(a)
@@ -52,6 +54,84 @@ func test_desktop() -> void:
 
 func test_desktop_hd() -> void:
 	await _run_config(DESKTOP_HD)
+
+
+## Very wide and squarish screens: the world (meadow, then forest) still
+## reaches every edge, nothing flat past it.
+const ODD_SCREENS := [
+	["ultrawide", Vector2i(3440, 1440), 1.0, [0.0, 0.0, 0.0, 0.0], false],
+	["superwide", Vector2i(3840, 1080), 1.0, [0.0, 0.0, 0.0, 0.0], false],
+	["squarish", Vector2i(1280, 1024), 1.0, [0.0, 0.0, 0.0, 0.0], false],
+	["tablet", Vector2i(1180, 820), 2.0, [24.0, 0.0, 20.0, 0.0], true],
+]
+
+
+func test_no_dead_margins_on_odd_screens() -> void:
+	for cfg in ODD_SCREENS:
+		var name: String = cfg[0]
+		var app: Control = await _open(cfg)
+		await _tap(app, app.metrics.safe_rect.get_center(), app.metrics)
+		var g: Control = app.game
+		var w = g.world
+		var screen_ui := Rect2(Vector2.ZERO, app.metrics.ui_size)
+		check(g.view_rect.grow(0.01).encloses(screen_ui), "%s: world view covers the screen (%s)" % [name, g.view_rect])
+		# Walk to every corner: the camera never shows past the forest.
+		for corner in [Vector2(8, 12), Vector2(w.size.x - 8, 12), Vector2(8, w.size.y - 2), w.size - Vector2(8, 2)]:
+			w.player_pos = corner
+			w.player_vel = Vector2.ZERO
+			await tree.process_frame
+			var WorldView := load("res://scripts/view/world_view.gd")
+			check(w.camera_bounds().grow(WorldView.FOREST_REACH).encloses(g.camera_rect), "%s: forest under the camera at %s" % [name, corner])
+			if not is_headless():
+				var img: Image = await _screen_image()
+				var letter := Color(str(JsonData.load_dict("res://data/palette.json")["ui"]["letterbox"]))
+				var flat := 0
+				for x in range(0, img.get_width(), 9):
+					for y in [0, img.get_height() - 1]:
+						if img.get_pixel(x, y).is_equal_approx(letter):
+							flat += 1
+				for y in range(0, img.get_height(), 9):
+					for x in [0, img.get_width() - 1]:
+						if img.get_pixel(x, y).is_equal_approx(letter):
+							flat += 1
+				check_eq(flat, 0, "%s at %s: edge pixels showing the letterbox colour" % [name, corner])
+		if shots_dir != "" and not is_headless():
+			await _shot(app, name)
+		_close(app)
+		after_each()
+
+
+func test_volume_button_cycles_and_sits_by_fullscreen() -> void:
+	for cfg in [PHONE, DESKTOP]:
+		var app: Control = await _open(cfg)
+		var vb: Control = app.volume_button
+		var fb: Control = app.fullscreen_button
+		var m = app.metrics
+		check(vb.visible, "%s: volume button shown" % cfg[0])
+		check(m.safe_rect.encloses(vb.get_global_rect()), "%s: volume button inside the safe area" % cfg[0])
+		check(vb.size.x * m.px_per_unit.x / m.dpr >= 48.0 - 0.01, "%s: volume button >= 48 CSS px" % cfg[0])
+		check(not vb.get_global_rect().intersects(fb.get_global_rect()), "%s: next to, not on, the fullscreen button" % cfg[0])
+		check(absf(vb.get_global_rect().end.x - fb.get_global_rect().position.x) <= 1.0, "%s: just left of the fullscreen button" % cfg[0])
+		var steps: Array = tuning["audio"]["volume_steps"]
+		for i in steps.size():
+			check_near(db_to_linear(AudioServer.get_bus_volume_db(0)) if not AudioServer.is_bus_mute(0) else 0.0, float(steps[i]), 0.01, "%s: master volume step %d" % [cfg[0], i])
+			await _tap(app, vb.get_global_rect().get_center(), m)
+			await tree.process_frame
+		check(app.title != null, "%s: the volume button doesn't start the game" % cfg[0])
+		check(not AudioServer.is_bus_mute(0), "%s: back to full volume after a full cycle" % cfg[0])
+		# Fullscreen: the volume button takes the corner.
+		await _tap(app, m.safe_rect.get_center(), m)
+		app.relayout()
+		check(not fb.visible, "%s: fullscreen button hidden while fullscreen" % cfg[0])
+		check(absf(vb.get_global_rect().end.x - (m.safe_rect.end.x - 4.0)) <= 1.0, "%s: volume button moves into the corner" % cfg[0])
+		_close(app)
+		after_each()
+
+
+func _screen_image() -> Image:
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	return tree.root.get_texture().get_image()
 
 
 func test_fullscreen_button_on_title_does_not_start_the_game() -> void:
@@ -296,10 +376,14 @@ func _check_view(app: Control, name: String) -> void:
 		check(g.view_rect.grow(0.01).encloses(screen_ui), "%s: no letterbox, the world fills the screen" % name)
 	check_near(g.view_rect.get_center().x, screen_ui.get_center().x, 1.0, "%s: view centred x" % name)
 	check_eq(g.viewport.size, g.view_size, "%s: SubViewport matches the view" % name)
-	var world_rect := Rect2(Vector2.ZERO, g.world.size)
-	check(world_rect.encloses(g.camera_rect), "%s: camera inside the world (camera %s)" % [name, g.camera_rect])
+	var lim: Rect2 = g.world.camera_bounds()
+	for axis in 2:
+		if g.camera_rect.size[axis] <= lim.size[axis]:
+			check(g.camera_rect.position[axis] >= lim.position[axis] and g.camera_rect.end[axis] <= lim.end[axis], "%s: camera inside the meadow + forest border on axis %d (camera %s)" % [name, axis, g.camera_rect])
 	check_eq(g.camera.position, g.camera_rect.position, "%s: Camera2D at the camera rect" % name)
-	check(g.camera.limit_right == int(g.world.size.x) and g.camera.limit_bottom == int(g.world.size.y), "%s: Camera2D limits are the world's edges" % name)
+	check(g.camera.limit_left == int(lim.position.x) and g.camera.limit_right == int(lim.end.x) and g.camera.limit_bottom == int(lim.end.y), "%s: Camera2D limits are the meadow + forest border" % name)
+	# No dead margins: the world view covers the whole screen.
+	check(g.view_rect.grow(0.01).encloses(screen_ui), "%s: the world reaches every edge (view %s, screen %s)" % [name, g.view_rect, screen_ui])
 
 
 func _check_hud(app: Control, name: String) -> void:
@@ -433,6 +517,7 @@ func _check_view_pixels(app: Control, name: String) -> void:
 	g.paused = true  # freeze overlay updates (hiding touch would show the keyboard prompt)
 	g.touch.visible = false
 	app.hud.visible = false
+	app.volume_button.visible = false
 	var box_was: bool = g.dialogue.visible
 	g.dialogue.visible = false
 	await RenderingServer.frame_post_draw
@@ -464,6 +549,7 @@ func _check_view_pixels(app: Control, name: String) -> void:
 	g.paused = paused_was
 	g.dialogue.visible = box_was
 	app.hud.visible = true
+	app.volume_button.visible = true
 
 
 func _shot(app: Control, name: String) -> void:
@@ -499,3 +585,138 @@ func _drag(app: Control, index: int, ui_pos: Vector2) -> void:
 	ev.index = index
 	ev.position = app.metrics.ui_to_px(ui_pos)
 	tree.root.push_input(ev)
+
+
+# --- Atmosphere: time of day, life, light
+
+
+func test_time_of_day_phone() -> void:
+	await _time_of_day(PHONE)
+
+
+func test_time_of_day_desktop() -> void:
+	await _time_of_day(DESKTOP)
+
+
+## Nightfall starts after the three conversations; then day, dusk, night
+## and the dialogue box are shot at this size and checked: grade and
+## brightness, fireflies at night, music swap, crisp integer scaling in
+## every state, and the meadow moving while Fern stands still.
+func _time_of_day(cfg: Array) -> void:
+	var name: String = cfg[0]
+	var app: Control = await _open(cfg)
+	await _tap(app, app.metrics.safe_rect.get_center(), app.metrics)
+	var g: Control = app.game
+	var w = g.world
+	var wv: Node2D = g.world_view
+	var pal := JsonData.load_dict("res://data/palette.json")
+	w.player_pos = Vector2(360, 250)
+	w.player_vel = Vector2.ZERO
+	await tree.process_frame
+	check_eq(g.day.phase(), "afternoon", "%s: starts in the afternoon" % name)
+	check(wv.grade.color.is_equal_approx(Color(str(pal["grade"]["afternoon"]))), "%s: warm afternoon grade" % name)
+	check_eq(g.sound.music_name, "day", "%s: day music" % name)
+	check(wv.pollen.emitting and not wv.fireflies.emitting, "%s: pollen by day, no fireflies" % name)
+	for k in ["pollen", "fireflies"]:
+		check_eq((wv.get(k) as CPUParticles2D).amount, int(tuning["ambience"][k]), "%s: %s count from tuning.json" % [name, k])
+	check_eq(wv.butterflies.size(), int(tuning["ambience"]["butterflies"]), "%s: butterflies from tuning.json" % name)
+
+	var stats := {}
+	if not is_headless():
+		# Alive while standing still: wind, clouds, butterflies, pollen.
+		var a: Image = await _view_image(g)
+		await tree.create_timer(0.7).timeout
+		var b: Image = await _view_image(g)
+		var moved := _diff_count(a, b)
+		check(moved > 40, "%s: the meadow moves while Fern stands still (%d px changed)" % [name, moved])
+		stats["afternoon"] = await _phase_shot(app, name + "_day")
+
+		# The box over the meadow, at most the bottom quarter.
+		w.player_pos = Vector2(262, 196)
+		await tree.process_frame
+		await tree.process_frame
+		g.interact()
+		for i in 20:
+			await tree.process_frame
+		var box: Control = g.dialogue
+		check(box.is_open and not box.animating(), "%s: box open" % name)
+		var top: float = minf(box.box_rect.position.y, box.plate_rect.position.y)
+		check(app.metrics.ui_size.y - top <= app.metrics.ui_size.y * float(tuning["dialogue"]["max_height"]) + 1.0, "%s: the box covers no more than the bottom quarter" % name)
+		await _phase_shot(app, name + "_dialogue")
+		DialogueManager.stop()
+		g._show({"type": "end"})
+		for i in 20:
+			await tree.process_frame
+		check(not box.visible, "%s: box gone after its close slide" % name)
+
+	# Nightfall: all three talked, box closed.
+	for id in ["bram", "sorrel", "wick"]:
+		GameState.set_flag("talked_" + id, true)
+	await tree.process_frame
+	await tree.process_frame
+	check(g.day.started, "%s: nightfall starts after the last conversation" % name)
+	if not is_headless():
+		g.day.set_t(float(tuning["time_of_day"]["dusk_at"]))
+		await tree.create_timer(0.3).timeout
+		check_eq(g.day.phase(), "dusk", "%s: dusk" % name)
+		stats["dusk"] = await _phase_shot(app, name + "_dusk")
+	g.day.set_t(1.0)
+	await tree.create_timer(3.0).timeout
+	check_eq(g.day.phase(), "night", "%s: night" % name)
+	check(wv.grade.color.is_equal_approx(Color(str(pal["grade"]["night"]))), "%s: night grade" % name)
+	check(wv.fireflies.emitting and not wv.pollen.emitting, "%s: fireflies rise at night" % name)
+	check_near(float((wv.pond.material as ShaderMaterial).get_shader_parameter("night")), 1.0, 0.001, "%s: the pond darkens" % name)
+	check_eq(g.sound.music_name, "night" if g.sound.has_music("night") else "day", "%s: night music" % name)
+	if not is_headless():
+		stats["night"] = await _phase_shot(app, name + "_night")
+		var day_s: Dictionary = stats["afternoon"]
+		check(day_s["r"] > day_s["b"], "%s: afternoon is warm (r %.2f > b %.2f)" % [name, day_s["r"], day_s["b"]])
+		check(stats["dusk"]["lum"] < day_s["lum"] and stats["night"]["lum"] < stats["dusk"]["lum"] * 0.85, "%s: darker each step (%.2f > %.2f > %.2f)" % [name, day_s["lum"], stats["dusk"]["lum"], stats["night"]["lum"]])
+		check(stats["night"]["b"] > stats["night"]["r"], "%s: night is cool" % name)
+		check(stats["night"]["glow"] >= 4, "%s: fireflies visible at night (%d glowing px)" % [name, stats["night"]["glow"]])
+	_close(app)
+
+
+## Screenshot, crisp-scaling check, and colour stats of the world view.
+func _phase_shot(app: Control, name: String) -> Dictionary:
+	var g: Control = app.game
+	await _check_view_pixels(app, name)
+	var img: Image = await _screen_image()
+	if shots_dir != "":
+		img.save_png(shots_dir.path_join("app_%s.png" % name))
+		print("     shot: ", shots_dir.path_join("app_%s.png" % name))
+	var src: Image = g.viewport.get_texture().get_image()
+	var r := 0.0
+	var gg := 0.0
+	var b := 0.0
+	var n := 0
+	for y in range(0, src.get_height(), 3):
+		for x in range(0, src.get_width(), 3):
+			var c := src.get_pixel(x, y)
+			r += c.r
+			gg += c.g
+			b += c.b
+			n += 1
+	# Firefly glow: bright yellow pixels on the overlay (not under the grade).
+	var glow := 0
+	var ff := Color(str(JsonData.load_dict("res://data/palette.json")["firefly"]))
+	for y in src.get_height():
+		for x in src.get_width():
+			var c := src.get_pixel(x, y)
+			if c.get_luminance() > 0.8 and absf(c.r - ff.r) < 0.25 and absf(c.b - ff.b) < 0.3 and c.b < c.r:
+				glow += 1
+	return {"r": r / n, "g": gg / n, "b": b / n, "lum": (r * 0.3 + gg * 0.59 + b * 0.11) / n, "glow": glow}
+
+
+func _view_image(g: Control) -> Image:
+	await RenderingServer.frame_post_draw
+	return g.viewport.get_texture().get_image()
+
+
+func _diff_count(a: Image, b: Image) -> int:
+	var n := 0
+	for y in range(0, a.get_height(), 2):
+		for x in range(0, a.get_width(), 2):
+			if not a.get_pixel(x, y).is_equal_approx(b.get_pixel(x, y)):
+				n += 1
+	return n

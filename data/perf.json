@@ -1,0 +1,6 @@
+{
+	"_note": "Budgets for tests/perf_smoke.gd. Measured on a CI-class machine (Nov 2026): logic 0.27-0.45 ms/frame, 84-88 draw calls, 528 nodes. Raise only with a reason in the commit.",
+	"logic_ms": 2.0,
+	"draw_calls": 140,
+	"nodes": 700
+}

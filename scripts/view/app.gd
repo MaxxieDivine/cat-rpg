@@ -9,6 +9,7 @@ const TitleScreen := preload("res://scripts/view/title.gd")
 const GameScreen := preload("res://scripts/view/game.gd")
 const RotateOverlay := preload("res://scripts/view/rotate_overlay.gd")
 const FullscreenButton := preload("res://scripts/view/fullscreen_button.gd")
+const VolumeButton := preload("res://scripts/view/volume_button.gd")
 const BUILD_PATH := "res://data/build.json"
 
 var metrics := ScreenMetrics.new()
@@ -17,6 +18,7 @@ var game: Control
 var rotate: Control
 var hud: Label
 var fullscreen_button: Control
+var volume_button: Control
 var build_text := ""
 ## Frame stats for the hud, refreshed twice a second.
 var fps := 0
@@ -47,7 +49,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var letterbox := ColorRect.new()
 	letterbox.name = "Letterbox"
-	letterbox.color = Color("#2e4a33")
+	letterbox.color = Color(str(JsonData.load_dict("res://data/palette.json").get("ui", {}).get("letterbox", "#264c33")))
 	letterbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	letterbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(letterbox)
@@ -71,6 +73,9 @@ func _ready() -> void:
 	add_child(hud)
 	fullscreen_button = FullscreenButton.new()
 	add_child(fullscreen_button)
+	volume_button = VolumeButton.new()
+	add_child(volume_button)
+	volume_button.configure(JsonData.load_dict("res://data/tuning.json").get("audio", {}).get("volume_steps", []))
 	build_text = read_build_text()
 	_update_hud()
 
@@ -110,9 +115,19 @@ func relayout() -> void:
 		game.layout(metrics)
 		game.set_paused(portrait)
 	_place_hud()
+	_place_buttons()
+	_laying_out = false
+
+
+## Fullscreen button in the top-right corner; the volume button just left
+## of it (or in the corner while the fullscreen one is hidden).
+func _place_buttons() -> void:
 	fullscreen_button.refresh()
 	fullscreen_button.place(metrics.safe_rect, 4.0)
-	_laying_out = false
+	var x := fullscreen_button.position.x
+	if fullscreen_button.visible:
+		x -= volume_button.min_target
+	volume_button.place(Vector2(x, fullscreen_button.position.y))
 
 
 func read_build_text() -> String:
@@ -142,7 +157,7 @@ func _process(dt: float) -> void:
 		_frame_time = 0.0
 		_worst_dt = 0.0
 		_update_hud()
-		fullscreen_button.refresh()  # also catches leaving fullscreen with Esc / back
+		_place_buttons()  # also catches leaving fullscreen with Esc / back
 
 
 func _update_hud() -> void:
@@ -165,6 +180,11 @@ func _update_hud() -> void:
 			"choices": game.dialogue.line.get("choices", []) if game != null and game.dialogue.choices_shown() else [],
 			"voice_blips": game.voice.blips_played if game != null else 0,
 			"flags": GameState.state.flags,
+			"time_of_day": snappedf(game.day.t, 0.01) if game != null else 0.0,
+			"phase": game.day.phase() if game != null else "afternoon",
+			"music": game.sound.music_name if game != null and game.sound != null else "",
+			"volume": volume_button.volume(),
+			"view_size": [game.view_size.x, game.view_size.y] if game != null else [],
 			"bonds": GameState.state.bonds,
 		}), true)
 

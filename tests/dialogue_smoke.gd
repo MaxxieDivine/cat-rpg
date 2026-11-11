@@ -248,20 +248,20 @@ func test_phone_layout_hides_joystick_and_keeps_targets_big() -> void:
 		var safe: Rect2 = m.safe_rect
 		check(safe.encloses(box.box_rect), "%s: box inside the safe area" % name)
 		check(safe.encloses(box.plate_rect), "%s: name plate inside the safe area" % name)
-		check_near(box.box_rect.size.y, roundf(m.ui_size.y * float(tuning["dialogue"]["box_height"])), 1.0, "%s: box about 40%% of the screen height" % name)
-		var css: float = box.font_size * m.px_per_unit.y / m.dpr
-		check(css >= 14.0, "%s: text at least 14 CSS px (%s)" % [name, css])
+		_check_box_size(app, name)
 		var liga := TextServerManager.get_primary_interface().name_to_tag("liga")
 		check(box.font is FontVariation and int(box.font.opentype_features.get(liga, 1)) == 0, "%s: ligatures off (Pixelify's fi reads as an A)" % name)
 		# Tap through to the choices.
 		await _tap_until_choices(app)
 		check(box.choices_shown(), "%s: choices shown" % name)
 		check(not box.show_selection, "%s: no keyboard highlight on touch" % name)
+		var d: Dictionary = tuning["dialogue"]
 		for r: Rect2 in box.choice_rects:
-			check(r.size.y * m.px_per_unit.y / m.dpr >= float(tuning["dialogue"]["min_choice_css"]) - 0.01, "%s: choice %s at least %s CSS px tall" % [name, r, tuning["dialogue"]["min_choice_css"]])
+			var css_h: float = r.size.y * m.px_per_unit.y / m.dpr
+			check(css_h >= float(d["min_choice_css"]) - 0.01 and css_h <= float(d["max_choice_css"]) + 1.0, "%s: touch choice %s is %s CSS px tall (%s-%s)" % [name, r, css_h, d["min_choice_css"], d["max_choice_css"]])
 			check(safe.encloses(r), "%s: choice %s inside the safe area" % [name, r])
-			check(not r.intersects(box.box_rect), "%s: choice clear of the box" % name)
 			check(not r.intersects(app.hud.get_global_rect()), "%s: choice clear of the build label" % name)
+		_check_choice_stack(app, name)
 		# A tap that misses every choice does nothing.
 		var miss := Vector2(box.box_rect.position.x + 30, safe.position.y + 30)
 		await _tap_at(app, miss)
@@ -273,6 +273,52 @@ func test_phone_layout_hides_joystick_and_keeps_targets_big() -> void:
 		check(box.portrait_rect.position.x > box.box_rect.get_center().x, "%s: Fern's portrait on the right" % name)
 		_close(app)
 		after_each()
+
+
+## The box is at most max_height of the screen (name plate included), fits
+## `lines` lines, and draws at the world's pixel scale.
+func _check_box_size(app: Control, name: String) -> void:
+	var g: Control = app.game
+	var box: Control = g.dialogue
+	var m = app.metrics
+	var d: Dictionary = tuning["dialogue"]
+	var top := minf(box.box_rect.position.y, box.plate_rect.position.y)
+	var h: float = box.box_rect.end.y - top
+	check(h <= m.ui_size.y * float(d["max_height"]) + 0.01, "%s: box %s UI tall, at most %d%% of %s" % [name, h, roundi(float(d["max_height"]) * 100), m.ui_size.y])
+	check_eq(box.k, g.view_scale, "%s: box pixels are world pixels (k)" % name)
+	check_near(box.unit, float(g.view_scale) / m.px_per_unit.y, 0.0001, "%s: box unit = k / px_per_unit" % name)
+	var lines := int(d["lines"])
+	var need: int = lines * int(box.font.get_height(box.font_size)) + (lines - 1) * (int(d["line_px"]) - int(box.font.get_height(box.font_size)))
+	check(box.text_rect.size.y / box.unit >= need - 0.01, "%s: text area fits %d lines" % [name, lines])
+	check(box.box_rect.encloses(box.text_rect), "%s: text area inside the box" % name)
+	# Whole box at most max_height of the screen, measured from its bottom edge.
+	check(m.ui_size.y - top <= m.ui_size.y * float(d["max_height"]) + 0.01, "%s: box covers at most the bottom %d%% (%s of %s)" % [name, roundi(float(d["max_height"]) * 100), m.ui_size.y - top, m.ui_size.y])
+	check_near(box.portrait_rect.size.x / box.unit, float(d["portrait_px"]), 0.01, "%s: portrait %s native px" % [name, d["portrait_px"]])
+	check_eq(box.font_size, int(d["font_px"]), "%s: font at its pixel size" % name)
+	var css: float = box.font_size * box.k / m.dpr
+	check(css >= 11.0, "%s: text %s CSS px (readable)" % [name, css])
+	check(m.safe_rect.encloses(box.box_rect) and m.safe_rect.encloses(box.plate_rect), "%s: box inside the safe area" % name)
+
+
+## Choices: a compact stack just above the box, on the right, each only as
+## wide as its text.
+func _check_choice_stack(app: Control, name: String) -> void:
+	var box: Control = app.game.dialogue
+	var texts: Array = box.line.get("choices", [])
+	var widths := {}
+	for i in box.choice_rects.size():
+		var r: Rect2 = box.choice_rects[i]
+		check_near(r.end.x, box.box_rect.end.x, 0.01, "%s: choice %d flush with the box's right edge" % [name, i])
+		check(r.end.y <= box.box_rect.position.y + 0.01, "%s: choice %d above the box" % [name, i])
+		check(r.size.x < box.box_rect.size.x * 0.6, "%s: choice %d is not a full-width slab (%s of %s)" % [name, i, r.size.x, box.box_rect.size.x])
+		var text_w: float = box.font.get_string_size(str(texts[i]), HORIZONTAL_ALIGNMENT_LEFT, -1, box.font_size).x * box.unit
+		check(r.size.x <= text_w + 20.0 * box.unit, "%s: choice %d only as wide as its text" % [name, i])
+		widths[r.size.x] = true
+		if i > 0:
+			check(r.position.y > box.choice_rects[i - 1].end.y - 0.01, "%s: choices stack downwards in order" % name)
+	check(widths.size() > 1 or texts.size() < 2, "%s: choices sized to their own text" % name)
+	var gap: float = box.box_rect.position.y - box.choice_rects[-1].end.y
+	check(gap <= 4.0 * box.unit + 0.01, "%s: the stack sits just above the box (gap %s)" % [name, gap])
 
 
 # --- Voice
@@ -330,9 +376,11 @@ func test_box_pixels_desktop() -> void:
 
 
 ## Draws the box with a line, then with choices, and checks real pixels:
-## paper inside the border, ink border, the speaker's colour in the portrait
-## and name plate, text drawn in the text area and in each choice, nothing
-## of the box drawn in the notch / gesture-bar insets.
+## the box is its own image scaled by exactly k (every box pixel covers k x k
+## device pixels of one colour, like the world), paper inside the ink
+## border, the speaker's colour in the portrait and name plate, text in the
+## text area and in each choice, the ▶ cursor on the selected choice, and
+## nothing of the box in the notch / gesture-bar insets.
 func _box_pixels(cfg: Array) -> void:
 	var name: String = cfg[0]
 	var by_touch: bool = cfg[4]
@@ -341,14 +389,17 @@ func _box_pixels(cfg: Array) -> void:
 	var box: Control = g.dialogue
 	await _open_talk(app, "bram", by_touch)
 	await _press(app, by_touch)  # finish the first line
+	_check_box_size(app, name)
 	if is_headless():
 		check(box.is_open, "%s: box open (pixel checks need a display)" % name)
 		_close(app)
 		return
+	await _settle(box)
 	var img := await _screen()
 	_check_box_pixels(app, img, name + " line")
+	_check_box_scale(app, img, name + " line")
 	var text_ink := _count_ink(img, app.metrics, box.text_rect)
-	check(text_ink > 200, "%s line: text drawn in the text area (%d ink px)" % [name, text_ink])
+	check(text_ink > 60, "%s line: text drawn in the text area (%d ink px)" % [name, text_ink])
 	_check_text_height(img, app, name)
 	_save(img, "dialogue_%s_line" % name)
 
@@ -357,29 +408,58 @@ func _box_pixels(cfg: Array) -> void:
 	else:
 		await _keys_until_choices(app)
 	check(box.choices_shown(), "%s: choices shown" % name)
+	_check_choice_stack(app, name)
+	if not by_touch:
+		box.move_selection(1)
+	await _settle(box)
 	img = await _screen()
 	_check_box_pixels(app, img, name + " choices")
+	_check_box_scale(app, img, name + " choices")
 	for i in box.choice_rects.size():
 		var r: Rect2 = box.choice_rects[i]
-		var inside := _px(app.metrics, r.position + Vector2(5, r.size.y / 2.0))
-		var want: Color = DialogueBox.SELECT if (box.show_selection and i == box.selected) else DialogueBox.PAPER
-		_check_color(img, inside, want, "%s choice %d fill" % [name, i])
-		_check_color(img, _px(app.metrics, r.position + Vector2(1, r.size.y / 2.0)), DialogueBox.INK, "%s choice %d border" % [name, i])
-		check(_count_ink(img, app.metrics, r.grow(-DialogueBox.BORDER - 2)) > 40, "%s choice %d text drawn" % [name, i])
+		var on: bool = box.show_selection and i == box.selected
+		var want: Color = DialogueBox.SELECT if on else DialogueBox.PAPER
+		_check_color(img, _bp(app, Vector2(r.position.x + 1.5 * box.unit, r.position.y + 1.5 * box.unit)), want, "%s choice %d fill" % [name, i])
+		_check_color(img, _bp(app, Vector2(r.position.x, r.get_center().y) + Vector2(0.5, 0) * box.unit), DialogueBox.INK, "%s choice %d border" % [name, i])
+		check(_count_ink(img, app.metrics, r.grow(-2.0 * box.unit)) > 15, "%s choice %d text drawn" % [name, i])
+		# The cursor: ink just inside the left padding, only on the selected row.
+		var cursor_ink := _count_ink(img, app.metrics, Rect2(r.position + Vector2(1.5, 1.5) * box.unit, Vector2(5, r.size.y / box.unit - 3) * box.unit))
+		if on:
+			check(cursor_ink > 0, "%s choice %d has the cursor" % [name, i])
+		else:
+			check_eq(cursor_ink, 0, "%s choice %d: no cursor on unselected rows" % [name, i])
 	_save(img, "dialogue_%s_choices" % name)
 	_close(app)
+
+
+func _settle(box: Control) -> void:
+	for i in 60:
+		if not box.animating():
+			break
+		await tree.process_frame
+	check(not box.animating(), "box finished its open slide")
+
+
+## UI point -> device pixel at the centre of its box pixel.
+func _bp(app: Control, ui: Vector2) -> Vector2i:
+	var box: Control = app.game.dialogue
+	var m = app.metrics
+	var origin: Vector2 = box.view.position * m.px_per_unit
+	var cell: Vector2 = ((ui * m.px_per_unit - origin) / box.k).floor()
+	return Vector2i(origin + cell * box.k + Vector2.ONE * floorf(box.k / 2.0))
 
 
 func _check_box_pixels(app: Control, img: Image, name: String) -> void:
 	var m = app.metrics
 	var box: Control = app.game.dialogue
 	var b: Rect2 = box.box_rect
+	var u: float = box.unit
 	var col: Color = box.speaker_color()
 	var portrait: Rect2 = box.portrait_rect
-	_check_color(img, _px(m, b.position + Vector2(1.5, b.size.y / 2.0)), DialogueBox.INK, name + ": box border")
-	_check_color(img, _px(m, b.position + Vector2(DialogueBox.BORDER + 3, b.size.y - DialogueBox.BORDER - 3)), DialogueBox.PAPER, name + ": paper inside the box")
-	_check_color(img, _px(m, portrait.position + portrait.size * 0.15), col, name + ": portrait in the speaker's colour")
-	_check_color(img, _px(m, box.plate_rect.position + Vector2(DialogueBox.BORDER + 3, box.plate_rect.size.y / 2.0)), col, name + ": name plate in the speaker's colour")
+	_check_color(img, _bp(app, Vector2(b.position.x + 0.5 * u, b.get_center().y)), DialogueBox.INK, name + ": box border")
+	_check_color(img, _bp(app, b.end - Vector2(3.5, 2.5) * u - Vector2(0, 0)), DialogueBox.PAPER, name + ": paper inside the box")
+	_check_color(img, _bp(app, portrait.position + Vector2(2.5, 2.5) * u), col, name + ": portrait in the speaker's colour")
+	_check_color(img, _bp(app, box.plate_rect.position + Vector2(1.5, 1.5) * u), col, name + ": name plate in the speaker's colour")
 	check(not app.game.touch.visible, name + ": joystick hidden")
 	# Nothing of the box in the insets below / beside the safe area.
 	var safe_px: Rect2i = m.safe_rect_px()
@@ -393,6 +473,36 @@ func _check_box_pixels(app: Control, img: Image, name: String) -> void:
 			if _near(img.get_pixel(x, y), DialogueBox.PAPER):
 				bad += 1
 	check_eq(bad, 0, name + ": box pixels outside the safe area")
+
+
+## Every device pixel of the box area matches its box pixel (scale k).
+func _check_box_scale(app: Control, img: Image, name: String) -> void:
+	var box: Control = app.game.dialogue
+	var m = app.metrics
+	var src: Image = box.viewport.get_texture().get_image()
+	var k: int = box.k
+	var origin := Vector2i((box.view.position * m.px_per_unit).round())
+	var r: Rect2 = box.box_rect.merge(box.plate_rect)
+	for cr in box.choice_rects:
+		r = r.merge(cr)
+	var p0 := Vector2i(((r.position * m.px_per_unit - Vector2(origin)) / k).floor())
+	var p1 := Vector2i(((r.end * m.px_per_unit - Vector2(origin)) / k).ceil())
+	var bad := 0
+	var checked := 0
+	for y in range(maxi(0, p0.y), mini(src.get_height(), p1.y)):
+		for x in range(maxi(0, p0.x), mini(src.get_width(), p1.x), 2):
+			var c := src.get_pixel(x, y)
+			if c.a < 0.99:
+				continue
+			for corner in [Vector2i(0, 0), Vector2i(k - 1, k - 1)]:
+				var sp: Vector2i = origin + Vector2i(x, y) * k + corner
+				if sp.x >= img.get_width() or sp.y >= img.get_height():
+					continue
+				checked += 1
+				if not _near(img.get_pixelv(sp), c):
+					bad += 1
+	check(checked > 500, "%s: box pixels checked (%d)" % [name, checked])
+	check_eq(bad, 0, "%s: box device pixels off their box pixel (k=%d, of %d)" % [name, k, checked])
 
 
 ## Readable on a phone: the tallest glyphs are at least ~10 CSS px.

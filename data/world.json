@@ -1,7 +1,14 @@
 {
 	"size": [720, 405],
 	"edge_margin": 6,
-	"background": "#6fb35a",
+	"border": 72,
+	"background": "#67a752",
+	"ground_art": "ground.meadow",
+	"forest_art": "forest.tile",
+	"ground_paint": {
+		"seed": 4021,
+		"patch_frequency": 0.008
+	},
 	"player": {
 		"start": [200, 220],
 		"footprint": [12, 5]
@@ -12,22 +19,70 @@
 		{"id": "wick", "art": "cat.wick", "frames": 3, "path": [[542, 224], [584, 224], [584, 236], [542, 236]], "speed": 18, "pause": 0.7, "footprint": [12, 5], "talk_radius": 22, "behavior": "pace", "dialogue": "res://data/dialogue/wick.json"},
 		{"id": "cow", "art": "cow.idle", "pos": [470, 200], "footprint": [30, 8], "talk_radius": 22, "behavior": "stand", "dialogue": "res://data/dialogue/cow.json"}
 	],
+	"path": {
+		"width": 11,
+		"lines": [[[-8, 302], [60, 290], [124, 256], [196, 234], [252, 216], [300, 212], [380, 222], [430, 214], [470, 214], [520, 240], [600, 250], [660, 230], [728, 216]], [[214, 230], [204, 190], [190, 156], [176, 140]]]
+	},
+	"pond": {
+		"art": "prop.pond",
+		"pos": [392, 334],
+		"size": [88, 42],
+		"footprint_inset": [6, 6],
+		"lap_radius": 40
+	},
 	"ground": [
 		{"art": "decor.sunspot", "pos": [170, 126]}
 	],
+	"prop_types": {
+		"bush_round": {"art": "prop.bush_round", "footprint": [26, 7], "shadow": "shadow.m", "sway": "bush", "rustle": true},
+		"bush_wide": {"art": "prop.bush_wide", "footprint": [36, 7], "shadow": "shadow.l", "sway": "bush", "rustle": true},
+		"bush_small": {"art": "prop.bush_small", "footprint": [16, 5], "shadow": "shadow.s", "sway": "bush", "rustle": true},
+		"rock_big": {"art": "prop.rock_big", "footprint": [20, 6], "shadow": "shadow.m"},
+		"rock_small": {"art": "prop.rock_small", "footprint": [10, 4], "shadow": "shadow.s"},
+		"log": {"art": "prop.log", "footprint": [30, 6], "shadow": "shadow.l"},
+		"tree_a": {"art": "prop.trunk", "canopy": "prop.canopy_a", "canopy_offset": [0, -22], "footprint": [8, 4], "shadow": "shadow.xl", "sway": "canopy"},
+		"tree_b": {"art": "prop.trunk", "canopy": "prop.canopy_b", "canopy_offset": [0, -20], "footprint": [8, 4], "shadow": "shadow.l", "sway": "canopy"}
+	},
 	"props": [
-		{"art": "prop.bush", "pos": [64, 72], "footprint": [26, 7]},
-		{"art": "prop.bush", "pos": [300, 110], "footprint": [26, 7]},
-		{"art": "prop.bush", "pos": [112, 336], "footprint": [26, 7]},
-		{"art": "prop.bush", "pos": [604, 352], "footprint": [26, 7]},
-		{"art": "prop.bush", "pos": [660, 62], "footprint": [26, 7]},
-		{"art": "prop.bush", "pos": [380, 312], "footprint": [26, 7]},
-		{"art": "prop.bush", "pos": [36, 214], "footprint": [26, 7]},
-		{"art": "prop.bush", "pos": [612, 214], "footprint": [26, 7]},
-		{"art": "prop.bush", "pos": [470, 64], "footprint": [26, 7]}
+		{"type": "bush_round", "pos": [64, 72]},
+		{"type": "bush_wide", "pos": [300, 110]},
+		{"type": "bush_round", "pos": [112, 336], "flip": true},
+		{"type": "bush_wide", "pos": [604, 352], "flip": true},
+		{"type": "bush_small", "pos": [660, 62]},
+		{"type": "bush_small", "pos": [300, 362], "flip": true},
+		{"type": "bush_round", "pos": [36, 214]},
+		{"type": "bush_round", "pos": [612, 196], "flip": true},
+		{"type": "bush_small", "pos": [470, 64]},
+		{"type": "rock_big", "pos": [252, 300]},
+		{"type": "rock_small", "pos": [268, 306]},
+		{"type": "rock_small", "pos": [440, 322]},
+		{"type": "rock_big", "pos": [672, 168]},
+		{"type": "log", "pos": [540, 318]},
+		{"type": "tree_a", "pos": [30, 150]},
+		{"type": "tree_b", "pos": [698, 300]},
+		{"type": "tree_b", "pos": [380, 40]}
 	],
+	"tree_line": {
+		"seed": 77,
+		"spacing": 30,
+		"jitter": 7,
+		"types": ["tree_a", "tree_b"],
+		"top_y": 10,
+		"bottom_y": 436,
+		"left_x": -18,
+		"right_x": 738
+	},
+	"tall_grass": {
+		"art": "decor.tall_grass",
+		"seed": 515,
+		"patches": [{"rect": [70, 248, 60, 34], "count": 22}, {"rect": [618, 262, 64, 40], "count": 26}, {"rect": [420, 92, 50, 28], "count": 16}, {"rect": [222, 52, 56, 30], "count": 18}]
+	},
+	"flowers": {
+		"seed": 909,
+		"clusters": [{"pos": [118, 108], "radius": 18, "count": 14, "colors": ["pink", "yellow"]}, {"pos": [352, 168], "radius": 13, "count": 9, "colors": ["yellow"]}, {"pos": [520, 146], "radius": 20, "count": 16, "colors": ["lilac", "pink"]}, {"pos": [196, 332], "radius": 22, "count": 16, "colors": ["yellow", "lilac"]}, {"pos": [646, 376], "radius": 15, "count": 11, "colors": ["pink"]}, {"pos": [470, 372], "radius": 14, "count": 9, "colors": ["lilac"]}, {"pos": [58, 378], "radius": 14, "count": 9, "colors": ["yellow", "pink"]}]
+	},
 	"decor": {
 		"seed": 20261111,
-		"items": {"decor.tuft": 150, "decor.flower": 75}
+		"items": {"decor.tuft": 120}
 	}
 }

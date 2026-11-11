@@ -8,11 +8,15 @@ const SUITES := [
 	"res://tests/test_assets.gd",
 	"res://tests/test_data.gd",
 	"res://tests/test_world.gd",
+	"res://tests/test_day_cycle.gd",
+	"res://tests/test_art.gd",
+	"res://tests/test_audio.gd",
 	"res://tests/test_dialogue.gd",
 	"res://tests/test_dialogue_files.gd",
 	"res://tests/test_typewriter.gd",
 	"res://tests/app_smoke.gd",
 	"res://tests/dialogue_smoke.gd",
+	"res://tests/perf_smoke.gd",
 ]
 
 

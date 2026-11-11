@@ -3,14 +3,21 @@ extends Control
 ## phones) shown at a whole-number scale k in device pixels. k is the largest
 ## scale at which the 480x270 base view fits the screen; the view then
 ## *expands* to fill the rest of the screen at that k (stretch aspect
-## "expand"), up to view.max in tuning.json, so wider screens see more
-## meadow. A Camera2D follows the cat, limited to the world's edges.
+## "expand"), so wider screens see more meadow and the world always reaches
+## every edge (no letterbox up to view.max, which no real screen reaches).
+## A Camera2D follows the cat, limited to the meadow plus its forest border;
+## past that the forest is drawn further out, so it never shows flat colour.
 ## Text, the dialogue box and touch controls are drawn at full resolution on
 ## top, in UI units (about 1 CSS px).
 ##
 ## Talking: Interact next to an NPC starts its conversation (DialogueManager
 ## autoload); the box shows it, movement is locked, the joystick hides and
 ## the camera eases so both cats sit above the box.
+##
+## Time of day (scripts/core/day_cycle.gd): after the last of the three
+## conversations, afternoon turns to dusk and night; the world view, the
+## music and the ambience follow it. Sound (sound.gd) is created here, after
+## tap-to-start, like the voice.
 
 const World := preload("res://scripts/core/world.gd")
 const JsonData := preload("res://scripts/core/json_data.gd")
@@ -20,6 +27,8 @@ const WorldView := preload("res://scripts/view/world_view.gd")
 const TouchControls := preload("res://scripts/view/touch_controls.gd")
 const DialogueBox := preload("res://scripts/view/dialogue_box.gd")
 const Voice := preload("res://scripts/view/voice.gd")
+const Sound := preload("res://scripts/view/sound.gd")
+const DayCycle := preload("res://scripts/core/day_cycle.gd")
 
 var world
 var tuning: Dictionary = {}
@@ -44,6 +53,10 @@ var view: Sprite2D
 var touch: Control
 var dialogue: Control
 var voice: Node
+var sound: Node
+var day
+## Distance walked when the last footstep played (world px).
+var _step_at := 0.0
 ## Where the camera centres (world px) while easing to / from a conversation.
 var _cam_center := Vector2.INF
 var _cam_easing := false
@@ -56,6 +69,7 @@ func _ready() -> void:
 	GameInput.ensure_actions()
 	tuning = JsonData.load_dict("res://data/tuning.json")
 	world = World.new()
+	day = DayCycle.new(tuning.get("time_of_day", {}))
 	# A new game: fresh flags and bonds, nothing mid-conversation.
 	GameState.reset()
 	DialogueManager.stop()
@@ -72,14 +86,16 @@ func _ready() -> void:
 	world_view = WorldView.new()
 	world_view.name = "WorldView"
 	viewport.add_child(world_view)
-	world_view.setup(world, tuning)
+	world_view.setup(world, tuning, day)
+	world_view.rustled.connect(_on_rustle)
 	camera = Camera2D.new()
 	camera.name = "Camera"
 	camera.anchor_mode = Camera2D.ANCHOR_MODE_FIXED_TOP_LEFT
-	camera.limit_left = 0
-	camera.limit_top = 0
-	camera.limit_right = int(world.size.x)
-	camera.limit_bottom = int(world.size.y)
+	var lim: Rect2 = world.camera_bounds()
+	camera.limit_left = int(lim.position.x)
+	camera.limit_top = int(lim.position.y)
+	camera.limit_right = int(lim.end.x)
+	camera.limit_bottom = int(lim.end.y)
 	viewport.add_child(camera)
 	camera.make_current()
 
@@ -104,12 +120,17 @@ func _ready() -> void:
 	voice = Voice.new()
 	voice.jitter = float(tuning.get("dialogue", {}).get("pitch_jitter", 0.05))
 	add_child(voice)
+	sound = Sound.new()
+	add_child(sound)
+	sound.configure(tuning.get("audio", {}))
+	sound.play_music("day")
 	# After the touch controls: it gets taps first and swallows them.
 	dialogue = DialogueBox.new()
 	dialogue.name = "Dialogue"
 	dialogue.configure(tuning.get("dialogue", {}), JsonData.load_dict("res://data/speakers.json"), voice)
 	dialogue.advance_requested.connect(_on_advance)
 	dialogue.choice_made.connect(_on_choice)
+	dialogue.ui_event.connect(func(kind: String) -> void: sound.play(kind))
 	add_child(dialogue)
 
 
@@ -131,7 +152,8 @@ func layout(m) -> void:
 	view.position = view_rect.position
 	view.scale = Vector2(view_scale, view_scale) / m.px_per_unit
 	touch.layout(m)
-	dialogue.layout(m)
+	dialogue.touch_rows = ScreenMetrics.is_touch()
+	dialogue.layout(m, view_rect, view_size, view_scale)
 	_update_camera(0.0)
 	_place_overlays()
 
@@ -179,7 +201,9 @@ func _talk_center() -> Vector2:
 	# within the view is all that matters).
 	var box_top_view: float = (dialogue.box_rect.position.y - view_rect.position.y) * float(view_size.y) / view_rect.size.y
 	var free_mid := clampf(box_top_view, 0.0, float(view_size.y)) / 2.0
-	return mid + Vector2(0, float(view_size.y) / 2.0 - free_mid)
+	# A little lift, so heads clear the name plate and choices sit beside them.
+	var lift := float(tuning.get("dialogue", {}).get("camera_lift_px", 6))
+	return mid + Vector2(0, float(view_size.y) / 2.0 - free_mid + lift)
 
 
 static func _vec(a: Variant) -> Vector2:
@@ -193,9 +217,32 @@ func _process(dt: float) -> void:
 	if touch.stick_vector != Vector2.ZERO:
 		_set_last_input("touch")
 	world.step(dt, inp["move"], inp["run"])
-	world_view.sync(dt)
+	day.step(dt, GameState.state.flags, is_talking())
 	_update_camera(dt)
+	world_view.camera_rect = camera_rect
+	world_view.sync(dt)
+	_update_sound()
 	_place_overlays()
+
+
+## Footsteps every few px walked (grass or path), ambience for the time of
+## day and the pond.
+func _update_sound() -> void:
+	if sound == null:
+		return
+	var every := float(tuning.get("audio", {}).get("footstep_px", 14))
+	if world.distance - _step_at >= every:
+		_step_at = world.distance
+		if world.speed() >= world_view.idle_speed:
+			sound.footstep(world.surface())
+	sound.set_time(day.day_amount(), day.night_amount())
+	var r := float(world.pond.get("lap_radius", 40)) if not world.pond.is_empty() else 1.0
+	sound.set_pond_near(1.0 - clampf(world.pond_distance() / r, 0.0, 1.0))
+
+
+func _on_rustle(_kind: String) -> void:
+	if sound != null:
+		sound.play("rustle")
 
 
 func _input(event: InputEvent) -> void:
@@ -268,6 +315,9 @@ func _on_choice(index: int) -> void:
 func _show(ev: Dictionary) -> void:
 	if ev["type"] == "line":
 		dialogue.show_selection = last_input != "touch" and not touch.visible
+		var rows: bool = last_input == "touch" or (last_input == "" and ScreenMetrics.is_touch())
+		if dialogue.touch_rows != rows:
+			dialogue.touch_rows = rows
 		dialogue.show_line(ev)
 	else:
 		dialogue.close()

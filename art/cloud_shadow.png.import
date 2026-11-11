@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b1gg4xcl4ocy5"
-path="res://.godot/imported/flower.png-2a7e702dd199934586d37ea15a054709.ctex"
+uid="uid://ys6dgwipb6e4"
+path="res://.godot/imported/cloud_shadow.png-de7608224d6bdd76f71bd293d0c8a581.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/flower.png"
-dest_files=["res://.godot/imported/flower.png-2a7e702dd199934586d37ea15a054709.ctex"]
+source_file="res://art/cloud_shadow.png"
+dest_files=["res://.godot/imported/cloud_shadow.png-de7608224d6bdd76f71bd293d0c8a581.ctex"]
 
 [params]
 
