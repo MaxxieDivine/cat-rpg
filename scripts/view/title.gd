@@ -1,7 +1,8 @@
 extends Control
-## "Tap to start" title screen. Browsers block audio (and fullscreen) until
-## the player taps or clicks, so the game starts here. A tap or click anywhere
-## except the fullscreen button starts the game; so do Enter / Space / E.
+## "Tap to start" title screen. Browsers block audio and fullscreen until the
+## player taps or clicks, so the game starts here. A tap or click anywhere
+## (or Enter / Space / E) requests fullscreen + landscape lock and starts the
+## game. The corner fullscreen button lives in app.gd.
 
 signal start_requested
 
@@ -16,7 +17,6 @@ var cat_scale := 1
 var title_label: Label
 var start_label: Label
 var controls_label: Label
-var fullscreen_button: Button
 var metrics
 var _t := 0.0
 var _started := false
@@ -42,15 +42,6 @@ func _ready() -> void:
 	var touch := ScreenMetrics.is_touch()
 	start_label = _label(GameStrings.text("title.start_touch" if touch else "title.start_desktop"), 22, INK)
 	controls_label = _label(GameStrings.text("title.controls_touch" if touch else "title.controls_desktop"), 13, Color(INK, 0.75))
-
-	fullscreen_button = Button.new()
-	fullscreen_button.name = "Fullscreen"
-	fullscreen_button.focus_mode = Control.FOCUS_NONE
-	fullscreen_button.add_theme_font_size_override("font_size", 16)
-	fullscreen_button.visible = ScreenMetrics.can_fullscreen()
-	fullscreen_button.pressed.connect(_on_fullscreen)
-	add_child(fullscreen_button)
-	_update_fullscreen_text()
 
 
 func _label(text: String, font_size: int, color: Color) -> Label:
@@ -84,11 +75,6 @@ func layout(m) -> void:
 		l.size.x = safe.size.x
 		l.position = Vector2(safe.position.x, y).round()
 		y += l.get_combined_minimum_size().y + 6.0
-	var margin := 8.0
-	fullscreen_button.reset_size()
-	var b := fullscreen_button.get_combined_minimum_size().max(Vector2(48, 48))
-	fullscreen_button.size = b
-	fullscreen_button.position = Vector2(safe.end.x - margin - b.x, safe.position.y + margin).round()
 
 
 func _process(dt: float) -> void:
@@ -101,13 +87,22 @@ func _gui_input(event: InputEvent) -> void:
 	var mb := event as InputEventMouseButton
 	if mb and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
 		accept_event()
-		_start()
+		_start_from_input()
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if (event.is_action_pressed("interact") or event.is_action_pressed("ui_accept")) and not event.is_echo():
 		get_viewport().set_input_as_handled()
-		_start()
+		_start_from_input()
+
+
+## Called from inside an input handler: the only moment browsers allow
+## fullscreen and orientation lock.
+func _start_from_input() -> void:
+	if _started:
+		return
+	ScreenMetrics.request_fullscreen()
+	_start()
 
 
 func _start() -> void:
@@ -116,11 +111,3 @@ func _start() -> void:
 	_started = true
 	start_requested.emit()
 
-
-func _on_fullscreen() -> void:
-	ScreenMetrics.toggle_fullscreen()
-	_update_fullscreen_text.call_deferred()
-
-
-func _update_fullscreen_text() -> void:
-	fullscreen_button.text = GameStrings.text("title.exit_fullscreen" if ScreenMetrics.is_fullscreen() else "title.fullscreen")

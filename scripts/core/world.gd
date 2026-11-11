@@ -108,6 +108,20 @@ static func footprint_rect(feet: Vector2, fp: Vector2) -> Rect2:
 	return Rect2(feet.x - fp.x / 2.0, feet.y - fp.y, fp.x, fp.y)
 
 
+## The part of the world a camera of `view_size` shows: centred on the
+## player, clamped so it never shows past the world's edges (the camera
+## limits). If the view is bigger than the world on an axis, it is centred.
+## Whole pixels, so pixel art stays crisp.
+func camera_rect(view_size: Vector2) -> Rect2:
+	var top_left := player_pos - Vector2(0, player_footprint.y * 2.0) - view_size / 2.0
+	for axis in 2:
+		if view_size[axis] >= size[axis]:
+			top_left[axis] = (size[axis] - view_size[axis]) / 2.0
+		else:
+			top_left[axis] = clampf(top_left[axis], 0.0, size[axis] - view_size[axis])
+	return Rect2(top_left.floor(), view_size)
+
+
 func player_rect() -> Rect2:
 	return footprint_rect(player_pos, player_footprint)
 

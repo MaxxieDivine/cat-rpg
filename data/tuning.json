@@ -1,7 +1,5 @@
 {
 	"game": {
-		"width": 480,
-		"height": 270,
 		"bubble_seconds": 1.5
 	},
 	"player": {
@@ -24,5 +22,9 @@
 	"ui": {
 		"corner_margin": 8,
 		"bubble_gap": 6
+	},
+	"view": {
+		"base": [480, 270],
+		"max": [640, 400]
 	}
 }

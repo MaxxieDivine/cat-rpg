@@ -13,6 +13,30 @@ static var override_dpr := 0.0
 static var override_insets_css: Array = []
 ## -1 = detect, 0 = no touchscreen, 1 = touchscreen.
 static var override_touch := -1
+## -1 = detect; 0 / 1 = pretend not fullscreen / fullscreen. While set,
+## request_fullscreen() only counts the request and flips this to 1.
+static var override_fullscreen := -1
+static var fullscreen_requests := 0
+
+const _JS_IS_FULLSCREEN := """(function () {
+	var mm = function (q) { return window.matchMedia && window.matchMedia(q).matches; };
+	return !!(document.fullscreenElement || document.webkitFullscreenElement ||
+		mm('(display-mode: fullscreen)') || mm('(display-mode: standalone)') || navigator.standalone === true);
+})()"""
+
+const _JS_REQUEST_FULLSCREEN := """(function () {
+	var lock = function () {
+		try { if (screen.orientation && screen.orientation.lock) { screen.orientation.lock('landscape').catch(function () {}); } } catch (e) {}
+	};
+	var el = document.documentElement;
+	var req = el.requestFullscreen || el.webkitRequestFullscreen;
+	if (!req) { lock(); return 'unsupported'; }
+	try {
+		var p = req.call(el, { navigationUI: 'hide' });
+		if (p && p.then) { p.then(lock, function () {}); } else { lock(); }
+		return 'requested';
+	} catch (e) { return 'error'; }
+})()"""
 
 const _JS_INSETS := """(function () {
 	var d = document.createElement('div');
@@ -118,28 +142,42 @@ static func is_touch() -> bool:
 	return DisplayServer.is_touchscreen_available()
 
 
-## Whether a fullscreen toggle can work here (not on iPhone Safari, for one).
+## Whether fullscreen can be requested here (not on iPhone Safari, for one;
+## iPhone players add the game to the home screen instead).
 static func can_fullscreen() -> bool:
+	if override_fullscreen >= 0:
+		return true
 	if is_web():
 		return str(JavaScriptBridge.eval("!!(document.fullscreenEnabled || document.webkitFullscreenEnabled)", true)) == "true"
 	return not OS.has_feature("mobile")
 
 
+## True when the game already fills the screen: browser fullscreen, or
+## launched from the home screen as an installed web app.
 static func is_fullscreen() -> bool:
+	if override_fullscreen >= 0:
+		return override_fullscreen == 1
+	if is_web():
+		return str(JavaScriptBridge.eval(_JS_IS_FULLSCREEN, true)) == "true"
 	var mode := DisplayServer.window_get_mode()
 	return mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
 
 
-## Must be called from an input handler: browsers only allow fullscreen
-## (and orientation lock) right after a tap or click.
-static func toggle_fullscreen() -> void:
-	if is_fullscreen():
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+## Asks for fullscreen, then for landscape orientation lock. Call it from
+## inside a tap / click / key handler: browsers refuse both otherwise.
+## Failures (iPhone Safari, desktop orientation lock, user said no) are
+## ignored: the game works the same, just not fullscreen.
+static func request_fullscreen() -> void:
+	if override_fullscreen >= 0:
+		fullscreen_requests += 1
+		override_fullscreen = 1
 		return
-	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	if is_fullscreen():
+		return
 	if is_web():
-		# Android Chrome can lock to landscape once fullscreen; others ignore it.
-		JavaScriptBridge.eval("setTimeout(function(){try{screen.orientation.lock('landscape').catch(function(){});}catch(e){}}, 300)", true)
+		JavaScriptBridge.eval(_JS_REQUEST_FULLSCREEN, true)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 
 static func _detect_dpr(window: Window) -> float:
