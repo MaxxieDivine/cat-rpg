@@ -57,6 +57,22 @@ static func font(key: String) -> Font:
 	return f
 
 
+## A shader by key (data/assets.json). Missing shaders warn once and
+## return null: callers then draw without it.
+static func shader(key: String) -> Shader:
+	if _cache.has(key):
+		return _cache[key]
+	var path := path_for(key)
+	var sh: Shader = null
+	if ResourceLoader.exists(path):
+		sh = load(path) as Shader
+	if sh == null and not warned_keys.has(key):
+		warned_keys.append(key)
+		push_warning("AssetCatalog: missing shader '%s' (%s)" % [key, path])
+	_cache[key] = sh
+	return sh
+
+
 static func is_placeholder(tex: Texture2D) -> bool:
 	return tex != null and tex == _placeholder
 

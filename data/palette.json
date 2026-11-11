@@ -1,0 +1,36 @@
+{
+	"ink": "#1c1824",
+	"grass": ["#5b9a4a", "#67a752", "#72b25a", "#7fbd62"],
+	"grass_dark": "#44793c",
+	"grass_light": "#9acb6c",
+	"dirt": ["#9c7a52", "#ae8c60", "#c09f72"],
+	"dirt_edge": "#7f6a46",
+	"leaf": ["#264c33", "#33613b", "#437b44", "#5a9650", "#79b062"],
+	"bark": ["#3b2a24", "#5a3f30", "#7a5a40"],
+	"stone": ["#5f5a6a", "#7d7888", "#9c98a6", "#bdb9c4"],
+	"water": ["#2f5f8c", "#3f78a8", "#5c97c4", "#8cc0de", "#d6eef6"],
+	"flower": {
+		"pink": "#ef8bb0",
+		"yellow": "#f6d25a",
+		"white": "#f6f2ea",
+		"lilac": "#b19ae0",
+		"center": "#f0a640"
+	},
+	"berry": "#d8465a",
+	"butterfly": ["#f6d25a", "#f2a0c4", "#f6f2ea"],
+	"shadow": "#1c1824",
+	"pollen": "#fff4d0",
+	"firefly": "#f2f79a",
+	"grade": {
+		"afternoon": "#fff1da",
+		"dusk": "#d9a7a4",
+		"night": "#56609a"
+	},
+	"pond_night": "#5c6aa0",
+	"ui": {
+		"paper": "#f6eedb",
+		"ink": "#1c1824",
+		"select": "#ffd873",
+		"letterbox": "#264c33"
+	}
+}

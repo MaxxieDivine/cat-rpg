@@ -22,6 +22,8 @@ func test_listed_keys_resolve_to_data_paths() -> void:
 		check_eq(AssetCatalog.path_for(key), str(map[key]), "path for %s" % key)
 		if key.begins_with("font."):
 			check(AssetCatalog.font(key) != null, "%s loads" % key)
+		elif key.begins_with("shader."):
+			check(AssetCatalog.shader(key) != null, "%s loads" % key)
 		else:
 			check(not AssetCatalog.is_placeholder(AssetCatalog.texture(key)), "%s loads" % key)
 

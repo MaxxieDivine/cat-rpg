@@ -1,8 +1,42 @@
 extends SceneTree
-## Bakes every PNG in art/ from the character grids below, one entry per file.
+## Bakes every PNG in art/. The cats, the cow and the paw prompt come from the
+## character grids below ("." is transparent; every other character must be in
+## that sprite's palette). Everything else in the meadow (trees, bushes, rocks,
+## the pond, flowers, the ground itself...) is painted by tools/art/painters.gd
+## from data/palette.json (and data/world.json for the ground): see PAINTED.
 ## Run: godot --headless --path . --script res://tools/make_art.gd
 ## Then: godot --headless --path . --import
-## "." is transparent; every other character must be in that sprite's palette.
+
+const Painters := preload("res://tools/art/painters.gd")
+const JsonData := preload("res://scripts/core/json_data.gd")
+
+## file name (art/<name>.png) -> [painter method, args...]
+const PAINTED := {
+	"bush_round": ["foliage", 30, 22, 11, 6, 4, true],
+	"bush_wide": ["foliage", 42, 20, 12, 8, 5, true],
+	"bush_small": ["foliage", 20, 15, 13, 4, 2, true],
+	"canopy_a": ["foliage", 60, 50, 21, 9],
+	"canopy_b": ["foliage", 46, 40, 22, 7],
+	"trunk": ["trunk", 12, 26],
+	"rock_big": ["rock", 22, 15, 31],
+	"rock_small": ["rock", 12, 9, 32],
+	"log": ["log_art", 32, 12],
+	"pond": ["pond", 88, 42, 41],
+	"tall_grass": ["tall_grass", 9, 12, 51],
+	"tuft": ["tuft", 1],
+	"flower_pink": ["flower", "pink"],
+	"flower_yellow": ["flower", "yellow"],
+	"flower_lilac": ["flower", "lilac"],
+	"butterfly": ["butterfly"],
+	"bird_shadow": ["bird_shadow"],
+	"shadow_s": ["shadow", 16, 5],
+	"shadow_m": ["shadow", 28, 8],
+	"shadow_l": ["shadow", 40, 10],
+	"shadow_xl": ["shadow", 54, 14],
+	"cloud_shadow": ["cloud_shadow", 200, 110, 61],
+	"forest": ["forest_tile", 64, 71],
+	"firefly": ["firefly"],
+}
 
 const SPRITES := {
 	# 48x48, front view
@@ -96,71 +130,6 @@ const SPRITES := {
 			"....oddcco...oddcco........oddoocco.oddoocco........occddo...occddo.....",
 			".....oooo.....oooo..........oo..oo...oo..oo..........oooo.....oooo......",
 			"........................................................................",
-		],
-	},
-	# 32x24 obstacle, base on row 22
-	"bush": {
-		"palette": {
-			".": Color8(0, 0, 0, 0),
-			"o": Color8(28, 24, 36), "g": Color8(76, 150, 72), "G": Color8(52, 112, 60),
-			"h": Color8(120, 190, 96), "r": Color8(220, 70, 80), "y": Color8(250, 210, 80), "w": Color8(250, 250, 245),
-		},
-		"grid": [
-			"................................",
-			"................................",
-			".............oooooo.............",
-			"...........ooggggggoo...........",
-			"..........oggggggggggooo........",
-			".........ogggghgggggggggoo......",
-			".......ooogghhgggggghgggggoo....",
-			".....oogggggggggggghggggggggo...",
-			"....ogggggggggggggggggggghggo...",
-			"...oggggghgggggggggggggghggggo..",
-			"..oggggghgggggggggggggggggggggo.",
-			"..ogggggggggggggggggggggggggggo.",
-			".oggggggggggggggggggggrgggggggo.",
-			".oggggggggggggggggggggggggggggo.",
-			".ogggggggrggggggggggggggggggggo.",
-			".oggggggggggggggggggggggggggggo.",
-			"..ogggggggggggggrgggggggggrggo..",
-			"..oGGGGGGGGGGGGGGGGGGGGGGGGGo...",
-			"...oGGGGGGGGGGGGGGGGGGGGGGGGo...",
-			"...oGGGGGGGGGGGGGGGGGGGGGGGGo...",
-			"...oGGGGGGGGGGGGGGGGGGGGGGGGo...",
-			"....oooooooooooooooooooooooo....",
-			"................................",
-			"................................",
-		],
-	},
-	# 8x6 grass tuft (decoration)
-	"tuft": {
-		"palette": {
-			".": Color8(0, 0, 0, 0),
-			"o": Color8(28, 24, 36), "g": Color8(76, 150, 72), "G": Color8(52, 112, 60),
-			"h": Color8(120, 190, 96), "r": Color8(220, 70, 80), "y": Color8(250, 210, 80), "w": Color8(250, 250, 245),
-		},
-		"grid": [
-			"........",
-			"........",
-			".....G..",
-			"...G.G..",
-			"..GGGGG.",
-			".GGGGGG.",
-		],
-	},
-	# 5x5 daisy (decoration)
-	"flower": {
-		"palette": {
-			".": Color8(0, 0, 0, 0),
-			"o": Color8(28, 24, 36), "g": Color8(76, 150, 72), "G": Color8(52, 112, 60),
-			"h": Color8(120, 190, 96), "r": Color8(220, 70, 80), "y": Color8(250, 210, 80), "w": Color8(250, 250, 245),
-		},
-		"grid": [
-			".....",
-			"..w..",
-			".wyw.",
-			"..w..",
-			".....",
 		],
 	},
 	# Wick: 72x24 sheet like Fern's (idle, walk A, walk B), facing right, feet
@@ -293,7 +262,20 @@ func _initialize() -> void:
 	for px: int in ICON_SIZES:
 		ok = _bake_icon(px) and ok
 	ok = _bake_sunspot() and ok
+	var painters := Painters.new()
+	for name: String in PAINTED:
+		var spec: Array = PAINTED[name]
+		var img: Image = painters.callv(spec[0], spec.slice(1))
+		ok = _save(img, name) and ok
+	ok = _save(painters.ground(JsonData.load_dict("res://data/world.json")), "ground") and ok
 	quit(0 if ok else 1)
+
+
+func _save(img: Image, name: String) -> bool:
+	var path := "res://art/%s.png" % name
+	var err := img.save_png(ProjectSettings.globalize_path(path))
+	print("make_art: wrote %s (%dx%d) err=%d" % [path, img.get_width(), img.get_height(), err])
+	return err == OK
 
 
 ## Sorrel's sunny spot: a flat pale-yellow ellipse (two tones, hard edges,
