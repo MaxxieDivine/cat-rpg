@@ -6,7 +6,7 @@
 ## Goal
 A Godot 4 (GDScript) prototype of **TODO: one-line pitch**.
 
-The first thing it does is **Hello Cow**: a 48x48 pixel-art cow in the middle of the screen. Tap or click it and it says "Moo!". When the cow shows up crisp on a phone browser and a desktop browser from the GitHub Pages build, and CI is green, the pipeline works.
+Milestone 0 was **Hello Cow** (a tappable 48x48 cow) to prove the pipeline. Milestone 1 turns it into a landscape 480x270 game: a cat walking around a meadow, with the cow as the first NPC.
 
 ## Pillars
 TODO: 3-5 short statements every feature is checked against. If a feature doesn't serve a pillar or the current milestone question, don't build it.
@@ -19,7 +19,9 @@ TODO: 3-5 short statements every feature is checked against. If a feature doesn'
 Each milestone has one **question** it is meant to answer. Build the smallest thing that answers it.
 
 - **Milestone 0: Hello Cow (pipeline).** "Can we change the game, push, and see the change on a phone and a PC within minutes, with tests guarding it?" Done when everything in "Milestone 0 checklist" below holds.
-- **Milestone 1:** TODO question. TODO scope.
+- **Milestone 1: Walk the meadow (feel, on a phone).** "Does moving a cat around and interacting feel good with touch *and* keyboard, at 60 fps on a phone, from the Pages link?"
+  - Scope: one 480x270 meadow screen; the cat walks (8 directions, analog on touch) and trots; bushes block; the cow is an NPC you walk up to and interact with ("Moo!"). Title screen ("tap to start", fullscreen button where supported). "Rotate your phone" overlay in portrait. Touch controls (joystick left, paw/interact right) only on touch devices. Build label plus fps in a corner.
+  - Done when: the game loads and plays on a phone and a PC from the GitHub Pages link; touch controls work and feel as good as the keyboard; it holds 60 fps on the phone (read the fps in the corner), not just the PC.
 - **Milestone 2:** TODO
 - **Milestone 3:** TODO
 
@@ -56,6 +58,12 @@ Run `tools/setup_godot.sh` before tests (`tools/setup_godot.sh --web` before a l
     - `deploy` (needs build): `actions/deploy-pages` with `pages: write`, `id-token: write`, concurrency group `pages`.
 11. **Check it for real.** Push, wait for green, open the Pages URL on a phone (portrait and landscape) and a desktop browser. Confirm the build label matches the pushed SHA, the cow is crisp (no blur, no uneven pixels), and a tap says "Moo!". Report the URL and the SHA.
 
+## Web build settings (locked in)
+- **Compatibility renderer only.** It's the only renderer Godot's web export supports; don't build lighting or effects that need Forward+/Mobile.
+- **Threads off** (no-threads templates, Godot 4.3+). GitHub Pages can't send the cross-origin isolation headers threaded builds need.
+- **Particles: `CPUParticles2D`, never `GPUParticles2D`** (e.g. for fireflies). More reliable in browsers, especially on phones.
+- **The world renders into a 480x270 `SubViewport`** shown at the largest whole-number scale (in device pixels) that fits the safe area, letterboxed. That keeps fill cost tiny on phones. Text, bubbles and touch controls draw at full resolution on top, in UI units.
+
 ## Foundation rules (keep these from day one)
 - **Logic is plain data, separate from Nodes.** Game state lives in `RefCounted` classes under `scripts/core/` with no Nodes, so it runs and tests headless. The view sends commands, the core validates and mutates state and returns events; the view only shows them.
 - **One seeded RNG** in the game state for anything that affects gameplay. Never `randf()`/`randi()` in rules. Cosmetic randomness in the view is fine.
@@ -66,35 +74,40 @@ Run `tools/setup_godot.sh` before tests (`tools/setup_godot.sh --web` before a l
 - **One command runs every headless test** and exits non-zero on any failure.
 
 ## Input and layout rules (PC + phone browser)
-- Design for a **portrait phone first**. Larger screens use the extra space (landscape layouts) without shrinking text.
-- **One input model for mouse and touch**: tap/click to select, tap/click again to confirm. Nothing depends on hover, right-click or keyboard. Long-press or an Info button shows details. Turn on `input_devices/pointing/emulate_mouse_from_touch` *or* handle `InputEventScreenTouch` explicitly, but never get two events for one tap; keep gesture handling in one input script, separate from game logic.
-- **Touch targets at least 48 CSS px.** Respect safe areas.
+- **Landscape only, 480x270 world.** Portrait shows the "rotate your phone" overlay and pauses the game.
+- **PC: keyboard** (WASD/arrows move, Shift trots, E/Space/Enter interacts; a gamepad works too). Actions are registered in `scripts/view/game_input.gd`, the one place that merges keyboard, gamepad and touch into a move vector + run + interact.
+- **Phone: touch controls** (`scripts/view/touch_controls.gd`), shown only on touch devices and hidden while a keyboard is used. The joystick base jumps to wherever the left thumb lands (left half); pushing past `stick_trot` trots. The paw button (right) interacts and lights up when something is in range.
+- **No double events:** `emulate_mouse_from_touch` stays on so ordinary UI buttons (title, fullscreen) work by touch. The touch controls read only `InputEventScreenTouch`/`Drag` and ignore mouse events. Game-screen nodes ignore mouse events. Never handle both for the same widget.
+- **Browsers need a tap first** for audio and fullscreen: the game starts on the title screen. Fullscreen/orientation-lock calls must happen inside an input handler (`ScreenMetrics.toggle_fullscreen`).
+- **Touch targets at least 48 CSS px**, kept `edge_margin` (data/tuning.json) inside the safe area, away from edges, notches and gesture bars.
 - **Pixel art stays crisp**: nearest filtering, whole-number scaling, positions snapped to whole pixels.
 - No pinch zoom, no browser scrolling: the canvas owns the whole page.
 
 ## Structure
-- `data/*.json`: content, strings and tuning (`assets.json`, `strings.json`, `tuning.json`; `build.json` is generated, never committed)
+- `data/*.json`: content, strings and tuning (`assets.json`, `strings.json`, `tuning.json`, `world.json` = meadow layout; `build.json` is generated, never committed)
 - `art/`: PNGs referenced by key
-- `scripts/core/`: headless logic, `asset_catalog.gd`, `game_strings.gd` (text from `strings.json`), `json_data.gd`. No Nodes.
-- `scripts/view/`: scenes' scripts, `screen_metrics.gd`, input
-- `scenes/`: `.tscn` files (main scene: `scenes/hello.tscn` for Milestone 0; later an `app.tscn` that swaps screens)
+- `scripts/core/`: headless logic: `world.gd` (movement, collision, focus, interact; the seeded RNG), `asset_catalog.gd`, `game_strings.gd` (text from `strings.json`), `json_data.gd`. No Nodes.
+- `scripts/view/`: `app.gd` (screens, rotate overlay, build/fps label), `title.gd`, `game.gd` (SubViewport + overlays), `world_view.gd` (draws the world), `touch_controls.gd`, `game_input.gd`, `speech_bubble.gd`, `rotate_overlay.gd`, `screen_metrics.gd`
+- `scenes/`: `app.tscn` is the main scene; its children are built in code
 - `tests/`: `run_tests.gd` (runner, `SUITES` list), `test_base.gd`, `test_*.gd` suites, `*_smoke.gd` real-scene tests
-- `tools/`: `setup_godot.sh`, `build_web.sh`, `make_cow.gd`
+- `tools/`: `setup_godot.sh`, `build_web.sh`, `run_tests.sh`, `make_art.gd` (bakes every PNG in `art/` from character grids), `perf_probe.gd`
 - `.github/workflows/ci.yml`, `export_presets.cfg`
 
 ## Running tests
 ```sh
 tools/setup_godot.sh                                            # once per session
 godot --headless --path . --import || true                      # first run / after adding art
-godot --headless --path . --script res://tests/run_tests.gd     # all tests; non-zero exit on failure
+tools/run_tests.sh                                              # all tests; non-zero exit on any failure or script error
 ```
-With a display (`xvfb-run -a godot --path . --script res://tests/run_tests.gd -- --shots=<dir>`) the smoke tests also save phone and desktop screenshots. **Look at them** before saying a visual change works. Headless runs have no renderer, so smoke tests must skip pixel checks (not fail) when `DisplayServer.get_name() == "headless"`.
+`tools/run_tests.sh` wraps `godot --headless --path . --script res://tests/run_tests.gd` and also fails when Godot prints `SCRIPT ERROR`: a test that crashes mid-way would otherwise be reported as PASS. With a display (`xvfb-run -a tools/run_tests.sh -- --shots=<dir>`) the smoke tests also save phone and desktop screenshots. **Look at them** before saying a visual change works. Headless runs have no renderer, so smoke tests must skip pixel checks (not fail) when `DisplayServer.get_name() == "headless"`.
 
-Arguments for the runner go after `--` (`-- --shots=<dir>`, `-- --only=<substring>`). Smoke tests fake DPR and safe-area insets through `ScreenMetrics.override_dpr` / `override_insets_css`; with a display they also check every cow art pixel covers exactly k x k device pixels of its colour.
+Arguments for the runner go after `--` (`-- --shots=<dir>`, `-- --only=<substring>`). Smoke tests fake DPR, safe-area insets and touch through `ScreenMetrics.override_dpr` / `override_insets_css` / `override_touch`, drive touch with `InputEventScreenTouch`/`Drag` and keys with `Input.action_press`; with a display they also check that the on-screen world is the SubViewport image scaled by exactly k (every world pixel covers k x k device pixels of its colour).
 
 Add `test_*` methods to a suite (register new suites in `SUITES`). Each test records failures instead of stopping, and the runner prints `PASS`/`FAIL` per test.
 
-To try the web build locally: `tools/setup_godot.sh --web && tools/build_web.sh && python3 -m http.server -d build/web 8000`, then open it in a headless Chromium (Playwright) at a phone viewport and a desktop viewport and screenshot both.
+To try the web build locally: `tools/setup_godot.sh --web && tools/build_web.sh && python3 -m http.server -d build/web 8000`, then open it in a headless Chromium (Playwright) at a phone viewport and a desktop viewport and screenshot both. Real multi-touch needs CDP `Input.dispatchTouchEvent`. Web builds publish `window.catRpgStats` (fps, low, logic_ms, screen, player position, bubble text) for scripted checks.
+
+**Performance:** the corner shows fps and the lowest fps of the last half second. 60 fps can only be confirmed on the real phone. Headless Chromium uses a software GPU and is far slower, so don't read its fps. `logic_ms` (in `catRpgStats`) and `tools/perf_probe.gd` measure our own per-frame script cost; if a phone is slow while `logic_ms` is small, the cost is rendering or the browser.
 
 ## Working agreement
 - **Check every feature against the pillars and the current milestone question.** Ask before building something neither covers.
@@ -112,3 +125,7 @@ To try the web build locally: `tools/setup_godot.sh --web && tools/build_web.sh 
 - **Double taps on touch**: touch-to-mouse emulation plus a touch handler gives two events per tap.
 - **`class_name` in core scripts** breaks headless tests on a fresh checkout (no import cache). Use `preload`.
 - **The first headless run needs `--import`** or new PNGs won't load.
+- **Controls snap to whole UI units** (`gui/common/snap_controls_to_pixels`). At DPR 2-3 that's a fraction of a device pixel off, which shifts pixel art by a row. Draw pixel art with `Sprite2D`, not `TextureRect`.
+- **`set_anchors_preset()` keeps old offsets**; for nodes built in code use `set_anchors_and_offsets_preset()`.
+- **GDScript keeps running after a runtime error**, so the runner can't see a crashed test. That's why CI runs `tools/run_tests.sh`.
+- **`Performance.TIME_PROCESS` isn't per-frame script time**; measure with timestamps (see `app.gd` / `perf_probe.gd`).

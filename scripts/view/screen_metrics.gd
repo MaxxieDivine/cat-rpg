@@ -11,6 +11,8 @@ extends RefCounted
 static var override_dpr := 0.0
 ## [top, right, bottom, left] in CSS px.
 static var override_insets_css: Array = []
+## -1 = detect, 0 = no touchscreen, 1 = touchscreen.
+static var override_touch := -1
 
 const _JS_INSETS := """(function () {
 	var d = document.createElement('div');
@@ -93,8 +95,51 @@ func snap(ui: Vector2) -> Vector2:
 	return px_to_ui(ui_to_px(ui).round())
 
 
+## True when the visible area is taller than it is wide.
+func is_portrait() -> bool:
+	return ui_size.y > ui_size.x
+
+
+## Largest whole number k so that `art` * k fits in `avail_px` (at least 1).
+static func integer_fit(art: Vector2, avail_px: Vector2) -> int:
+	if art.x <= 0.0 or art.y <= 0.0:
+		return 1
+	return maxi(1, floori(minf(avail_px.x / art.x, avail_px.y / art.y)))
+
+
 static func is_web() -> bool:
 	return OS.has_feature("web")
+
+
+## Whether this device has a touchscreen (phones, tablets, touch laptops).
+static func is_touch() -> bool:
+	if override_touch >= 0:
+		return override_touch == 1
+	return DisplayServer.is_touchscreen_available()
+
+
+## Whether a fullscreen toggle can work here (not on iPhone Safari, for one).
+static func can_fullscreen() -> bool:
+	if is_web():
+		return str(JavaScriptBridge.eval("!!(document.fullscreenEnabled || document.webkitFullscreenEnabled)", true)) == "true"
+	return not OS.has_feature("mobile")
+
+
+static func is_fullscreen() -> bool:
+	var mode := DisplayServer.window_get_mode()
+	return mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+
+
+## Must be called from an input handler: browsers only allow fullscreen
+## (and orientation lock) right after a tap or click.
+static func toggle_fullscreen() -> void:
+	if is_fullscreen():
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		return
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	if is_web():
+		# Android Chrome can lock to landscape once fullscreen; others ignore it.
+		JavaScriptBridge.eval("setTimeout(function(){try{screen.orientation.lock('landscape').catch(function(){});}catch(e){}}, 300)", true)
 
 
 static func _detect_dpr(window: Window) -> float:

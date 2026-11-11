@@ -1,5 +1,16 @@
 {
-	"hello.moo": "Moo!",
+	"title.name": "Cat RPG",
+	"title.start_touch": "Tap to start",
+	"title.start_desktop": "Click or press Enter to start",
+	"title.fullscreen": "Fullscreen",
+	"title.exit_fullscreen": "Exit fullscreen",
+	"title.controls_desktop": "Move: WASD / arrows   Trot: Shift   Interact: E / Space",
+	"title.controls_touch": "Left thumb: move (push far to trot)   Paw: interact",
+	"rotate.touch": "Rotate your phone",
+	"rotate.desktop": "Make the window wider",
+	"hint.interact_desktop": "E",
+	"cow.moo": "Moo!",
 	"build.label": "build {sha} {date}",
-	"build.dev": "dev"
+	"build.dev": "dev",
+	"hud.fps": "{fps} fps (low {low})"
 }

@@ -1,10 +1,28 @@
 {
-	"hello": {
-		"cow_screen_fraction": 0.333,
-		"bubble_seconds": 1.5,
-		"bob_seconds": 0.12,
-		"min_tap_target": 48,
-		"bubble_gap": 14,
-		"corner_margin": 8
+	"game": {
+		"width": 480,
+		"height": 270,
+		"bubble_seconds": 1.5
+	},
+	"player": {
+		"walk_speed": 70,
+		"run_speed": 125,
+		"accel": 900,
+		"decel": 1200,
+		"walk_frame_px": 7,
+		"idle_speed": 4
+	},
+	"touch": {
+		"stick_radius": 56,
+		"knob_radius": 24,
+		"stick_deadzone": 0.15,
+		"stick_trot": 0.85,
+		"button_radius": 38,
+		"edge_margin": 28,
+		"min_target": 48
+	},
+	"ui": {
+		"corner_margin": 8,
+		"bubble_gap": 6
 	}
 }

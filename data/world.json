@@ -1,0 +1,23 @@
+{
+	"size": [480, 270],
+	"edge_margin": 6,
+	"background": "#6fb35a",
+	"player": {
+		"start": [150, 175],
+		"footprint": [12, 5]
+	},
+	"npcs": [
+		{"id": "cow", "art": "cow.idle", "pos": [330, 150], "footprint": [30, 8], "talk_radius": 16, "say": "cow.moo"}
+	],
+	"props": [
+		{"art": "prop.bush", "pos": [64, 72], "footprint": [26, 7]},
+		{"art": "prop.bush", "pos": [228, 96], "footprint": [26, 7]},
+		{"art": "prop.bush", "pos": [92, 236], "footprint": [26, 7]},
+		{"art": "prop.bush", "pos": [418, 248], "footprint": [26, 7]},
+		{"art": "prop.bush", "pos": [440, 52], "footprint": [26, 7]}
+	],
+	"decor": {
+		"seed": 20261111,
+		"items": {"decor.tuft": 70, "decor.flower": 34}
+	}
+}
