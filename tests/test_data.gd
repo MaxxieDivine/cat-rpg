@@ -11,7 +11,7 @@ func test_data_files_parse() -> void:
 
 func test_strings_come_from_json() -> void:
 	var raw := JsonData.load_dict(GameStrings.STRINGS_PATH)
-	check_eq(GameStrings.text("hello.moo"), str(raw["hello.moo"]), "hello.moo")
+	check_eq(GameStrings.text("cow.moo"), str(raw["cow.moo"]), "cow.moo")
 
 
 func test_string_formatting() -> void:
