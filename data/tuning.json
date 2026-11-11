@@ -1,0 +1,10 @@
+{
+	"hello": {
+		"cow_screen_fraction": 0.333,
+		"bubble_seconds": 1.5,
+		"bob_seconds": 0.12,
+		"min_tap_target": 48,
+		"bubble_gap": 14,
+		"corner_margin": 8
+	}
+}
