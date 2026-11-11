@@ -163,6 +163,120 @@ const SPRITES := {
 			".....",
 		],
 	},
+	# Wick: 72x24 sheet like Fern's (idle, walk A, walk B), facing right, feet
+	# on row 22. Lean and long-legged, sandy, white tail tip, so he never
+	# reads as Fern (orange, shorter legs, orange tail).
+	"wick": {
+		"palette": {
+			".": Color8(0, 0, 0, 0),
+			"o": Color8(28, 24, 36), "c": Color8(214, 196, 150), "d": Color8(172, 150, 104),
+			"l": Color8(244, 236, 214), "e": Color8(20, 18, 26), "p": Color8(226, 150, 160), "w": Color8(255, 255, 255),
+		},
+		"grid": [
+			".............................................................o.......o..",
+			".............o.......o...............o.......o..............oco.....oco.",
+			"............oco.....oco.............oco.....oco.............occo...occo.",
+			"............occo...occo.............occo...occo.............ocpcooocpco.",
+			"............ocpcooocpco.............ocpcooocpco..............ooccdccoo..",
+			"....o........ooccdccoo....o..........ooccdccoo......o.......occcdddccco.",
+			"...owo......occcdddccco..owo........occcdddccco....owo......occccccccco.",
+			"..owo.......occccccccco.owo.........occccccccco...owo......occccccewccco",
+			".owo.......occccccewcccoowo........occccccewccco.owo.......occcccceeccco",
+			".oco.......occcccceecccooco........occcccceeccco.oco.......occccccccllpo",
+			".oco.......occccccccllpooco........occccccccllpo.oco...oooooocccccclllo.",
+			".oco...oooooocccccclllo..oco...oooooocccccclllo..oco.ooccddcocccccclllo.",
+			".oco.ooccddcocccccclllo..oco.ooccddcocccccclllo..ocooccccdccdooccccloo..",
+			"..ococcccdccdooccccloo....ococcccdccdooccccloo....occccccccccccooooo....",
+			"...occcccccccccooooo.......occcccccccccooooo.......occcccccccccccco.....",
+			"...occcccccccccccco........occcccccccccccco.........occclllllllllo......",
+			"....occclllllllllo..........occcllllllllloo..........ooclllllllooo......",
+			"....oddcllllllldcco........oddocllllllloocco........occddoooooccddo.....",
+			"....oddccoooooddcco........oddooccoooddoocco........occddo...occddo.....",
+			"....oddcco...oddcco........oddoocco.oddoocco........occddo...occddo.....",
+			"....oddcco...oddcco........oddoocco.oddoocco........occddo...occddo.....",
+			"....oddcco...oddcco........oddoocco.oddoocco........occddo...occddo.....",
+			".....oooo.....oooo..........oo..oo...oo..oo..........oooo.....oooo......",
+			"........................................................................",
+		],
+	},
+	# Bram: 56x24 sheet, two 28x24 frames (sitting, blink), facing right, base
+	# on row 22. Broad and dark brown with amber eyes.
+	"bram": {
+		"palette": {
+			".": Color8(0, 0, 0, 0),
+			"o": Color8(28, 24, 36), "b": Color8(98, 66, 46), "d": Color8(70, 46, 32),
+			"m": Color8(150, 112, 82), "y": Color8(236, 184, 64), "k": Color8(20, 18, 26), "p": Color8(206, 126, 128),
+		},
+		"grid": [
+			"........................................................",
+			"..............o.......o...................o.......o.....",
+			".............obo.....obo.................obo.....obo....",
+			".............obbo...obbo.................obbo...obbo....",
+			".............obpbooobpbo.................obpbooobpbo....",
+			"............obbbbdddbbbbo...............obbbbdddbbbbo...",
+			"...........obbbbbbbbbbbbbo.............obbbbbbbbbbbbbo..",
+			"...........obbbbbbbbbbbbbo.............obbbbbbbbbbbbbo..",
+			"...........obbbbbbbbyybbbbo............obbbbbbbbddbbbbo.",
+			"...........obbbbbbbbykbbbmo............obbbbbbbbddbbbmo.",
+			"...........obbbbbbbbbbbmmmpo...........obbbbbbbbbbbmmmpo",
+			"............obbbbbbbbbmmmmo.............obbbbbbbbbmmmmo.",
+			"............oobbbbbbbbbmmo..............oobbbbbbbbbmmo..",
+			"..........oobbbbbbbbbbboo.............oobbbbbbbbbbboo...",
+			".........obbbbbbbbbbbbmmo............obbbbbbbbbbbbmmo...",
+			"........obbbbbdbbbbbbmmmo...........obbbbbdbbbbbbmmmo...",
+			".......obbbbbdbbbbbbbmmmo..........obbbbbdbbbbbbbmmmo...",
+			".......obbbbdbbbbobbbmmmo..........obbbbdbbbbobbbmmmo...",
+			"......obbbbbbbbbobbbbmmbo.........obbbbbbbbbobbbbmmbo...",
+			"......obbbbbbbbbobbbbobbo.........obbbbbbbbbobbbbobbo...",
+			".oooo.obbbbbbbbbobbbbobbo....oooo.obbbbbbbbbobbbbobbo...",
+			"obbbbdobbbbbbbbbbobbbobbo...obbbbdobbbbbbbbbbobbbobbo...",
+			".oooooooooooooooooooooooo....oooooooooooooooooooooooo...",
+			"........................................................",
+		],
+	},
+	# Sorrel: 64x16 sheet, two 32x16 frames (dozing, awake), lying down facing
+	# right, base on row 14. Thin and gray with a pale muzzle.
+	"sorrel": {
+		"palette": {
+			".": Color8(0, 0, 0, 0),
+			"o": Color8(28, 24, 36), "g": Color8(150, 152, 160), "G": Color8(116, 118, 128),
+			"m": Color8(232, 228, 220), "e": Color8(40, 38, 48), "k": Color8(20, 18, 26), "p": Color8(226, 150, 160),
+		},
+		"grid": [
+			"................................................................",
+			"......................o....o..........................o....o....",
+			".....................ogo..ogo........................ogo..ogo...",
+			".....................ogpooogpo.......................ogpooogpo..",
+			"....................ogggGGgggo......................ogggGGgggo..",
+			"....................oggggggggo......................ogkggggkgo..",
+			"....................ogeeggeegmo.....................ogkggggkgmo.",
+			"....................oggggggmmmpo....................oggggggmmmpo",
+			".........ooooooooooogggggmmmmo...........ooooooooooogggggmmmmo..",
+			".......ooggGgggGgggGgoggggmmoo.........ooggGgggGgggGgoggggmmoo..",
+			"......ogggGgggGgggGgggooooo...........ogggGgggGgggGgggooooo.....",
+			".....ogggggggggggggggggggo...........ogggggggggggggggggggo......",
+			"ooooogggggggggggggggggggggo.....ooooogggggggggggggggggggggo.....",
+			"oggggGgggggggggggggggmmmmmmo....oggggGgggggggggggggggmmmmmmo....",
+			".ooooooooooooooooooooooooooo.....ooooooooooooooooooooooooooo....",
+			"................................................................",
+		],
+	},
+	# 11x9 paw print: the "you can talk here" prompt that bobs over an NPC.
+	"paw": {
+		"palette": {".": Color8(0, 0, 0, 0), "o": Color8(28, 24, 36), "w": Color8(250, 250, 245)},
+		"grid": [
+			"...oo.oo...",
+			"..owwowwo..",
+			".oowwowwoo.",
+			"owwooooowwo",
+			"owwowwwowwo",
+			".oowwwwwoo.",
+			"..owwwwwo..",
+			"..owwwwwo..",
+			"...ooooo...",
+
+		],
+	},
 }
 
 
@@ -178,7 +292,31 @@ func _initialize() -> void:
 		ok = _bake(name, SPRITES[name]) and ok
 	for px: int in ICON_SIZES:
 		ok = _bake_icon(px) and ok
+	ok = _bake_sunspot() and ok
 	quit(0 if ok else 1)
+
+
+## Sorrel's sunny spot: a flat pale-yellow ellipse (two tones, hard edges,
+## no gradients) drawn under her on the ground layer.
+const SUNSPOT_SIZE := Vector2i(64, 22)
+const SUNSPOT_OUTER := Color8(255, 236, 140, 70)
+const SUNSPOT_INNER := Color8(255, 244, 180, 110)
+
+
+func _bake_sunspot() -> bool:
+	var img := Image.create(SUNSPOT_SIZE.x, SUNSPOT_SIZE.y, false, Image.FORMAT_RGBA8)
+	var c := Vector2(SUNSPOT_SIZE) / 2.0
+	for y in SUNSPOT_SIZE.y:
+		for x in SUNSPOT_SIZE.x:
+			var d := ((Vector2(x, y) + Vector2(0.5, 0.5) - c) / c).length()
+			if d <= 0.62:
+				img.set_pixel(x, y, SUNSPOT_INNER)
+			elif d <= 1.0:
+				img.set_pixel(x, y, SUNSPOT_OUTER)
+	var path := "res://art/sunspot.png"
+	var err := img.save_png(ProjectSettings.globalize_path(path))
+	print("make_art: wrote %s err=%d" % [path, err])
+	return err == OK
 
 
 func _bake_icon(px: int) -> bool:
