@@ -290,6 +290,9 @@ func _check_box_size(app: Control, name: String) -> void:
 	var lines := int(d["lines"])
 	var need: int = lines * int(box.font.get_height(box.font_size)) + (lines - 1) * (int(d["line_px"]) - int(box.font.get_height(box.font_size)))
 	check(box.text_rect.size.y / box.unit >= need - 0.01, "%s: text area fits %d lines" % [name, lines])
+	check(box.box_rect.encloses(box.text_rect), "%s: text area inside the box" % name)
+	# Whole box at most max_height of the screen, measured from its bottom edge.
+	check(m.ui_size.y - top <= m.ui_size.y * float(d["max_height"]) + 0.01, "%s: box covers at most the bottom %d%% (%s of %s)" % [name, roundi(float(d["max_height"]) * 100), m.ui_size.y - top, m.ui_size.y])
 	check_near(box.portrait_rect.size.x / box.unit, float(d["portrait_px"]), 0.01, "%s: portrait %s native px" % [name, d["portrait_px"]])
 	check_eq(box.font_size, int(d["font_px"]), "%s: font at its pixel size" % name)
 	var css: float = box.font_size * box.k / m.dpr

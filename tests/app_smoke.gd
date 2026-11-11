@@ -585,3 +585,138 @@ func _drag(app: Control, index: int, ui_pos: Vector2) -> void:
 	ev.index = index
 	ev.position = app.metrics.ui_to_px(ui_pos)
 	tree.root.push_input(ev)
+
+
+# --- Atmosphere: time of day, life, light
+
+
+func test_time_of_day_phone() -> void:
+	await _time_of_day(PHONE)
+
+
+func test_time_of_day_desktop() -> void:
+	await _time_of_day(DESKTOP)
+
+
+## Nightfall starts after the three conversations; then day, dusk, night
+## and the dialogue box are shot at this size and checked: grade and
+## brightness, fireflies at night, music swap, crisp integer scaling in
+## every state, and the meadow moving while Fern stands still.
+func _time_of_day(cfg: Array) -> void:
+	var name: String = cfg[0]
+	var app: Control = await _open(cfg)
+	await _tap(app, app.metrics.safe_rect.get_center(), app.metrics)
+	var g: Control = app.game
+	var w = g.world
+	var wv: Node2D = g.world_view
+	var pal := JsonData.load_dict("res://data/palette.json")
+	w.player_pos = Vector2(360, 250)
+	w.player_vel = Vector2.ZERO
+	await tree.process_frame
+	check_eq(g.day.phase(), "afternoon", "%s: starts in the afternoon" % name)
+	check(wv.grade.color.is_equal_approx(Color(str(pal["grade"]["afternoon"]))), "%s: warm afternoon grade" % name)
+	check_eq(g.sound.music_name, "day", "%s: day music" % name)
+	check(wv.pollen.emitting and not wv.fireflies.emitting, "%s: pollen by day, no fireflies" % name)
+	for k in ["pollen", "fireflies"]:
+		check_eq((wv.get(k) as CPUParticles2D).amount, int(tuning["ambience"][k]), "%s: %s count from tuning.json" % [name, k])
+	check_eq(wv.butterflies.size(), int(tuning["ambience"]["butterflies"]), "%s: butterflies from tuning.json" % name)
+
+	var stats := {}
+	if not is_headless():
+		# Alive while standing still: wind, clouds, butterflies, pollen.
+		var a: Image = await _view_image(g)
+		await tree.create_timer(0.7).timeout
+		var b: Image = await _view_image(g)
+		var moved := _diff_count(a, b)
+		check(moved > 40, "%s: the meadow moves while Fern stands still (%d px changed)" % [name, moved])
+		stats["afternoon"] = await _phase_shot(app, name + "_day")
+
+		# The box over the meadow, at most the bottom quarter.
+		w.player_pos = Vector2(262, 196)
+		await tree.process_frame
+		await tree.process_frame
+		g.interact()
+		for i in 20:
+			await tree.process_frame
+		var box: Control = g.dialogue
+		check(box.is_open and not box.animating(), "%s: box open" % name)
+		var top: float = minf(box.box_rect.position.y, box.plate_rect.position.y)
+		check(app.metrics.ui_size.y - top <= app.metrics.ui_size.y * float(tuning["dialogue"]["max_height"]) + 1.0, "%s: the box covers no more than the bottom quarter" % name)
+		await _phase_shot(app, name + "_dialogue")
+		DialogueManager.stop()
+		g._show({"type": "end"})
+		for i in 20:
+			await tree.process_frame
+		check(not box.visible, "%s: box gone after its close slide" % name)
+
+	# Nightfall: all three talked, box closed.
+	for id in ["bram", "sorrel", "wick"]:
+		GameState.set_flag("talked_" + id, true)
+	await tree.process_frame
+	await tree.process_frame
+	check(g.day.started, "%s: nightfall starts after the last conversation" % name)
+	if not is_headless():
+		g.day.set_t(float(tuning["time_of_day"]["dusk_at"]))
+		await tree.create_timer(0.3).timeout
+		check_eq(g.day.phase(), "dusk", "%s: dusk" % name)
+		stats["dusk"] = await _phase_shot(app, name + "_dusk")
+	g.day.set_t(1.0)
+	await tree.create_timer(3.0).timeout
+	check_eq(g.day.phase(), "night", "%s: night" % name)
+	check(wv.grade.color.is_equal_approx(Color(str(pal["grade"]["night"]))), "%s: night grade" % name)
+	check(wv.fireflies.emitting and not wv.pollen.emitting, "%s: fireflies rise at night" % name)
+	check_near(float((wv.pond.material as ShaderMaterial).get_shader_parameter("night")), 1.0, 0.001, "%s: the pond darkens" % name)
+	check_eq(g.sound.music_name, "night" if g.sound.has_music("night") else "day", "%s: night music" % name)
+	if not is_headless():
+		stats["night"] = await _phase_shot(app, name + "_night")
+		var day_s: Dictionary = stats["afternoon"]
+		check(day_s["r"] > day_s["b"], "%s: afternoon is warm (r %.2f > b %.2f)" % [name, day_s["r"], day_s["b"]])
+		check(stats["dusk"]["lum"] < day_s["lum"] and stats["night"]["lum"] < stats["dusk"]["lum"] * 0.85, "%s: darker each step (%.2f > %.2f > %.2f)" % [name, day_s["lum"], stats["dusk"]["lum"], stats["night"]["lum"]])
+		check(stats["night"]["b"] > stats["night"]["r"], "%s: night is cool" % name)
+		check(stats["night"]["glow"] >= 4, "%s: fireflies visible at night (%d glowing px)" % [name, stats["night"]["glow"]])
+	_close(app)
+
+
+## Screenshot, crisp-scaling check, and colour stats of the world view.
+func _phase_shot(app: Control, name: String) -> Dictionary:
+	var g: Control = app.game
+	await _check_view_pixels(app, name)
+	var img: Image = await _screen_image()
+	if shots_dir != "":
+		img.save_png(shots_dir.path_join("app_%s.png" % name))
+		print("     shot: ", shots_dir.path_join("app_%s.png" % name))
+	var src: Image = g.viewport.get_texture().get_image()
+	var r := 0.0
+	var gg := 0.0
+	var b := 0.0
+	var n := 0
+	for y in range(0, src.get_height(), 3):
+		for x in range(0, src.get_width(), 3):
+			var c := src.get_pixel(x, y)
+			r += c.r
+			gg += c.g
+			b += c.b
+			n += 1
+	# Firefly glow: bright yellow pixels on the overlay (not under the grade).
+	var glow := 0
+	var ff := Color(str(JsonData.load_dict("res://data/palette.json")["firefly"]))
+	for y in src.get_height():
+		for x in src.get_width():
+			var c := src.get_pixel(x, y)
+			if c.get_luminance() > 0.8 and absf(c.r - ff.r) < 0.25 and absf(c.b - ff.b) < 0.3 and c.b < c.r:
+				glow += 1
+	return {"r": r / n, "g": gg / n, "b": b / n, "lum": (r * 0.3 + gg * 0.59 + b * 0.11) / n, "glow": glow}
+
+
+func _view_image(g: Control) -> Image:
+	await RenderingServer.frame_post_draw
+	return g.viewport.get_texture().get_image()
+
+
+func _diff_count(a: Image, b: Image) -> int:
+	var n := 0
+	for y in range(0, a.get_height(), 2):
+		for x in range(0, a.get_width(), 2):
+			if not a.get_pixel(x, y).is_equal_approx(b.get_pixel(x, y)):
+				n += 1
+	return n

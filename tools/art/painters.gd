@@ -514,17 +514,19 @@ func ground(world: Dictionary) -> Image:
 	return img
 
 
-## A firefly: a bright core with a soft dithered glow (5x5).
+## A firefly: a bright plus-shaped core with a soft dithered glow (7x7).
 func firefly() -> Image:
-	var img := Image.create(5, 5, false, Image.FORMAT_RGBA8)
+	var img := Image.create(7, 7, false, Image.FORMAT_RGBA8)
 	var col := c("firefly")
-	for y in 5:
-		for x in 5:
-			var d := Vector2(x - 2, y - 2).length()
-			if d < 0.5:
+	for y in 7:
+		for x in 7:
+			var d := Vector2(x - 3, y - 3).length()
+			if d < 1.01:
 				img.set_pixel(x, y, Color(col.lightened(0.6), 1.0))
-			elif d < 1.1:
-				img.set_pixel(x, y, Color(col, 0.75))
-			elif d < 2.0:
-				img.set_pixel(x, y, Color(col, 0.22))
+			elif d < 1.5:
+				img.set_pixel(x, y, Color(col, 0.7))
+			elif d < 2.3:
+				img.set_pixel(x, y, Color(col, 0.35))
+			elif d < 3.2 and dither(x, y) < 0.5:
+				img.set_pixel(x, y, Color(col, 0.18))
 	return img

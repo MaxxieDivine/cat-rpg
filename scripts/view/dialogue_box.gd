@@ -384,11 +384,17 @@ func _choice_at(p: Vector2) -> int:
 	return -1
 
 
-## Height of the box for `lines` lines of text (box pixels).
-func box_height() -> int:
+## Height of a label holding `lines` lines (box pixels).
+func text_height() -> int:
 	var lines := int(t.get("lines", 3))
-	var text_h := lines * _font_height() + (lines - 1) * (int(t.get("line_px", 13)) - _font_height())
-	var inner := maxi(text_h, int(t.get("portrait_px", 32)))
+	return lines * _font_height() + (lines - 1) * (int(t.get("line_px", 13)) - _font_height())
+
+
+## Height of the box for `lines` lines of text (box pixels). The font's
+## blank rows above the capitals and below the descenders ("text_trim_px")
+## may overlap the padding.
+func box_height() -> int:
+	var inner := maxi(text_height() - int(t.get("text_trim_px", 4)), int(t.get("portrait_px", 32)))
 	return inner + int(t.get("padding_px", 4)) * 2 + BORDER * 2
 
 
@@ -401,24 +407,27 @@ func _relayout() -> void:
 	var safe := _bp_safe
 	var h := box_height()
 	var w := safe.size.x - margin * 2
-	_bp_box = Rect2i(safe.position.x + margin, safe.end.y - margin - h, w, h)
+	var bottom_margin := int(t.get("bottom_margin_px", margin))
+	_bp_box = Rect2i(safe.position.x + margin, safe.end.y - bottom_margin - h, w, h)
 	var b := _bp_box
 	var side := int(t.get("portrait_px", 32))
 	var inner_y := b.position.y + BORDER + pad
 	_bp_portrait = Rect2i(b.end.x - BORDER - pad - side if right else b.position.x + BORDER + pad, inner_y, side, side)
 	var tx0 := b.position.x + BORDER + pad if right else _bp_portrait.end.x + pad
 	var tx1 := _bp_portrait.position.x - pad if right else b.end.x - BORDER - pad
-	_bp_text = Rect2i(tx0, inner_y - 1, maxi(0, tx1 - tx0), b.size.y - BORDER * 2 - pad * 2 + 2)
+	var trim_top := int(t.get("text_trim_px", 4)) * 3 / 4
+	_bp_text = Rect2i(tx0, inner_y - trim_top, maxi(0, tx1 - tx0), text_height())
 	text_label.position = _bp_text.position
 	text_label.size = _bp_text.size
 
 	var fh := _font_height()
 	var name_w := int(font.get_string_size(name_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
-	var plate_h := int(t.get("plate_px", 12)) + BORDER
+	var plate_h := int(t.get("plate_px", 12))
 	var plate_w := name_w + pad * 2 + BORDER * 2
 	var plate_x := b.end.x - pad - plate_w if right else b.position.x + pad
 	_bp_plate = Rect2i(plate_x, b.position.y - plate_h + BORDER, plate_w, plate_h)
-	name_label.position = Vector2(_bp_plate.position.x + BORDER, _bp_plate.position.y + BORDER + (plate_h - BORDER - fh) / 2 + 1)
+	# Capitals start ~3 px below the label's top (Pixelify's ascent).
+	name_label.position = Vector2(_bp_plate.position.x + BORDER, _bp_plate.position.y + BORDER + 1 - (fh - int(t.get("text_trim_px", 4)) - 9) / 2 - 3)
 	name_label.size = Vector2(_bp_plate.size.x - BORDER * 2, fh)
 
 	# Choices: rows only as wide as their text, stacked up from the box's
