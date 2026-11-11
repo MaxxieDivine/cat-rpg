@@ -24,7 +24,7 @@ jobs:
       - name: Import
         run: godot --headless --path . --import || true
       - name: Run tests
-        run: godot --headless --path . --script res://tests/run_tests.gd
+        run: tools/run_tests.sh godot
 
   build:
     needs: test
