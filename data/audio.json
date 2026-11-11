@@ -1,0 +1,24 @@
+{
+	"music": {
+		"day": {"file": "res://audio/music/placeholder_day.wav", "volume_db": -15, "placeholder": true},
+		"night": {"file": "res://audio/music/placeholder_night.wav", "volume_db": -16, "placeholder": true}
+	},
+	"ambience": {
+		"wind": {"file": "res://audio/ambience/wind.wav", "volume_db": -22, "day": -22, "night": -26},
+		"crickets": {"file": "res://audio/ambience/crickets.wav", "volume_db": -24, "day": -80, "night": -24},
+		"pond": {"file": "res://audio/ambience/pond.wav", "volume_db": -20, "near": true}
+	},
+	"sfx": {
+		"step_grass": {"files": ["res://audio/sfx/step_grass_1.wav", "res://audio/sfx/step_grass_2.wav"], "volume_db": -20, "pitch_jitter": 0.1},
+		"step_path": {"files": ["res://audio/sfx/step_path_1.wav", "res://audio/sfx/step_path_2.wav"], "volume_db": -17, "pitch_jitter": 0.1},
+		"rustle": {"files": ["res://audio/sfx/rustle.wav"], "volume_db": -18, "pitch_jitter": 0.15},
+		"pond_lap": {"files": ["res://audio/sfx/pond_lap_1.wav", "res://audio/sfx/pond_lap_2.wav"], "volume_db": -16, "pitch_jitter": 0.1},
+		"bird": {"files": ["res://audio/sfx/bird_1.wav", "res://audio/sfx/bird_2.wav", "res://audio/sfx/bird_3.wav"], "volume_db": -24, "pitch_jitter": 0.08, "bus": "Ambience"}
+	},
+	"ui": {
+		"open": {"files": ["res://audio/ui/open.wav"], "volume_db": -18},
+		"move": {"files": ["res://audio/ui/move.wav"], "volume_db": -20},
+		"confirm": {"files": ["res://audio/ui/confirm.wav"], "volume_db": -17},
+		"advance": {"files": ["res://audio/ui/advance.wav"], "volume_db": -21}
+	}
+}

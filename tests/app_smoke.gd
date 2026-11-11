@@ -33,6 +33,8 @@ func after_each() -> void:
 	ScreenMetrics.override_touch = -1
 	ScreenMetrics.override_fullscreen = -1
 	ScreenMetrics.fullscreen_requests = 0
+	AudioServer.set_bus_mute(0, false)
+	AudioServer.set_bus_volume_db(0, 0.0)
 	for a in ["move_left", "move_right", "move_up", "move_down", "run", "interact"]:
 		if InputMap.has_action(a):
 			Input.action_release(a)
@@ -52,6 +54,84 @@ func test_desktop() -> void:
 
 func test_desktop_hd() -> void:
 	await _run_config(DESKTOP_HD)
+
+
+## Very wide and squarish screens: the world (meadow, then forest) still
+## reaches every edge, nothing flat past it.
+const ODD_SCREENS := [
+	["ultrawide", Vector2i(3440, 1440), 1.0, [0.0, 0.0, 0.0, 0.0], false],
+	["superwide", Vector2i(3840, 1080), 1.0, [0.0, 0.0, 0.0, 0.0], false],
+	["squarish", Vector2i(1280, 1024), 1.0, [0.0, 0.0, 0.0, 0.0], false],
+	["tablet", Vector2i(1180, 820), 2.0, [24.0, 0.0, 20.0, 0.0], true],
+]
+
+
+func test_no_dead_margins_on_odd_screens() -> void:
+	for cfg in ODD_SCREENS:
+		var name: String = cfg[0]
+		var app: Control = await _open(cfg)
+		await _tap(app, app.metrics.safe_rect.get_center(), app.metrics)
+		var g: Control = app.game
+		var w = g.world
+		var screen_ui := Rect2(Vector2.ZERO, app.metrics.ui_size)
+		check(g.view_rect.grow(0.01).encloses(screen_ui), "%s: world view covers the screen (%s)" % [name, g.view_rect])
+		# Walk to every corner: the camera never shows past the forest.
+		for corner in [Vector2(8, 12), Vector2(w.size.x - 8, 12), Vector2(8, w.size.y - 2), w.size - Vector2(8, 2)]:
+			w.player_pos = corner
+			w.player_vel = Vector2.ZERO
+			await tree.process_frame
+			var WorldView := load("res://scripts/view/world_view.gd")
+			check(w.camera_bounds().grow(WorldView.FOREST_REACH).encloses(g.camera_rect), "%s: forest under the camera at %s" % [name, corner])
+			if not is_headless():
+				var img: Image = await _screen_image()
+				var letter := Color(str(JsonData.load_dict("res://data/palette.json")["ui"]["letterbox"]))
+				var flat := 0
+				for x in range(0, img.get_width(), 9):
+					for y in [0, img.get_height() - 1]:
+						if img.get_pixel(x, y).is_equal_approx(letter):
+							flat += 1
+				for y in range(0, img.get_height(), 9):
+					for x in [0, img.get_width() - 1]:
+						if img.get_pixel(x, y).is_equal_approx(letter):
+							flat += 1
+				check_eq(flat, 0, "%s at %s: edge pixels showing the letterbox colour" % [name, corner])
+		if shots_dir != "" and not is_headless():
+			await _shot(app, name)
+		_close(app)
+		after_each()
+
+
+func test_volume_button_cycles_and_sits_by_fullscreen() -> void:
+	for cfg in [PHONE, DESKTOP]:
+		var app: Control = await _open(cfg)
+		var vb: Control = app.volume_button
+		var fb: Control = app.fullscreen_button
+		var m = app.metrics
+		check(vb.visible, "%s: volume button shown" % cfg[0])
+		check(m.safe_rect.encloses(vb.get_global_rect()), "%s: volume button inside the safe area" % cfg[0])
+		check(vb.size.x * m.px_per_unit.x / m.dpr >= 48.0 - 0.01, "%s: volume button >= 48 CSS px" % cfg[0])
+		check(not vb.get_global_rect().intersects(fb.get_global_rect()), "%s: next to, not on, the fullscreen button" % cfg[0])
+		check(absf(vb.get_global_rect().end.x - fb.get_global_rect().position.x) <= 1.0, "%s: just left of the fullscreen button" % cfg[0])
+		var steps: Array = tuning["audio"]["volume_steps"]
+		for i in steps.size():
+			check_near(db_to_linear(AudioServer.get_bus_volume_db(0)) if not AudioServer.is_bus_mute(0) else 0.0, float(steps[i]), 0.01, "%s: master volume step %d" % [cfg[0], i])
+			await _tap(app, vb.get_global_rect().get_center(), m)
+			await tree.process_frame
+		check(app.title != null, "%s: the volume button doesn't start the game" % cfg[0])
+		check(not AudioServer.is_bus_mute(0), "%s: back to full volume after a full cycle" % cfg[0])
+		# Fullscreen: the volume button takes the corner.
+		await _tap(app, m.safe_rect.get_center(), m)
+		app.relayout()
+		check(not fb.visible, "%s: fullscreen button hidden while fullscreen" % cfg[0])
+		check(absf(vb.get_global_rect().end.x - (m.safe_rect.end.x - 4.0)) <= 1.0, "%s: volume button moves into the corner" % cfg[0])
+		_close(app)
+		after_each()
+
+
+func _screen_image() -> Image:
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	return tree.root.get_texture().get_image()
 
 
 func test_fullscreen_button_on_title_does_not_start_the_game() -> void:
@@ -296,10 +376,14 @@ func _check_view(app: Control, name: String) -> void:
 		check(g.view_rect.grow(0.01).encloses(screen_ui), "%s: no letterbox, the world fills the screen" % name)
 	check_near(g.view_rect.get_center().x, screen_ui.get_center().x, 1.0, "%s: view centred x" % name)
 	check_eq(g.viewport.size, g.view_size, "%s: SubViewport matches the view" % name)
-	var world_rect := Rect2(Vector2.ZERO, g.world.size)
-	check(world_rect.encloses(g.camera_rect), "%s: camera inside the world (camera %s)" % [name, g.camera_rect])
+	var lim: Rect2 = g.world.camera_bounds()
+	for axis in 2:
+		if g.camera_rect.size[axis] <= lim.size[axis]:
+			check(g.camera_rect.position[axis] >= lim.position[axis] and g.camera_rect.end[axis] <= lim.end[axis], "%s: camera inside the meadow + forest border on axis %d (camera %s)" % [name, axis, g.camera_rect])
 	check_eq(g.camera.position, g.camera_rect.position, "%s: Camera2D at the camera rect" % name)
-	check(g.camera.limit_right == int(g.world.size.x) and g.camera.limit_bottom == int(g.world.size.y), "%s: Camera2D limits are the world's edges" % name)
+	check(g.camera.limit_left == int(lim.position.x) and g.camera.limit_right == int(lim.end.x) and g.camera.limit_bottom == int(lim.end.y), "%s: Camera2D limits are the meadow + forest border" % name)
+	# No dead margins: the world view covers the whole screen.
+	check(g.view_rect.grow(0.01).encloses(screen_ui), "%s: the world reaches every edge (view %s, screen %s)" % [name, g.view_rect, screen_ui])
 
 
 func _check_hud(app: Control, name: String) -> void:
@@ -433,6 +517,7 @@ func _check_view_pixels(app: Control, name: String) -> void:
 	g.paused = true  # freeze overlay updates (hiding touch would show the keyboard prompt)
 	g.touch.visible = false
 	app.hud.visible = false
+	app.volume_button.visible = false
 	var box_was: bool = g.dialogue.visible
 	g.dialogue.visible = false
 	await RenderingServer.frame_post_draw
@@ -464,6 +549,7 @@ func _check_view_pixels(app: Control, name: String) -> void:
 	g.paused = paused_was
 	g.dialogue.visible = box_was
 	app.hud.visible = true
+	app.volume_button.visible = true
 
 
 func _shot(app: Control, name: String) -> void:

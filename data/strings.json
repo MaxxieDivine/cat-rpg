@@ -10,5 +10,6 @@
 	"build.dev": "dev",
 	"hud.fps": "{fps} fps (low {low})",
 	"ui.fullscreen": "Fullscreen",
-	"title.add_to_home": "For full screen: tap Share, then Add to Home Screen"
+	"title.add_to_home": "For full screen: tap Share, then Add to Home Screen",
+	"ui.volume": "Sound: loud / quiet / off"
 }
