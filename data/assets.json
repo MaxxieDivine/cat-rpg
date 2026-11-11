@@ -1,3 +1,7 @@
 {
-	"cow.idle": "res://art/cow.png"
+	"cow.idle": "res://art/cow.png",
+	"cat.sheet": "res://art/cat.png",
+	"prop.bush": "res://art/bush.png",
+	"decor.tuft": "res://art/tuft.png",
+	"decor.flower": "res://art/flower.png"
 }
