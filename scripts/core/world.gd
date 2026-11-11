@@ -22,6 +22,21 @@ var size := Vector2(480, 270)
 ## Where the player's footprint may be.
 var bounds := Rect2()
 var background := Color("#6fb35a")
+## How far past the meadow's edge the forest is drawn and the camera may go
+## (world px). The camera limits are the world grown by this.
+var border := 0.0
+## Art keys for the baked meadow floor and the forest tile around it.
+var ground_art := ""
+var forest_art := ""
+## Worn path: polylines (world px) and their width.
+var path_lines: Array[PackedVector2Array] = []
+var path_width := 10.0
+## The pond: {"art", "pos" (centre), "size", "rect" (solid), "lap_radius"}
+## or empty.
+var pond: Dictionary = {}
+## Tall-grass blades Fern walks through. Each: {"art", "pos", "flip"}.
+var tall_grass: Array[Dictionary] = []
+var tall_grass_patches: Array[Rect2] = []
 
 var player_pos := Vector2.ZERO
 var player_vel := Vector2.ZERO
@@ -40,7 +55,9 @@ var npcs: Array[Dictionary] = []
 var ground: Array[Dictionary] = []
 ## id of the NPC the player is talking to, or "".
 var talk_id := ""
-## Each: {"art", "pos", "rect"}
+## Each: {"art", "pos", "rect", "type", "flip", "shadow", "sway",
+## "rustle", and for trees "canopy" + "canopy_offset"}. world.json "props"
+## first (in order), then the generated tree line.
 var props: Array[Dictionary] = []
 ## Each: {"art", "pos"}; cosmetic, placed with the seeded RNG.
 var decor: Array[Dictionary] = []
@@ -79,6 +96,16 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 	var margin := float(w.get("edge_margin", 0))
 	bounds = Rect2(Vector2(margin, margin), size - Vector2(margin, margin) * 2.0)
 	background = Color(str(w.get("background", "#6fb35a")))
+	border = float(w.get("border", 0))
+	ground_art = str(w.get("ground_art", ""))
+	forest_art = str(w.get("forest_art", ""))
+	var pth: Dictionary = w.get("path", {})
+	path_width = float(pth.get("width", path_width))
+	for line in pth.get("lines", []):
+		var pts := PackedVector2Array()
+		for pt in line:
+			pts.append(_vec(pt))
+		path_lines.append(pts)
 
 	var pl: Dictionary = w.get("player", {})
 	player_pos = _vec(pl.get("start", [size.x / 2, size.y / 2]))
@@ -111,15 +138,49 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 		npc["rect"] = footprint_rect(npc["pos"], npc["footprint"])
 		npcs.append(npc)
 
+	var types: Dictionary = w.get("prop_types", {})
 	for pr: Dictionary in w.get("props", []):
-		var prop := {"art": str(pr.get("art", "")), "pos": _vec(pr.get("pos", [0, 0]))}
-		prop["rect"] = footprint_rect(prop["pos"], _vec(pr.get("footprint", [16, 6])))
-		props.append(prop)
-		_prop_solids.append(prop["rect"])
+		_add_prop(pr, types)
+	_add_tree_line(w.get("tree_line", {}), types)
+	var pd: Dictionary = w.get("pond", {})
+	if not pd.is_empty():
+		var c := _vec(pd.get("pos", [0, 0]))
+		var sz := _vec(pd.get("size", [32, 16]))
+		var inset := _vec(pd.get("footprint_inset", [4, 4]))
+		pond = {"art": str(pd.get("art", "")), "pos": c, "size": sz,
+			"rect": Rect2(c - sz / 2.0 + inset, sz - inset * 2.0),
+			"lap_radius": float(pd.get("lap_radius", 40))}
+		_prop_solids.append(pond["rect"])
 	_rebuild_solids()
 
 	for g: Dictionary in w.get("ground", []):
 		ground.append({"art": str(g.get("art", "")), "pos": _vec(g.get("pos", [0, 0]))})
+
+	var tg: Dictionary = w.get("tall_grass", {})
+	rng.seed = int(tg.get("seed", 0))
+	for patch: Dictionary in tg.get("patches", []):
+		var r: Array = patch.get("rect", [0, 0, 0, 0])
+		var rect := Rect2(float(r[0]), float(r[1]), float(r[2]), float(r[3]))
+		tall_grass_patches.append(rect)
+		for i in int(patch.get("count", 0)):
+			# Denser in the middle: average two samples.
+			var pos := Vector2(
+				(rng.randf_range(rect.position.x, rect.end.x) + rng.randf_range(rect.position.x, rect.end.x)) / 2.0,
+				rng.randf_range(rect.position.y, rect.end.y)).round()
+			tall_grass.append({"art": str(tg.get("art", "")), "pos": pos, "flip": rng.randf() < 0.5})
+
+	# Flowers grow in clusters (denser near the centre), never on the path.
+	var fl: Dictionary = w.get("flowers", {})
+	rng.seed = int(fl.get("seed", 0))
+	for cl: Dictionary in fl.get("clusters", []):
+		var centre := _vec(cl.get("pos", [0, 0]))
+		var radius := float(cl.get("radius", 10))
+		var colors: Array = cl.get("colors", ["yellow"])
+		for i in int(cl.get("count", 0)):
+			var pos := (centre + Vector2.from_angle(rng.randf() * TAU) * radius * sqrt(rng.randf()) * rng.randf_range(0.5, 1.0)).round()
+			var col: String = colors[rng.randi_range(0, colors.size() - 1)]
+			if _decor_spot_ok(pos):
+				decor.append({"art": "decor.flower_" + col, "pos": pos})
 
 	var d: Dictionary = w.get("decor", {})
 	rng.seed = int(d.get("seed", 0))
@@ -127,8 +188,114 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 	for art: String in items:
 		for i in int(items[art]):
 			var pos := Vector2(rng.randi_range(4, int(size.x) - 4), rng.randi_range(8, int(size.y) - 2))
-			decor.append({"art": art, "pos": pos})
+			if _decor_spot_ok(pos):
+				decor.append({"art": art, "pos": pos})
 	_update_focus()
+
+
+func _add_prop(pr: Dictionary, types: Dictionary) -> void:
+	var spec: Dictionary = types.get(str(pr.get("type", "")), {}).duplicate()
+	spec.merge(pr, true)
+	var prop := {
+		"type": str(spec.get("type", "")),
+		"art": str(spec.get("art", "")),
+		"pos": _vec(spec.get("pos", [0, 0])),
+		"flip": bool(spec.get("flip", false)),
+		"shadow": str(spec.get("shadow", "")),
+		"sway": str(spec.get("sway", "")),
+		"rustle": bool(spec.get("rustle", false)),
+		"trunk": bool(spec.get("trunk", true)),
+	}
+	if spec.has("canopy"):
+		prop["canopy"] = str(spec["canopy"])
+		prop["canopy_offset"] = _vec(spec.get("canopy_offset", [0, 0]))
+	prop["rect"] = footprint_rect(prop["pos"], _vec(spec.get("footprint", [16, 6])))
+	props.append(prop)
+	_prop_solids.append(prop["rect"])
+
+
+## Trees all round the meadow, so the edge is a wood, not a cliff: a row
+## along the top (Fern walks in front of the trunks), and rows just past the
+## bottom, left and right edges whose canopies hang over the meadow.
+func _add_tree_line(tl: Dictionary, types: Dictionary) -> void:
+	if tl.is_empty():
+		return
+	var r := RandomNumberGenerator.new()
+	r.seed = int(tl.get("seed", 0))
+	var spacing := float(tl.get("spacing", 30))
+	var jitter := float(tl.get("jitter", 6))
+	var kinds: Array = tl.get("types", [])
+	if kinds.is_empty():
+		return
+	var spots: Array[Vector2] = []
+	var x := -spacing
+	while x <= size.x + spacing:
+		spots.append(Vector2(x, float(tl.get("top_y", 8))))
+		spots.append(Vector2(x + spacing / 2.0, float(tl.get("bottom_y", size.y + 30))))
+		x += spacing
+	var y := spacing / 2.0
+	while y <= size.y + spacing:
+		spots.append(Vector2(float(tl.get("left_x", -16)), y))
+		spots.append(Vector2(float(tl.get("right_x", size.x + 16)), y + spacing / 3.0))
+		y += spacing
+	for p in spots:
+		var j := Vector2(r.randf_range(-jitter, jitter), r.randf_range(-jitter, jitter) * 0.5)
+		# Only the top row stands in the meadow; the others are canopies
+		# over the forest floor (no trunk, no shadow).
+		var inside := p.y >= 0.0 and p.y < size.y and p.x >= 0.0 and p.x <= size.x
+		_add_prop({"type": kinds[r.randi_range(0, kinds.size() - 1)], "pos": [roundf(p.x + j.x), roundf(p.y + j.y)], "flip": r.randf() < 0.5, "trunk": inside}, types)
+
+
+func _decor_spot_ok(p: Vector2) -> bool:
+	if on_path(p, 2.0):
+		return false
+	if not pond.is_empty() and Rect2(pond["pos"] - pond["size"] / 2.0, pond["size"]).grow(3).has_point(p):
+		return false
+	return true
+
+
+## Whether `p` is on the worn path (`grow` px of slack).
+func on_path(p: Vector2, grow: float = 0.0) -> bool:
+	var half := path_width / 2.0 + grow
+	for line in path_lines:
+		for i in range(line.size() - 1):
+			if p.distance_to(Geometry2D.get_closest_point_to_segment(p, line[i], line[i + 1])) <= half:
+				return true
+	return false
+
+
+## What Fern is standing on: "path" or "grass" (footstep sounds).
+func surface() -> String:
+	return "path" if on_path(player_pos) else "grass"
+
+
+## Whether Fern's feet are in a tall-grass patch.
+func in_tall_grass() -> bool:
+	for r in tall_grass_patches:
+		if r.has_point(player_pos):
+			return true
+	return false
+
+
+## Index into props of a rustly prop (bush) Fern is brushing against, or -1.
+func brushing_prop() -> int:
+	var pr := player_rect().grow(2.0)
+	for i in props.size():
+		if props[i]["rustle"] and pr.intersects(props[i]["rect"]):
+			return i
+	return -1
+
+
+## Distance from Fern to the pond's water edge (INF without a pond).
+func pond_distance() -> float:
+	if pond.is_empty():
+		return INF
+	return distance_to_rect(pond["rect"])
+
+
+## The area the camera may show: the meadow plus the forest border.
+func camera_bounds() -> Rect2:
+	return Rect2(Vector2.ZERO, size).grow(border)
 
 
 static func footprint_rect(feet: Vector2, fp: Vector2) -> Rect2:
@@ -136,8 +303,9 @@ static func footprint_rect(feet: Vector2, fp: Vector2) -> Rect2:
 
 
 ## The part of the world a camera of `view_size` shows: centred on the
-## player, clamped so it never shows past the world's edges (the camera
-## limits). If the view is bigger than the world on an axis, it is centred.
+## player, clamped to camera_bounds() (the meadow plus the forest border:
+## the camera limits). If the view is bigger than that on an axis, it is
+## centred (the forest is drawn further out, so it still fills the view).
 ## Whole pixels, so pixel art stays crisp.
 ## `center` (world px) overrides the point to centre on (the view frames a
 ## conversation above the dialogue box with it).
@@ -145,11 +313,12 @@ func camera_rect(view_size: Vector2, center: Vector2 = Vector2.INF) -> Rect2:
 	if center == Vector2.INF:
 		center = player_pos - Vector2(0, player_footprint.y * 2.0)
 	var top_left := center - view_size / 2.0
+	var lim := camera_bounds()
 	for axis in 2:
-		if view_size[axis] >= size[axis]:
-			top_left[axis] = (size[axis] - view_size[axis]) / 2.0
+		if view_size[axis] >= lim.size[axis]:
+			top_left[axis] = lim.position[axis] + (lim.size[axis] - view_size[axis]) / 2.0
 		else:
-			top_left[axis] = clampf(top_left[axis], 0.0, size[axis] - view_size[axis])
+			top_left[axis] = clampf(top_left[axis], lim.position[axis], lim.end[axis] - view_size[axis])
 	return Rect2(top_left.floor(), view_size)
 
 

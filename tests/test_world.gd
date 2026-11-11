@@ -35,11 +35,15 @@ func _open_spot() -> void:
 func test_loads_from_data() -> void:
 	check_eq(w.size, Vector2(wdata["size"][0], wdata["size"][1]), "world size")
 	check_eq(w.npcs.size(), wdata["npcs"].size(), "npc count")
-	check_eq(w.props.size(), wdata["props"].size(), "prop count")
-	var decor := 0
+	check(w.props.size() > wdata["props"].size(), "world.json props plus the tree line (%d)" % w.props.size())
+	for i in wdata["props"].size():
+		check_eq(w.props[i]["pos"], Vector2(wdata["props"][i]["pos"][0], wdata["props"][i]["pos"][1]), "prop %d in world.json order" % i)
+	var most := 0
 	for k in wdata["decor"]["items"]:
-		decor += int(wdata["decor"]["items"][k])
-	check_eq(w.decor.size(), decor, "decor count")
+		most += int(wdata["decor"]["items"][k])
+	for cl in wdata["flowers"]["clusters"]:
+		most += int(cl["count"])
+	check(w.decor.size() <= most and w.decor.size() > most * 0.7, "decor count %d (of up to %d; spots on the path or pond are skipped)" % [w.decor.size(), most])
 	check(w.bounds.encloses(w.player_rect()), "player starts inside bounds")
 	for s: Rect2 in w.solids:
 		check(not s.intersects(w.player_rect()), "player does not start inside an obstacle")
@@ -277,15 +281,115 @@ func test_camera_follows_player() -> void:
 
 
 func test_camera_limits_cover_every_view() -> void:
-	# Every view the game can show (from the base size up to view.max) must
-	# stay inside the world wherever the player is: no void past the edge.
+	# Every view the game shows stays inside the camera bounds (the meadow
+	# plus its forest border) wherever the player is; a view bigger than the
+	# bounds is centred on them. The forest is drawn FOREST_REACH further
+	# out, so even view.max never shows past it.
 	var v: Dictionary = tdata["view"]
 	var base := Vector2(v["base"][0], v["base"][1])
 	var biggest := Vector2(v["max"][0], v["max"][1])
-	var world_rect := Rect2(Vector2.ZERO, w.size)
-	check(w.size.x >= biggest.x and w.size.y >= biggest.y, "world %s is at least view.max %s" % [w.size, biggest])
-	for view in [base, Vector2(633, 293), Vector2(512, 384), biggest]:
+	var lim: Rect2 = w.camera_bounds()
+	check_eq(lim, Rect2(Vector2.ZERO, w.size).grow(float(wdata["border"])), "camera bounds = world + border")
+	var WorldView := load("res://scripts/view/world_view.gd")
+	check(lim.grow(WorldView.FOREST_REACH).size.x >= biggest.x and lim.grow(WorldView.FOREST_REACH).size.y >= biggest.y, "forest covers view.max %s" % biggest)
+	for view in [base, Vector2(633, 293), Vector2(512, 384), Vector2(640, 512), Vector2(1024, 288), biggest]:
 		for corner in [Vector2.ZERO, Vector2(w.size.x, 0), w.size, Vector2(0, w.size.y), w.size / 2.0]:
 			w.player_pos = corner
 			var r: Rect2 = w.camera_rect(view)
-			check(world_rect.encloses(r), "view %s with player at %s stays inside the world (got %s)" % [view, corner, r])
+			for axis in 2:
+				if view[axis] <= lim.size[axis]:
+					check(r.position[axis] >= lim.position[axis] and r.end[axis] <= lim.end[axis], "view %s with player at %s stays inside the bounds on axis %d (got %s)" % [view, corner, axis, r])
+				else:
+					check_near(r.get_center()[axis], lim.get_center()[axis], 1.0, "view %s bigger than the bounds is centred on axis %d" % [view, axis])
+			check(lim.grow(WorldView.FOREST_REACH).encloses(r), "forest drawn under view %s at %s" % [view, corner])
+
+
+func test_the_edge_is_a_tree_line() -> void:
+	# Trees on all four sides, at most `spacing` + jitter apart.
+	var tl: Dictionary = wdata["tree_line"]
+	var gap := float(tl["spacing"]) + float(tl["jitter"]) * 2.0 + 1.0
+	var sides := {"top": [], "bottom": [], "left": [], "right": []}
+	for p: Dictionary in w.props:
+		if not p.has("canopy"):
+			continue
+		var pos: Vector2 = p["pos"]
+		if pos.y < 30:
+			sides["top"].append(pos.x)
+		elif pos.y > w.size.y:
+			sides["bottom"].append(pos.x)
+		elif pos.x < 0:
+			sides["left"].append(pos.y)
+		elif pos.x > w.size.x:
+			sides["right"].append(pos.y)
+	for side in sides:
+		var xs: Array = sides[side]
+		xs.sort()
+		check(xs.size() >= 8, "%s: a row of trees (%d)" % [side, xs.size()])
+		for i in range(1, xs.size()):
+			check(xs[i] - xs[i - 1] <= gap, "%s: no gap in the tree line between %s and %s" % [side, xs[i - 1], xs[i]])
+	# Only the top row has trunks in the meadow.
+	for p: Dictionary in w.props:
+		if p.has("canopy") and p["trunk"]:
+			check(Rect2(Vector2.ZERO, w.size).grow(1.0).has_point(p["pos"]), "trunk %s is in the meadow" % p["pos"])
+
+
+func test_landmarks_block_and_npcs_stay_reachable() -> void:
+	check(not w.pond.is_empty(), "there is a pond")
+	check(w.solids.has(w.pond["rect"]), "the pond is solid")
+	var kinds := {}
+	for p: Dictionary in w.props:
+		kinds[p["type"]] = true
+		check(not p["rect"].intersects(w.player_rect()), "Fern doesn't start inside %s" % p["type"])
+	for k in ["bush_round", "bush_wide", "bush_small", "rock_big", "log", "tree_a", "tree_b"]:
+		check(kinds.has(k), "has a %s" % k)
+	var flipped: Array = w.props.filter(func(p): return p["type"].begins_with("bush") and p["flip"])
+	check(flipped.size() >= 2, "some bushes are mirrored")
+	# Every NPC can be walked up to from the left, clear of every obstacle.
+	for npc: Dictionary in w.npcs:
+		var r: Rect2 = npc["rect"]
+		var spot := World.footprint_rect(Vector2(r.position.x - w.player_footprint.x / 2.0 - 4.0, r.end.y), w.player_footprint)
+		for s: Rect2 in w.solids:
+			if s != r:
+				check(not s.intersects(spot), "%s's talk spot %s is clear (blocked by %s)" % [npc["id"], spot, s])
+
+
+func test_path_surface_and_tall_grass() -> void:
+	var line: Array = wdata["path"]["lines"][0]
+	var on := Vector2(line[3][0], line[3][1])
+	w.player_pos = on
+	check_eq(w.surface(), "path", "on the path at %s" % on)
+	_open_spot()
+	w.player_pos = Vector2(150, 175)
+	check_eq(w.surface(), "grass", "open grass is grass")
+	var patch: Array = wdata["tall_grass"]["patches"][0]["rect"]
+	w.player_pos = Vector2(patch[0] + patch[2] / 2.0, patch[1] + patch[3] / 2.0)
+	check(w.in_tall_grass(), "in the tall grass patch")
+	var count := 0
+	for p in wdata["tall_grass"]["patches"]:
+		count += int(p["count"])
+	check_eq(w.tall_grass.size(), count, "tall grass blades from world.json")
+	for d: Dictionary in w.decor:
+		check(not w.on_path(d["pos"], 1.0), "decor %s at %s is off the path" % [d["art"], d["pos"]])
+
+
+func test_flowers_grow_in_clusters() -> void:
+	var colors := {}
+	var near := 0
+	var flowers: Array = w.decor.filter(func(d): return str(d["art"]).begins_with("decor.flower_"))
+	for d: Dictionary in flowers:
+		colors[d["art"]] = true
+		for cl in wdata["flowers"]["clusters"]:
+			if (d["pos"] as Vector2).distance_to(Vector2(cl["pos"][0], cl["pos"][1])) <= float(cl["radius"]) + 1.0:
+				near += 1
+				break
+	check(colors.size() >= 2 and colors.size() <= 3, "2-3 flower colours (%s)" % [colors.keys()])
+	check_eq(near, flowers.size(), "every flower is in a cluster")
+
+
+func test_brushing_a_bush() -> void:
+	var bush: Dictionary = w.props[0]
+	var r: Rect2 = bush["rect"]
+	w.player_pos = Vector2(r.position.x - w.player_footprint.x / 2.0 - 1.0, r.end.y)
+	check_eq(w.brushing_prop(), 0, "next to the bush")
+	_open_spot()
+	check_eq(w.brushing_prop(), -1, "open grass")
