@@ -25,6 +25,21 @@ extends Control
 ## gets the paw prompt. "The pile is empty." and similar short lines show
 ## over Fern for needs_hud.message_s (`message`).
 ##
+## Areas (data/areas.json, scripts/core/areas.gd): the game starts in the
+## camp. Walking into an exit fades to black (travel.gd, tuning.json
+## travel.fade_s), builds the other area's World and WorldView in the same
+## SubViewport (load_area()), puts Fern at the exit's spawn and fades back
+## in. Camera limits are set per area. Hunger, thirst (Needs), the area,
+## spawn and what Fern carries (Player) are autoloads, so they carry over;
+## flags, bonds and the time of day too.
+##
+## Passing out: when hunger or thirst reaches 0 (and no conversation, meal
+## or fade is running), control locks, Fern sinks down, the screen fades to
+## black, Player.collapse_message shows until a tap / key or a moment
+## passes, she wakes at Player.recovery_area / recovery_spawn (her den in
+## camp) with Needs restore values and nothing carried, and stretches before
+## control comes back. travel.gd runs the sequence; it can't start twice.
+##
 ## Time of day (scripts/core/day_cycle.gd): after the last of the three
 ## conversations, afternoon turns to dusk and night; the world view, the
 ## music and the ambience follow it. Sound (sound.gd) is created here, after
@@ -43,8 +58,13 @@ const DayCycle := preload("res://scripts/core/day_cycle.gd")
 const NeedsHud := preload("res://scripts/view/needs_hud.gd")
 const GameStrings := preload("res://scripts/core/game_strings.gd")
 const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
+const Areas := preload("res://scripts/core/areas.gd")
+const Travel := preload("res://scripts/core/travel.gd")
 
 var world
+var areas
+## Fades between areas and the passing-out sequence (scripts/core/travel.gd).
+var travel
 var tuning: Dictionary = {}
 var metrics
 ## Device pixels per world pixel (whole number).
@@ -88,6 +108,11 @@ var _speaker := ""
 var _cam_center := Vector2.INF
 var _cam_easing := false
 var _stick_y_held := false
+## Black over everything while travelling, and the line shown on it after
+## passing out (plus a "tap to continue" hint).
+var fade: ColorRect
+var fade_message: Label
+var fade_hint: Label
 
 
 func _ready() -> void:
@@ -95,12 +120,14 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	GameInput.ensure_actions()
 	tuning = JsonData.load_dict("res://data/tuning.json")
-	world = World.new()
+	areas = Areas.new()
+	travel = Travel.new(tuning)
 	day = DayCycle.new(tuning.get("time_of_day", {}))
 	# A new game: fresh flags and bonds, nothing mid-conversation.
 	GameState.reset()
 	DialogueManager.stop()
 	Needs.reset()
+	Player.reset(areas.start_area(), "start")
 
 	viewport = SubViewport.new()
 	viewport.name = "WorldViewport"
@@ -111,21 +138,12 @@ func _ready() -> void:
 	viewport.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	add_child(viewport)
-	world_view = WorldView.new()
-	world_view.name = "WorldView"
-	viewport.add_child(world_view)
-	world_view.setup(world, tuning, day)
-	world_view.rustled.connect(_on_rustle)
 	camera = Camera2D.new()
 	camera.name = "Camera"
 	camera.anchor_mode = Camera2D.ANCHOR_MODE_FIXED_TOP_LEFT
-	var lim: Rect2 = world.camera_bounds()
-	camera.limit_left = int(lim.position.x)
-	camera.limit_top = int(lim.position.y)
-	camera.limit_right = int(lim.end.x)
-	camera.limit_bottom = int(lim.end.y)
 	viewport.add_child(camera)
 	camera.make_current()
+	load_area(areas.start_area(), "start")
 
 	# A Sprite2D, not a TextureRect: Controls are snapped to whole UI units
 	# (gui/common/snap_controls_to_pixels), which is a fraction of a device
@@ -184,6 +202,77 @@ func _ready() -> void:
 	dialogue.ui_event.connect(func(kind: String) -> void: sound.play(kind))
 	add_child(dialogue)
 
+	# Over everything on the game screen: the fade to black.
+	fade = ColorRect.new()
+	fade.name = "Fade"
+	fade.color = Color(0, 0, 0, 0)
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fade.visible = false
+	add_child(fade)
+	fade_message = _pixel_label("FadeMessage", int(tuning.get("collapse", {}).get("message_font", 20)))
+	fade_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	fade.add_child(fade_message)
+	fade_hint = _pixel_label("FadeHint", int(tuning.get("needs_hud", {}).get("message_font", 18)) - 4)
+	fade_hint.modulate = Color(1, 1, 1, 0.7)
+	fade.add_child(fade_hint)
+
+
+## A centred Pixelify label in the paper colour (the "fi" ligature off, as
+## in the dialogue box).
+func _pixel_label(n: String, size: int) -> Label:
+	var l := Label.new()
+	l.name = n
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var base_font := AssetCatalog.font("font.dialogue")
+	if base_font != null:
+		var fv := FontVariation.new()
+		fv.base_font = base_font
+		fv.opentype_features = {TextServerManager.get_primary_interface().name_to_tag("liga"): 0}
+		l.add_theme_font_override("font", fv)
+	l.add_theme_color_override("font_color", Color(str(JsonData.load_dict("res://data/palette.json").get("ui", {}).get("paper", "#f6eedb"))))
+	l.add_theme_font_size_override("font_size", size)
+	return l
+
+
+## Builds area `id` (data/areas.json) in the world SubViewport with Fern at
+## spawn `spawn_name` (its "start" if there is no such spawn), replacing the
+## area shown now. Camera limits follow the area. Needs, Player, flags and
+## the time of day are untouched.
+func load_area(id: String, spawn_name: String) -> bool:
+	var w = areas.load_world(id, tuning)
+	if w == null:
+		return false
+	if not w.spawns.has(spawn_name):
+		push_warning("game: area '%s' has no spawn '%s'; using start" % [id, spawn_name])
+		spawn_name = "start"
+	w.place_at_spawn(spawn_name)
+	if world_view != null:
+		viewport.remove_child(world_view)
+		world_view.queue_free()
+	world = w
+	world_view = WorldView.new()
+	world_view.name = "WorldView"
+	viewport.add_child(world_view)
+	viewport.move_child(world_view, 0)
+	world_view.setup(world, tuning, day)
+	world_view.rustled.connect(_on_rustle)
+	var lim: Rect2 = world.camera_bounds()
+	camera.limit_left = int(lim.position.x)
+	camera.limit_top = int(lim.position.y)
+	camera.limit_right = int(lim.end.x)
+	camera.limit_bottom = int(lim.end.y)
+	_step_at = world.distance
+	_cam_center = Vector2.INF
+	_cam_easing = false
+	Player.arrive(id, spawn_name)
+	if metrics != null:
+		_update_camera(0.0)
+		world_view.camera_rect = camera_rect
+		world_view.sync()
+	return true
+
 
 func layout(m) -> void:
 	metrics = m
@@ -214,6 +303,7 @@ func layout(m) -> void:
 	if Settings.debug_overlay:
 		top.y += 16.0
 	needs_hud.layout(m, top)
+	_layout_fade(m)
 	_cam_center = Vector2.INF
 	_update_camera(0.0)
 	_place_overlays()
@@ -307,8 +397,14 @@ func _process(dt: float) -> void:
 	var inp := GameInput.read(touch)
 	if touch.stick_vector != Vector2.ZERO:
 		_set_last_input("touch")
-	_handle(world.step(dt, inp["move"], inp["run"]))
-	Needs.step(dt)
+	# No control while fading or passed out.
+	var locked: bool = travel.busy()
+	_handle(world.step(dt, Vector2.ZERO if locked else inp["move"], false if locked else inp["run"]))
+	if travel.busy():
+		_handle_travel(travel.step(dt))
+	else:
+		Needs.step(dt)
+		_check_collapse()
 	day.step(dt, GameState.state.flags, is_talking())
 	_update_camera(dt)
 	world_view.camera_rect = camera_rect
@@ -316,6 +412,106 @@ func _process(dt: float) -> void:
 	_update_sound()
 	_message_t = maxf(0.0, _message_t - dt)
 	_place_overlays()
+	_update_fade()
+
+
+## Hunger or thirst at 0 makes Fern pass out, once: not mid-conversation or
+## mid-meal (those finish first), and never while a fade already runs.
+func _check_collapse() -> void:
+	if Needs.needs.collapsed() and not is_talking() and not world.is_talking() and not world.is_busy():
+		collapse()
+
+
+## Starts passing out (false if a fade or collapse is already running).
+func collapse() -> bool:
+	if not travel.collapse(Player.recovery_area, Player.recovery_spawn):
+		return false
+	world.player_vel = Vector2.ZERO
+	world.running = false
+	world_view.pose = "down"
+	touch.reset()
+	_update_touch_visibility()
+	_update_fade()
+	return true
+
+
+## An exit was walked into: fade out, load the other area, fade in.
+func _on_exit(ev: Dictionary) -> void:
+	if not areas.has(ev["to"]):
+		push_warning("game: exit '%s' leads to unknown area '%s'" % [ev["id"], ev["to"]])
+		return
+	if travel.go(ev["to"], ev["spawn"]):
+		touch.reset()
+		_update_touch_visibility()
+		_update_fade()
+
+
+func _handle_travel(events: Array[Dictionary]) -> void:
+	for ev in events:
+		match ev["type"]:
+			"load":
+				if ev["collapsed"]:
+					# Carried home: rested, needs restored, nothing in her mouth.
+					Needs.needs.restore()
+					Needs.refresh()
+					Player.drop_carried()
+					Player.state.collapses += 1
+				if ev["collapsed"] and ev["area"] == world.id:
+					world.place_at_spawn(ev["spawn"])
+					Player.arrive(ev["area"], world_spawn_name(ev["spawn"]))
+					_cam_center = Vector2.INF
+					_update_camera(0.0)
+				else:
+					load_area(ev["area"], ev["spawn"])
+				if ev["collapsed"]:
+					world_view.pose = "down"
+				_message_t = 0.0
+			"wake":
+				world_view.pose = "wake"
+			"done":
+				_update_touch_visibility()
+		_place_overlays()
+
+
+func world_spawn_name(n: String) -> String:
+	return n if world.spawns.has(n) else "start"
+
+
+## Debug overlay helper: sets hunger or thirst (e.g. to 5, to test passing out).
+func debug_set_need(which: String, value: int) -> void:
+	Needs.set_value(which, value)
+
+
+func _layout_fade(m) -> void:
+	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var safe: Rect2 = m.safe_rect
+	var w := minf(safe.size.x - 32.0, 520.0)
+	fade_message.size = Vector2(w, 0)
+	fade_message.custom_minimum_size = Vector2(w, 0)
+	fade_hint.custom_minimum_size = Vector2(w, 0)
+
+
+## The black overlay follows travel.black(); after passing out, the message
+## (and a hint) shows on it.
+func _update_fade() -> void:
+	if fade == null:
+		return
+	var a: float = travel.black()
+	fade.visible = a > 0.0
+	fade.color = Color(0, 0, 0, a)
+	var show_msg: bool = travel.phase == "message"
+	fade_message.visible = show_msg
+	fade_hint.visible = show_msg and travel.phase_time() >= travel.min_message_s
+	if show_msg and metrics != null:
+		fade_message.text = Player.collapse_message
+		var touchy: bool = last_input == "touch" or (last_input == "" and ScreenMetrics.is_touch())
+		fade_hint.text = GameStrings.text("collapse.continue_touch" if touchy else "collapse.continue_keys")
+		var safe: Rect2 = metrics.safe_rect
+		fade_message.reset_size()
+		fade_hint.reset_size()
+		var c := safe.get_center()
+		fade_message.position = metrics.snap(c - Vector2(fade_message.size.x / 2.0, fade_message.size.y))
+		fade_hint.position = metrics.snap(Vector2(c.x - fade_hint.size.x / 2.0, c.y + 18.0))
 
 
 ## Footsteps every few px walked (grass or path), ambience for the time of
@@ -343,10 +539,27 @@ func _input(event: InputEvent) -> void:
 		_set_last_input("touch")
 	elif (event is InputEventKey or event is InputEventJoypadButton) and event.is_pressed():
 		_set_last_input("keys")
+	if travel != null and travel.phase == "message" and not paused and _is_continue(event):
+		travel.confirm()
+		get_viewport().set_input_as_handled()
+
+
+## A tap, a real click, Interact / Enter or a gamepad button (not emulated
+## mouse events from touch, so a tap counts once).
+func _is_continue(event: InputEvent) -> bool:
+	if event.is_echo() or not event.is_pressed():
+		return false
+	if event is InputEventScreenTouch:
+		return true
+	if event is InputEventMouseButton:
+		return event.device != InputEvent.DEVICE_ID_EMULATION
+	if event is InputEventJoypadButton:
+		return true
+	return event.is_action_pressed("interact") or event.is_action_pressed("ui_accept")
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if paused:
+	if paused or travel.busy():
 		return
 	if is_talking():
 		_dialogue_input(event)
@@ -382,14 +595,14 @@ func _dialogue_input(event: InputEvent) -> void:
 
 
 func _on_touch_interact() -> void:
-	if not paused:
+	if not paused and not travel.busy():
 		interact()
 
 
 ## Interacts with whatever has focus: talks to a cat, eats from the pile or
 ## drinks at the pond.
 func interact() -> void:
-	if is_talking():
+	if is_talking() or travel.busy():
 		return
 	_handle(world.interact(Needs.needs))
 	Needs.refresh()
@@ -411,6 +624,8 @@ func _handle(events: Array[Dictionary]) -> void:
 					sound.play("drink")
 			"message":
 				say(GameStrings.text(ev["key"]))
+			"exit":
+				_on_exit(ev)
 
 
 ## Shows a short line over Fern for a moment (needs_hud.message_s).
@@ -458,7 +673,7 @@ func _set_last_input(kind: String) -> void:
 ## keyboard is used and while a conversation is open (a tap advances then).
 func _update_touch_visibility() -> void:
 	var show := last_input == "touch" or (last_input == "" and ScreenMetrics.is_touch())
-	if is_talking():
+	if is_talking() or (travel != null and travel.busy()):
 		show = false
 	if touch.visible != show:
 		touch.visible = show

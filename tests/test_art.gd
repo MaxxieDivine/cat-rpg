@@ -31,10 +31,21 @@ func test_painted_art_matches_the_palette() -> void:
 
 
 func test_ground_matches_world_json() -> void:
-	var made: Image = Painters.new().ground(JsonData.load_dict("res://data/world.json"))
-	check(_same(made, _png("ground")), "art/ground.png matches world.json path / patches (run tools/make_art.gd)")
-	var size: Array = JsonData.load_dict("res://data/world.json")["size"]
-	check_eq(made.get_size(), Vector2i(size[0], size[1]), "ground covers the world")
+	for name: String in MakeArt.GROUNDS:
+		var area := JsonData.load_dict(MakeArt.GROUNDS[name])
+		var made: Image = Painters.new().ground(area)
+		check(_same(made, _png(name)), "art/%s.png matches %s path / patches (run tools/make_art.gd)" % [name, MakeArt.GROUNDS[name]])
+		var size: Array = area["size"]
+		check_eq(made.get_size(), Vector2i(size[0], size[1]), "%s covers its area" % name)
+		check_eq(AssetCatalog.path_for(area["ground_art"]), "res://art/%s.png" % name, "%s is the area's ground_art" % name)
+
+
+func test_every_area_has_its_ground_painted() -> void:
+	var listed := {}
+	for f: String in MakeArt.GROUNDS.values():
+		listed[f] = true
+	for a: Dictionary in JsonData.load_dict("res://data/areas.json")["areas"].values():
+		check(listed.has(a["file"]), "%s is in make_art.gd GROUNDS" % a["file"])
 
 
 func test_ground_uses_several_grass_shades_and_dirt() -> void:
@@ -81,11 +92,18 @@ func _collect(v: Variant, out: Dictionary) -> void:
 
 func test_every_world_art_key_loads() -> void:
 	AssetCatalog.reset()
-	var w := JsonData.load_dict("res://data/world.json")
-	var keys := [w["ground_art"], w["forest_art"], w["pond"]["art"], w["tall_grass"]["art"]]
-	for t in w["prop_types"].values():
-		for k in ["art", "canopy", "shadow"]:
-			if t.has(k):
-				keys.append(t[k])
-	for k in keys:
-		check(not AssetCatalog.is_placeholder(AssetCatalog.texture(k)), "%s loads" % k)
+	for a: Dictionary in JsonData.load_dict("res://data/areas.json")["areas"].values():
+		var w := JsonData.load_dict(a["file"])
+		var keys := [w["ground_art"], w["forest_art"], w["tall_grass"]["art"]]
+		if w.has("pond"):
+			keys.append(w["pond"]["art"])
+		for t in w["prop_types"].values():
+			for k in ["art", "canopy", "shadow"]:
+				if t.has(k):
+					keys.append(t[k])
+		for g: Dictionary in w.get("ground", []):
+			keys.append(g["art"])
+		for sc: Dictionary in w.get("scatter", {}).get("areas", []):
+			keys.append_array(sc.get("decor", {}).keys())
+		for k in keys:
+			check(not AssetCatalog.is_placeholder(AssetCatalog.texture(k)), "%s: %s loads" % [a["file"], k])

@@ -304,11 +304,13 @@ func pond(w: int, h: int, seed: int) -> Image:
 
 ## Tall grass: a clump of blades Fern walks through (drawn in front of her
 ## feet, y-sorted). Bottom-centre is the base.
-func tall_grass(w: int, h: int, seed: int) -> Image:
+## `grass` names the palette ramp: "grass" (camp) or "grass_gold" (the
+## Hunting Grounds); "<grass>_dark" / "<grass>_light" go with it.
+func tall_grass(w: int, h: int, seed: int, grass: String = "grass") -> Image:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
-	var shades := [c("grass_dark"), c("grass.0"), c("grass.2"), c("grass_light")]
+	var shades := [c(grass + "_dark"), c(grass + ".0"), c(grass + ".2"), c(grass + "_light")]
 	for b in 6:
 		var x := float(rng.randi_range(1, w - 2))
 		var lean := rng.randf_range(-0.35, 0.35)
@@ -325,7 +327,7 @@ func tall_grass(w: int, h: int, seed: int) -> Image:
 
 
 ## A short grass tuft (scattered decor).
-func tuft(seed: int) -> Image:
+func tuft(seed: int, grass: String = "grass") -> Image:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
 	var img := Image.create(7, 5, false, Image.FORMAT_RGBA8)
@@ -334,9 +336,9 @@ func tuft(seed: int) -> Image:
 		for x in 7:
 			match rows[y][x]:
 				"d":
-					img.set_pixel(x, y, c("grass_dark"))
+					img.set_pixel(x, y, c(grass + "_dark"))
 				"l":
-					img.set_pixel(x, y, c("grass.0"))
+					img.set_pixel(x, y, c(grass + ".0"))
 	return img
 
 
@@ -459,7 +461,9 @@ func ground(world: Dictionary) -> Image:
 	var h := int(size[1])
 	var g: Dictionary = world.get("ground_paint", {})
 	var seed := int(g.get("seed", 1))
-	var grass := ramp("grass")
+	# Which grass ramp ("grass", or "grass_gold" for the Hunting Grounds).
+	var gname := str(g.get("ramp", "grass"))
+	var grass := ramp(gname)
 	var dirt := ramp("dirt")
 	var noise := FastNoiseLite.new()
 	noise.seed = seed
@@ -504,13 +508,59 @@ func ground(world: Dictionary) -> Image:
 			elif d < half:
 				col = c("dirt_edge")
 			elif d < half + 2.0 and dither(x, y) < 0.5:
-				col = c("grass_dark")
+				col = c(gname + "_dark")
 			img.set_pixel(x, y, col)
 	# Specks: tiny darker / lighter dots so big patches don't look flat.
 	for i in w * h / 90:
 		var p := Vector2i(rng.randi_range(0, w - 1), rng.randi_range(0, h - 1))
 		if dist[p.y * w + p.x] > half + 2.0:
-			img.set_pixelv(p, c("grass_dark") if rng.randf() < 0.6 else c("grass_light"))
+			img.set_pixelv(p, c(gname + "_dark") if rng.randf() < 0.6 else c(gname + "_light"))
+	return img
+
+
+## Where a path leaves the area: the worn path carried on into the forest
+## floor past the painted ground, dithering away (w x h, the path's width).
+## Drawn so the left end joins the meadow; flip it for an exit on the left.
+func trail(w: int, h: int) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var dirt := ramp("dirt")
+	for y in h:
+		for x in w:
+			var fade := pow(float(x) / float(w), 1.4)
+			if dither(x, y) < fade * 1.1:
+				continue
+			var edge := y == 0 or y == h - 1
+			# Narrower as it goes: the edges give out first.
+			if (y <= 1 or y >= h - 2) and dither(x + 2, y) < fade * 2.0:
+				continue
+			img.set_pixel(x, y, c("dirt_edge") if edge else dirt[0 if dither(x, y + 1) < 0.5 else 1])
+	return img
+
+
+## Fern's den in camp (where she wakes after passing out): an oval nest of
+## bracken and moss, darker inside, a flat ground decal.
+func den(w: int, h: int) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var leaf := ramp("leaf")
+	var dirt := ramp("dirt")
+	var ctr := Vector2(w, h) / 2.0
+	for y in h:
+		for x in w:
+			var d := ((Vector2(x, y) + Vector2(0.5, 0.5) - ctr) / ctr).length()
+			if d > 1.0:
+				continue
+			var col: Color
+			if d > 0.72:
+				# The rim: bracken, lit from the upper left.
+				var lit := y < h / 2 and x < w * 0.6
+				col = leaf[3] if lit and dither(x, y) < 0.6 else leaf[2]
+				if d > 0.93:
+					col = leaf[1]
+			elif d > 0.58:
+				col = leaf[1] if dither(x, y) < 0.5 else dirt[0]
+			else:
+				col = dirt[0] if dither(x, y) < 0.7 else c("dirt_edge")
+			img.set_pixel(x, y, col)
 	return img
 
 

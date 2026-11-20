@@ -41,6 +41,18 @@ const PAINTED := {
 	"icon_prey": ["icon_prey"],
 	"icon_drop": ["icon_drop"],
 	"ripple": ["ripple", 11, 5],
+	"tall_grass_gold": ["tall_grass", 9, 12, 51, "grass_gold"],
+	"tuft_gold": ["tuft", 1, "grass_gold"],
+	"flower_white": ["flower", "white"],
+	"den": ["den", 30, 12],
+	"trail": ["trail", 36, 11],
+}
+
+## Each area's baked floor: art/<name>.png -> the area file it is painted
+## from (its size, path and ground_paint).
+const GROUNDS := {
+	"ground": "res://data/world.json",
+	"ground_hunting": "res://data/hunting_grounds.json",
 }
 
 const SPRITES := {
@@ -143,7 +155,8 @@ func _initialize() -> void:
 		var spec: Array = PAINTED[name]
 		var img: Image = painters.callv(spec[0], spec.slice(1))
 		ok = _save(img, name) and ok
-	ok = _save(painters.ground(JsonData.load_dict("res://data/world.json")), "ground") and ok
+	for name: String in GROUNDS:
+		ok = _save(painters.ground(JsonData.load_dict(GROUNDS[name])), name) and ok
 	quit(0 if ok else 1)
 
 

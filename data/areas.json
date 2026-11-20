@@ -1,0 +1,8 @@
+{
+	"_note": "Every area Fern can walk to: id -> its layout file (same format as world.json, the camp). Exits in a layout name an area id here and a spawn in that area. New areas: add the file here, give it spawns and exits, paint its ground (tools/make_art.gd GROUNDS).",
+	"start": "camp",
+	"areas": {
+		"camp": {"file": "res://data/world.json"},
+		"hunting_grounds": {"file": "res://data/hunting_grounds.json"}
+	}
+}

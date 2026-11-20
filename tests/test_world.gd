@@ -326,7 +326,12 @@ func test_the_edge_is_a_tree_line() -> void:
 		xs.sort()
 		check(xs.size() >= 8, "%s: a row of trees (%d)" % [side, xs.size()])
 		for i in range(1, xs.size()):
-			check(xs[i] - xs[i - 1] <= gap, "%s: no gap in the tree line between %s and %s" % [side, xs[i - 1], xs[i]])
+			# Except where world.json leaves a gap for an exit path.
+			var planned := false
+			for g: Vector3 in w.tree_gaps:
+				var along := g.x if side in ["top", "bottom"] else g.y
+				planned = planned or (along > xs[i - 1] and along < xs[i])
+			check(planned or xs[i] - xs[i - 1] <= gap, "%s: no gap in the tree line between %s and %s" % [side, xs[i - 1], xs[i]])
 	# Only the top row has trunks in the meadow.
 	for p: Dictionary in w.props:
 		if p.has("canopy") and p["trunk"]:

@@ -3,7 +3,9 @@ extends Control
 ## the rotate-your-phone overlay in portrait and the build / fps label (the
 ## debug overlay: always on the title screen, so a phone can check the
 ## build; in the game only while Settings.debug_overlay is on, toggled by F3
-## or three quick taps in the top-left corner).
+## or three quick taps in the top-left corner). In the game the label also
+## names the area and the spawn Fern arrived at, and two debug buttons (keys
+## H / T) set hunger / thirst to 5 to try passing out.
 
 const ScreenMetrics := preload("res://scripts/view/screen_metrics.gd")
 const GameStrings := preload("res://scripts/core/game_strings.gd")
@@ -27,6 +29,8 @@ var rotate: Control
 var hud: Label
 var fullscreen_button: Control
 var volume_button: Control
+## Debug overlay buttons: hunger -> 5, thirst -> 5.
+var debug_buttons: Array[Button] = []
 var build_text := ""
 ## Frame stats for the hud, refreshed twice a second.
 var fps := 0
@@ -86,6 +90,17 @@ func _ready() -> void:
 	volume_button = VolumeButton.new()
 	add_child(volume_button)
 	volume_button.configure(JsonData.load_dict("res://data/tuning.json").get("audio", {}).get("volume_steps", []))
+	for which in ["hunger", "thirst"]:
+		var b := Button.new()
+		b.name = "Debug_" + which
+		b.text = GameStrings.text("debug." + which)
+		b.focus_mode = Control.FOCUS_NONE
+		b.visible = false
+		b.add_theme_font_size_override("font_size", 13)
+		b.pressed.connect(func() -> void: debug_set_need(which))
+		add_child(b)
+		debug_buttons.append(b)
+	Player.area_changed.connect(func(_a: String, _s: String) -> void: _update_hud())
 	build_text = read_build_text()
 	_update_hud()
 
@@ -141,6 +156,13 @@ func _input(event: InputEvent) -> void:
 	if key != null and key.pressed and not key.echo and key.keycode == KEY_F3:
 		Settings.debug_overlay = not Settings.debug_overlay
 		return
+	if key != null and key.pressed and not key.echo and Settings.debug_overlay and game != null:
+		if key.keycode == KEY_H:
+			debug_set_need("hunger")
+			return
+		if key.keycode == KEY_T:
+			debug_set_need("thirst")
+			return
 	var tap := event as InputEventScreenTouch
 	if tap == null or not tap.pressed:
 		return
@@ -168,6 +190,12 @@ func _place_buttons() -> void:
 	if fullscreen_button.visible:
 		x -= volume_button.min_target
 	volume_button.place(Vector2(x, fullscreen_button.position.y))
+
+
+## Debug: hunger or thirst to 5 (passing out follows soon after).
+func debug_set_need(which: String) -> void:
+	if game != null:
+		game.debug_set_need(which, 5)
 
 
 func read_build_text() -> String:
@@ -203,6 +231,9 @@ func _process(dt: float) -> void:
 func _update_hud() -> void:
 	var stats := GameStrings.text("hud.fps", {"fps": fps, "low": fps_low}) if fps > 0 else ""
 	hud.text = build_text + ("   " + stats if stats != "" else "")
+	if game != null and game.world != null:
+		var where := GameStrings.text("hud.area", {"area": game.world.display_name, "spawn": Player.spawn()})
+		hud.text += "   " + where
 	_place_hud()
 	if ScreenMetrics.is_web() and fps > 0:
 		# Lets a browser test (or a curious tester's console) read frame stats.
@@ -226,6 +257,12 @@ func _update_hud() -> void:
 			"volume": volume_button.volume(),
 			"view_size": [game.view_size.x, game.view_size.y] if game != null else [],
 			"bonds": GameState.state.bonds,
+			"area": Player.area(),
+			"spawn": Player.spawn(),
+			"hunger": Needs.hunger(),
+			"thirst": Needs.thirst(),
+			"travel": game.travel.phase if game != null else "",
+			"collapses": Player.state.collapses,
 		}), true)
 
 
@@ -236,3 +273,14 @@ func _place_hud() -> void:
 	var margin := 6.0
 	hud.reset_size()
 	hud.position = metrics.snap(metrics.safe_rect.position + Vector2(margin, margin * 0.5))
+	# Debug buttons: just right of the centre at the top (the right half,
+	# so a tap never grabs the joystick), clear of the needs bars and the
+	# corner buttons, at least min_target tall.
+	var show_debug := game != null and Settings.debug_overlay
+	var tall := float(JsonData.load_dict("res://data/tuning.json").get("touch", {}).get("min_target", 48))
+	var x := metrics.safe_rect.get_center().x + 8.0
+	for b in debug_buttons:
+		b.visible = show_debug
+		b.size = Vector2(tall * 2.0, tall)
+		b.position = metrics.snap(Vector2(x, metrics.safe_rect.position.y + 12.0))
+		x += tall * 2.0 + 8.0
