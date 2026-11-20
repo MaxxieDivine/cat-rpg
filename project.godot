@@ -15,6 +15,7 @@ config/icon="res://art/icon_512.png"
 GameState="*res://scripts/autoload/game_state.gd"
 DialogueManager="*res://scripts/autoload/dialogue_manager.gd"
 Settings="*res://scripts/autoload/settings.gd"
+Needs="*res://scripts/autoload/needs.gd"
 
 [audio]
 

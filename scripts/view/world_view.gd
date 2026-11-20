@@ -27,10 +27,14 @@ signal rustled(kind: String)
 const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
 const JsonData := preload("res://scripts/core/json_data.gd")
 const NpcScene := preload("res://scenes/npc.tscn")
+const PileScene := preload("res://scenes/fresh_catch_pile.tscn")
 const CatAnim := preload("res://scripts/view/cat_anim.gd")
 const PLAYER_ID := "fern"
 const MEOW_KEY := "fx.meow"
 const PAW_KEY := "ui.paw"
+const RIPPLE_KEY := "fx.ripple"
+## Fern's animation while eating or drinking (world.action).
+const ACTION_ANIM := "lick"
 const SPEAKERS_PATH := "res://data/speakers.json"
 const PALETTE_PATH := "res://data/palette.json"
 ## How far past the camera bounds the forest tile is drawn (world px).
@@ -48,8 +52,13 @@ var _meow_t := 0.0
 ## Fern standing still: seconds since she stopped or finished a fidget.
 var _still := 0.0
 var _next_fidget := 0
-## The talk prompt over the focused NPC.
+## The interact prompt over whatever has focus (NPC, pile, pond edge).
 var paw: Sprite2D
+## The fresh-catch pile (fresh_catch_pile.gd), or null.
+var pile: Sprite2D
+## Rings on the water where Fern drinks.
+var ripple: Sprite2D
+var _action_seen := ""
 var walk_frame_px := 7.0
 var idle_speed := 4.0
 var bob_px := 2.0
@@ -189,6 +198,24 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 			_canopy_layer.add_child(c)
 			canopies.append(c)
 			_canopy_rects.append(Rect2(c.position + c.offset, c.texture.get_size()))
+	if not world.pile.is_empty():
+		pile = PileScene.instantiate()
+		pile.setup(world.pile)
+		_sorted.add_child(pile)
+		if world.pile["shadow"] != "":
+			var ps := Sprite2D.new()
+			ps.texture = AssetCatalog.texture(world.pile["shadow"])
+			ps.position = (world.pile["pos"] + Vector2(2, -1)).round()
+			ps.offset = -(ps.texture.get_size() / 2.0).floor()
+			ps.centered = false
+			_ground.add_child(ps)
+	if pond != null:
+		ripple = Sprite2D.new()
+		ripple.name = "Ripple"
+		ripple.texture = AssetCatalog.texture(RIPPLE_KEY)
+		ripple.hframes = 3
+		ripple.visible = false
+		_ground.add_child(ripple)
 	for npc: Dictionary in world.npcs:
 		var n: Node2D = NpcScene.instantiate()
 		n.setup(npc, speakers.get(npc["id"], {}), tuning)
@@ -362,10 +389,13 @@ func sync(dt: float = 0.0) -> void:
 	for npc: Dictionary in world.npcs:
 		var id: String = npc["id"]
 		npc_nodes[id].sync(npc, dt, world.focus_id == id, world.talk_id == id)
+	if pile != null:
+		pile.sync(world.pile)
+	_sync_ripple()
 	var focus: String = world.focus_id
-	paw.visible = focus != "" and not world.is_talking()
+	paw.visible = focus != "" and not world.is_talking() and not world.is_busy()
 	if paw.visible:
-		var head := npc_head(focus)
+		var head := focus_head()
 		var bob := roundf((0.5 + 0.5 * sin(_t * TAU * bob_hz)) * bob_px)
 		paw.position = (head - Vector2(floorf(paw.texture.get_width() / 2.0), paw.texture.get_height() + prompt_gap + bob)).round()
 	_sync_meow(dt)
@@ -510,6 +540,19 @@ func _sync_sky(dt: float) -> void:
 ## cats.json fidget_after_s plays a fidget (lick, itch, stretch) in turn.
 ## A meow plays out unless she starts moving.
 func _sync_player(dt: float) -> void:
+	if world.is_busy():
+		# Eating or drinking: lap / chew (the lick animation) until done.
+		if _action_seen != world.action:
+			_action_seen = world.action
+			player.play(ACTION_ANIM, true)
+		_still = 0.0
+		player.step(dt)
+		if player.finished():
+			player.play(ACTION_ANIM, true)
+		return
+	if _action_seen != "":
+		_action_seen = ""
+		player.play("idle")
 	if world.speed() >= idle_speed:
 		_still = 0.0
 		player.show_stride("run" if world.running else "walk", world.distance)
@@ -557,6 +600,37 @@ func _sync_meow(dt: float) -> void:
 	meow.flip_h = face < 0.0
 	var shown := float(CatAnim.data().get("meow_vfx_s", 0.9)) - _meow_t
 	meow.frame = mini(int(shown * float(CatAnim.data().get("meow_vfx_fps", 8))), meow.hframes - 1)
+
+
+## Where the interact prompt goes (world px): over the focused NPC's head,
+## over the pile, or over the water's edge nearest Fern.
+func focus_head() -> Vector2:
+	match world.focus_kind():
+		"pile":
+			return pile.head() if pile != null else world.pile["pos"]
+		"pond":
+			return world.pond_point() + Vector2(0, -2)
+		"npc":
+			return npc_head(world.focus_id)
+	return Vector2.ZERO
+
+
+## Rings spread on the water while Fern drinks.
+func _sync_ripple() -> void:
+	if ripple == null:
+		return
+	ripple.visible = world.action == "drink"
+	if not ripple.visible:
+		return
+	var span: float = maxf(0.01, world.drink_s)
+	var k: float = 1.0 - world.action_t / span
+	ripple.frame = int(k * 6.0) % 3
+	# Just inside the water, below Fern's mouth.
+	var r: Rect2 = world.pond["rect"]
+	var at: Vector2 = world.pond_point()
+	at.x = clampf(at.x + world.facing * 4.0, r.position.x + 4.0, r.end.x - 4.0)
+	at.y = clampf(at.y, r.position.y + 3.0, r.end.y - 3.0)
+	ripple.position = at.round()
 
 
 ## Top-centre of an NPC's art, in world pixels.

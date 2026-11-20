@@ -18,6 +18,13 @@ extends Control
 ## autoload); the box shows it, movement is locked, the joystick hides and
 ## the camera eases so both cats sit above the box.
 ##
+## Needs (Needs autoload, scripts/core/needs.gd): hunger and thirst tick
+## down while the game runs (not on the title, not while paused) and show as
+## two bars top-left (needs_hud.gd). Interact at the fresh-catch pile eats,
+## at the pond's edge drinks; the nearest thing in range (cat, pile or pond)
+## gets the paw prompt. "The pile is empty." and similar short lines show
+## over Fern for needs_hud.message_s (`message`).
+##
 ## Time of day (scripts/core/day_cycle.gd): after the last of the three
 ## conversations, afternoon turns to dusk and night; the world view, the
 ## music and the ambience follow it. Sound (sound.gd) is created here, after
@@ -33,6 +40,9 @@ const DialogueBox := preload("res://scripts/view/dialogue_box.gd")
 const Voice := preload("res://scripts/view/voice.gd")
 const Sound := preload("res://scripts/view/sound.gd")
 const DayCycle := preload("res://scripts/core/day_cycle.gd")
+const NeedsHud := preload("res://scripts/view/needs_hud.gd")
+const GameStrings := preload("res://scripts/core/game_strings.gd")
+const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
 
 var world
 var tuning: Dictionary = {}
@@ -66,6 +76,10 @@ var dialogue: Control
 var voice: Node
 var sound: Node
 var day
+var needs_hud: Control
+## A short line over Fern ("The pile is empty."), and seconds left.
+var message: Label
+var _message_t := 0.0
 ## Distance walked when the last footstep played (world px).
 var _step_at := 0.0
 ## Who spoke the last line shown (a new speaker meows).
@@ -86,6 +100,7 @@ func _ready() -> void:
 	# A new game: fresh flags and bonds, nothing mid-conversation.
 	GameState.reset()
 	DialogueManager.stop()
+	Needs.reset()
 
 	viewport = SubViewport.new()
 	viewport.name = "WorldViewport"
@@ -121,6 +136,29 @@ func _ready() -> void:
 	view.centered = false
 	view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(view)
+
+	needs_hud = NeedsHud.new()
+	needs_hud.configure(tuning)
+	needs_hud.set_values(Needs.hunger(), Needs.thirst())
+	Needs.needs_changed.connect(needs_hud.set_values)
+	add_child(needs_hud)
+	message = Label.new()
+	message.name = "Message"
+	message.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var base_font := AssetCatalog.font("font.dialogue")
+	if base_font != null:
+		# Pixelify's "fi" ligature reads as an "A": off, as in the box.
+		var fv := FontVariation.new()
+		fv.base_font = base_font
+		fv.opentype_features = {TextServerManager.get_primary_interface().name_to_tag("liga"): 0}
+		message.add_theme_font_override("font", fv)
+	message.add_theme_color_override("font_color", Color(str(JsonData.load_dict("res://data/palette.json").get("ui", {}).get("paper", "#f6eedb"))))
+	message.add_theme_color_override("font_outline_color", Color(0.11, 0.09, 0.14, 0.9))
+	message.add_theme_constant_override("outline_size", 6)
+	message.add_theme_font_size_override("font_size", int(tuning.get("needs_hud", {}).get("message_font", 18)))
+	message.visible = false
+	add_child(message)
 
 	touch = TouchControls.new()
 	touch.name = "TouchControls"
@@ -169,6 +207,13 @@ func layout(m) -> void:
 	var fit := ScreenMetrics.integer_fit(base, screen_px)
 	var safe_px: Rect2i = m.safe_rect_px()
 	dialogue.layout(m, dialogue.pick_scale(screen_px, float(safe_px.size.x), screen_px.y - float(safe_px.end.y), fit, Settings.text_scale))
+	# The needs bars: top-left, in from the corner like the buttons, below
+	# the build / fps label while that is on.
+	var inset := float(tuning.get("ui", {}).get("button_inset", 12))
+	var top: Vector2 = m.safe_rect.position + Vector2(inset, inset * 0.5)
+	if Settings.debug_overlay:
+		top.y += 16.0
+	needs_hud.layout(m, top)
 	_cam_center = Vector2.INF
 	_update_camera(0.0)
 	_place_overlays()
@@ -262,12 +307,14 @@ func _process(dt: float) -> void:
 	var inp := GameInput.read(touch)
 	if touch.stick_vector != Vector2.ZERO:
 		_set_last_input("touch")
-	world.step(dt, inp["move"], inp["run"])
+	_handle(world.step(dt, inp["move"], inp["run"]))
+	Needs.step(dt)
 	day.step(dt, GameState.state.flags, is_talking())
 	_update_camera(dt)
 	world_view.camera_rect = camera_rect
 	world_view.sync(dt)
 	_update_sound()
+	_message_t = maxf(0.0, _message_t - dt)
 	_place_overlays()
 
 
@@ -277,7 +324,7 @@ func _update_sound() -> void:
 	if sound == null:
 		return
 	var every := float(tuning.get("audio", {}).get("footstep_px", 14))
-	if world.distance - _step_at >= every:
+	if world.distance - _step_at >= every and not world.is_busy():
 		_step_at = world.distance
 		if world.speed() >= world_view.idle_speed:
 			sound.footstep(world.surface())
@@ -339,14 +386,37 @@ func _on_touch_interact() -> void:
 		interact()
 
 
-## Talks to whoever is in range (if anyone).
+## Interacts with whatever has focus: talks to a cat, eats from the pile or
+## drinks at the pond.
 func interact() -> void:
 	if is_talking():
 		return
-	for ev in world.interact():
-		if ev["type"] == "talk":
-			_show(DialogueManager.start(ev["dialogue"]))
+	_handle(world.interact(Needs.needs))
+	Needs.refresh()
 	world_view.sync()
+	_place_overlays()
+
+
+## World events: conversations, eating and drinking (sounds), short lines.
+func _handle(events: Array[Dictionary]) -> void:
+	for ev in events:
+		match ev["type"]:
+			"talk":
+				_show(DialogueManager.start(ev["dialogue"]))
+			"eat":
+				if sound != null:
+					sound.play("eat")
+			"drink":
+				if sound != null:
+					sound.play("drink")
+			"message":
+				say(GameStrings.text(ev["key"]))
+
+
+## Shows a short line over Fern for a moment (needs_hud.message_s).
+func say(text: String) -> void:
+	message.text = text
+	_message_t = float(tuning.get("needs_hud", {}).get("message_s", 1.8))
 	_place_overlays()
 
 
@@ -400,4 +470,15 @@ func _place_overlays() -> void:
 		return
 	# The paw button lights up when someone is in range (the world view
 	# shows the paw-print prompt over them).
-	touch.highlight = world.focus_id != "" and not world.is_talking()
+	touch.highlight = world.focus_id != "" and not world.is_talking() and not world.is_busy()
+	message.visible = _message_t > 0.0 and not is_talking()
+	if message.visible:
+		# Over Fern's head, kept inside the safe area.
+		message.modulate.a = clampf(_message_t / 0.3, 0.0, 1.0)
+		message.reset_size()
+		var head := world_to_ui(world.player_pos - Vector2(0, 26))
+		var pos := head - Vector2(message.size.x / 2.0, message.size.y)
+		var safe: Rect2 = metrics.safe_rect
+		pos.x = clampf(pos.x, safe.position.x, maxf(safe.position.x, safe.end.x - message.size.x))
+		pos.y = clampf(pos.y, safe.position.y, maxf(safe.position.y, safe.end.y - message.size.y))
+		message.position = metrics.snap(pos)

@@ -17,6 +17,8 @@
 		"center": "#f0a640"
 	},
 	"berry": "#d8465a",
+	"prey": ["#4a3a36", "#7a5e4e", "#a8876c"],
+	"prey_tail": "#d99a94",
 	"butterfly": ["#f6d25a", "#f2a0c4", "#f6f2ea"],
 	"shadow": "#1c1824",
 	"pollen": "#fff4d0",
@@ -31,6 +33,10 @@
 		"paper": "#f6eedb",
 		"ink": "#1c1824",
 		"select": "#ffd873",
-		"letterbox": "#264c33"
+		"letterbox": "#264c33",
+		"bar_back": "#3a3444",
+		"hunger": "#e39a4a",
+		"thirst": "#5c97c4",
+		"bar_pulse": "#fff4d0"
 	}
 }

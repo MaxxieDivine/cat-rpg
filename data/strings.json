@@ -11,5 +11,7 @@
 	"hud.fps": "{fps} fps (low {low})",
 	"ui.fullscreen": "Fullscreen",
 	"title.add_to_home": "For full screen: tap Share, then Add to Home Screen",
-	"ui.volume": "Sound: loud / quiet / off"
+	"ui.volume": "Sound: loud / quiet / off",
+	"needs.pile_empty": "The pile is empty.",
+	"needs.not_hungry": "You're not hungry."
 }

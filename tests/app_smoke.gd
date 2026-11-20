@@ -540,6 +540,8 @@ func _check_view_pixels(app: Control, name: String) -> void:
 	app.volume_button.visible = false
 	var box_was: bool = g.dialogue.visible
 	g.dialogue.visible = false
+	g.needs_hud.visible = false
+	g.message.visible = false
 	await RenderingServer.frame_post_draw
 	await RenderingServer.frame_post_draw
 	var src: Image = g.viewport.get_texture().get_image()
@@ -568,6 +570,7 @@ func _check_view_pixels(app: Control, name: String) -> void:
 	g.touch.visible = touch_was
 	g.paused = paused_was
 	g.dialogue.visible = box_was
+	g.needs_hud.visible = true
 	Settings.debug_overlay = debug_was
 	app.volume_button.visible = true
 
