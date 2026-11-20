@@ -68,8 +68,22 @@ var decor: Array[Dictionary] = []
 ## Collision rects (npc and prop footprints). Rebuilt when an NPC moves.
 var solids: Array[Rect2] = []
 var _prop_solids: Array[Rect2] = []
-## id of the NPC the player can interact with right now, or "".
+## What the player can interact with right now: an NPC id, PILE_ID (the
+## fresh-catch pile), POND_ID, or "". The nearest one in range wins.
 var focus_id := ""
+const PILE_ID := "fresh_catch"
+const POND_ID := "pond"
+## The fresh-catch pile: {"id", "art", "pos", "footprint", "rect",
+## "talk_radius", "prey", "max", "refill_s", "refill_t", "shadow"} or empty.
+var pile: Dictionary = {}
+## How close to the water's edge Fern must be to drink (world px).
+var drink_radius := 12.0
+## What Fern is busy doing ("eat", "drink" or ""), and seconds left. She
+## can't move meanwhile.
+var action := ""
+var action_t := 0.0
+var eat_s := 1.6
+var drink_s := 1.6
 
 var walk_speed := 70.0
 var run_speed := 125.0
@@ -95,6 +109,9 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 	run_speed = float(p.get("run_speed", run_speed))
 	accel = float(p.get("accel", accel))
 	decel = float(p.get("decel", decel))
+	var nd: Dictionary = t.get("needs", {})
+	eat_s = float(nd.get("eat_s", eat_s))
+	drink_s = float(nd.get("drink_s", drink_s))
 
 	size = _vec(w.get("size", [480, 270]))
 	var margin := float(w.get("edge_margin", 0))
@@ -156,7 +173,19 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 		pond = {"art": str(pd.get("art", "")), "pos": c, "size": sz,
 			"rect": Rect2(c - sz / 2.0 + inset, sz - inset * 2.0),
 			"lap_radius": float(pd.get("lap_radius", 40))}
+		drink_radius = float(pd.get("drink_radius", drink_radius))
 		_prop_solids.append(pond["rect"])
+	var fc: Dictionary = w.get("fresh_catch", {})
+	if not fc.is_empty():
+		var fpos := _vec(fc.get("pos", [0, 0]))
+		var ffp := _vec(fc.get("footprint", [18, 5]))
+		var most := int(fc.get("max", 5))
+		pile = {"id": PILE_ID, "art": str(fc.get("art", "")), "pos": fpos, "footprint": ffp,
+			"rect": footprint_rect(fpos, ffp), "talk_radius": float(fc.get("talk_radius", 22)),
+			"max": most, "prey": clampi(int(fc.get("prey", most)), 0, most),
+			"refill_s": float(fc.get("refill_s", 60)), "refill_t": 0.0,
+			"shadow": str(fc.get("shadow", ""))}
+		_prop_solids.append(pile["rect"])
 	_rebuild_solids()
 
 	for g: Dictionary in w.get("ground", []):
@@ -256,6 +285,8 @@ func _decor_spot_ok(p: Vector2) -> bool:
 	if on_path(p, 2.0):
 		return false
 	if not pond.is_empty() and Rect2(pond["pos"] - pond["size"] / 2.0, pond["size"]).grow(3).has_point(p):
+		return false
+	if not pile.is_empty() and Rect2(pile["pos"] - Vector2(16, 16), Vector2(32, 18)).has_point(p):
 		return false
 	return true
 
@@ -385,9 +416,16 @@ func speed() -> float:
 ## length (0..1) scales speed, so a half-pushed stick walks slowly.
 func step(dt: float, move: Vector2, run: bool) -> Array[Dictionary]:
 	dt = clampf(dt, 0.0, MAX_DT)
-	if is_talking():
+	var events: Array[Dictionary] = []
+	if is_talking() or is_busy():
 		move = Vector2.ZERO
 		run = false
+	if is_busy():
+		action_t = maxf(0.0, action_t - dt)
+		if action_t <= 0.0:
+			events.append({"type": "action_done", "action": action})
+			action = ""
+	_step_pile(dt, events)
 	_step_npcs(dt)
 	if move.length() > 1.0:
 		move = move.normalized()
@@ -407,7 +445,6 @@ func step(dt: float, move: Vector2, run: bool) -> Array[Dictionary]:
 		_move_axis(Vector2(0.0, travel.y / steps))
 	distance += before.distance_to(player_pos)
 
-	var events: Array[Dictionary] = []
 	var old_focus := focus_id
 	_update_focus()
 	if focus_id != old_focus:
@@ -415,11 +452,31 @@ func step(dt: float, move: Vector2, run: bool) -> Array[Dictionary]:
 	return events
 
 
-## The player pressed interact. If an NPC is in range, starts talking to it
-## and returns a "talk" event with its dialogue file.
-func interact() -> Array[Dictionary]:
-	if is_talking():
+## The player pressed interact, on whatever has focus:
+## - an NPC: starts talking; a "talk" event with its dialogue file.
+## - the fresh-catch pile: eats one prey ("eat", needs.eat()), or a
+##   "message" (strings.json key) when the pile is empty or Fern is full.
+## - the pond: drinks ("drink", needs.drink()); it never runs out.
+## Eating and drinking face the thing and lock movement for eat_s / drink_s.
+## `needs` is a scripts/core/needs.gd (null: eat / drink change nothing).
+func interact(needs = null) -> Array[Dictionary]:
+	if is_talking() or is_busy():
 		return []
+	if focus_id == PILE_ID:
+		if needs != null and needs.is_full():
+			return [{"type": "message", "key": "needs.not_hungry"}]
+		if pile["prey"] <= 0:
+			return [{"type": "message", "key": "needs.pile_empty"}]
+		pile["prey"] -= 1
+		if needs != null:
+			needs.eat()
+		_begin_action("eat", eat_s, pile["pos"])
+		return [{"type": "eat", "prey": pile["prey"]}, {"type": "pile", "prey": pile["prey"]}]
+	if focus_id == POND_ID:
+		if needs != null:
+			needs.drink()
+		_begin_action("drink", drink_s, pond_point())
+		return [{"type": "drink", "pos": pond_point()}]
 	var npc := npc_by_id(focus_id)
 	if npc.is_empty() or npc["dialogue"] == "":
 		return []
@@ -429,6 +486,54 @@ func interact() -> Array[Dictionary]:
 
 func is_talking() -> bool:
 	return talk_id != ""
+
+
+## Eating or drinking (movement locked).
+func is_busy() -> bool:
+	return action != ""
+
+
+## "npc", "pile", "pond" or "" for what has focus.
+func focus_kind() -> String:
+	if focus_id == "":
+		return ""
+	if focus_id == PILE_ID:
+		return "pile"
+	if focus_id == POND_ID:
+		return "pond"
+	return "npc"
+
+
+## The point on the pond's water edge nearest Fern (world px).
+func pond_point() -> Vector2:
+	if pond.is_empty():
+		return Vector2.ZERO
+	var r: Rect2 = pond["rect"]
+	return Vector2(clampf(player_pos.x, r.position.x, r.end.x), clampf(player_pos.y, r.position.y, r.end.y))
+
+
+func _begin_action(kind: String, seconds: float, toward: Vector2) -> void:
+	action = kind
+	action_t = maxf(0.01, seconds)
+	player_vel = Vector2.ZERO
+	running = false
+	if absf(toward.x - player_pos.x) >= 2.0:
+		facing = 1 if toward.x > player_pos.x else -1
+
+
+## Temporary refill: one prey every refill_s while the pile isn't full
+## (hunting and patrols replace this later). Emits "pile" when it grows.
+func _step_pile(dt: float, events: Array[Dictionary]) -> void:
+	if pile.is_empty():
+		return
+	if pile["prey"] >= pile["max"] or pile["refill_s"] <= 0.0:
+		pile["refill_t"] = 0.0
+		return
+	pile["refill_t"] += dt
+	if pile["refill_t"] >= pile["refill_s"]:
+		pile["refill_t"] -= pile["refill_s"]
+		pile["prey"] += 1
+		events.append({"type": "pile", "prey": pile["prey"]})
 
 
 ## Locks movement, stops the cat and the NPC, and turns them to face each other.
@@ -537,6 +642,16 @@ func _update_focus() -> void:
 		var d := distance_to_rect(npc["rect"])
 		if d <= npc["talk_radius"] and d < best_d:
 			best = npc["id"]
+			best_d = d
+	if not pile.is_empty():
+		var d := distance_to_rect(pile["rect"])
+		if d <= pile["talk_radius"] and d < best_d:
+			best = PILE_ID
+			best_d = d
+	if not pond.is_empty():
+		var d := distance_to_rect(pond["rect"])
+		if d <= drink_radius and d < best_d:
+			best = POND_ID
 			best_d = d
 	focus_id = best
 

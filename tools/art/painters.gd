@@ -530,3 +530,112 @@ func firefly() -> Image:
 			elif d < 3.2 and dither(x, y) < 0.5:
 				img.set_pixel(x, y, Color(col, 0.18))
 	return img
+
+
+# --- Needs: the fresh-catch pile, HUD icons, drinking ripple
+
+
+## Stamps a character grid at `at` ("." = clear; other characters map to
+## palette paths through `cols`), optionally mirrored.
+func _stamp(img: Image, rows: Array, cols: Dictionary, at: Vector2i, flip: bool = false) -> void:
+	for y in rows.size():
+		var row: String = rows[y]
+		for x in row.length():
+			var ch := row[x]
+			if ch == "." or not cols.has(ch):
+				continue
+			var px := at.x + (row.length() - 1 - x if flip else x)
+			var py := at.y + y
+			if px >= 0 and py >= 0 and px < img.get_width() and py < img.get_height():
+				img.set_pixel(px, py, c(cols[ch]))
+
+
+## A small mouse / vole lying on its side (fresh-kill), facing left.
+const PREY_ROWS := [
+	"..oo......",
+	".obbooo...",
+	"oebbbbbo..",
+	"nbblllbott",
+	".oooooo...",
+]
+const PREY_COLS := {"o": "ink", "b": "prey.1", "l": "prey.2", "e": "ink", "n": "prey_tail", "t": "prey_tail"}
+## Where each prey lies on the pile (bottom row first), frame-local.
+const PILE_SLOTS := [Vector2i(3, 8), Vector2i(12, 9), Vector2i(19, 8), Vector2i(7, 5), Vector2i(15, 4)]
+
+
+## The fresh-catch pile: a sheet of `count + 1` frames (`w` x `h`), frame n
+## showing n prey on a bed of dry leaves (frame 0 = the empty bed).
+## Origin (feet) is the bottom-centre of a frame.
+func fresh_catch(count: int, w: int, h: int) -> Image:
+	var img := Image.create(w * (count + 1), h, false, Image.FORMAT_RGBA8)
+	var bed := [c("dirt_edge"), c("dirt.0"), c("dirt.1"), c("leaf.2")]
+	for f in count + 1:
+		var ox := f * w
+		var c0 := Vector2(w / 2.0, h - 3.0)
+		var rad := Vector2(w / 2.0 - 1.0, 3.0)
+		var mask := PackedByteArray()
+		mask.resize(w * h)
+		var frame := Image.create(w, h, false, Image.FORMAT_RGBA8)
+		for y in h:
+			for x in w:
+				var q := ((Vector2(x + 0.5, y + 0.5) - c0) / rad).length()
+				if q < 1.0:
+					var v := clampf(0.8 - (y - (c0.y - rad.y)) / (rad.y * 2.0) * 0.7, 0.0, 1.0)
+					frame.set_pixel(x, y, bed[level(v, 3, x, y)])
+					mask[y * w + x] = 1
+		# A few green leaves in the bed.
+		for p in [Vector2i(5, h - 3), Vector2i(w - 7, h - 4), Vector2i(w / 2, h - 2)]:
+			frame.set_pixel(p.x, p.y, bed[3])
+		_outline(frame, mask, c("ink"))
+		for i in mini(f, PILE_SLOTS.size()):
+			_stamp(frame, PREY_ROWS, PREY_COLS, PILE_SLOTS[i], i % 2 == 1)
+		img.blit_rect(frame, Rect2i(0, 0, w, h), Vector2i(ox, 0))
+	return img
+
+
+## HUD icon for hunger: a mouse, 11x9.
+func icon_prey() -> Image:
+	var img := Image.create(11, 9, false, Image.FORMAT_RGBA8)
+	_stamp(img, [
+		"...oo......",
+		"..oppo.....",
+		".obbbbooo..",
+		"obebbbbbbo.",
+		"nbbbbbbbbbo",
+		"oblllllllbo",
+		".ooooooooo.",
+		".......ott.",
+		"........tt.",
+	], {"o": "ink", "b": "prey.1", "l": "prey.2", "e": "ink", "p": "prey_tail", "n": "prey_tail", "t": "prey_tail"}, Vector2i.ZERO)
+	return img
+
+
+## HUD icon for thirst: a water drop, 9x9 (same height as the mouse).
+func icon_drop() -> Image:
+	var img := Image.create(9, 9, false, Image.FORMAT_RGBA8)
+	_stamp(img, [
+		"....o....",
+		"...oho...",
+		"..ohmmo..",
+		".ohmmmmo.",
+		"ohmmmmmmo",
+		"ommmmmmdo",
+		"ommmmmddo",
+		".odddddo.",
+		"..ooooo..",
+	], {"o": "ink", "h": "water.4", "m": "water.2", "d": "water.1"}, Vector2i.ZERO)
+	return img
+
+
+## A ripple where Fern laps the water: 3 frames of a widening ring, w x h.
+func ripple(w: int, h: int) -> Image:
+	var img := Image.create(w * 3, h, false, Image.FORMAT_RGBA8)
+	var c0 := Vector2(w, h) / 2.0
+	for f in 3:
+		var r := (0.4 + f * 0.3)
+		for y in h:
+			for x in w:
+				var q := ((Vector2(x + 0.5, y + 0.5) - c0) / c0).length()
+				if absf(q - r) < 0.14:
+					img.set_pixel(f * w + x, y, c("water.4", 1.0 - f * 0.3))
+	return img

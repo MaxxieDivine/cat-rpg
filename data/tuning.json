@@ -69,6 +69,28 @@
 		"text_trim_px": 4,
 		"bottom_margin_px": 1
 	},
+	"needs": {
+		"max": 100,
+		"start": 80,
+		"hunger_every_s": 6,
+		"thirst_every_s": 4,
+		"low": 25,
+		"eat": 40,
+		"drink": 50,
+		"full_above": 90,
+		"eat_s": 1.6,
+		"drink_s": 1.6
+	},
+	"needs_hud": {
+		"_note": "Hunger / thirst bars in the top-left of the safe area. Drawn in hud pixels of about hud_px_css CSS px each (whole device px). bar_px = bar size incl. its 1 px outline; pulse_hz when under needs.low.",
+		"hud_px_css": 2.5,
+		"bar_px": [40, 6],
+		"icon_gap_px": 2,
+		"row_gap_px": 3,
+		"pulse_hz": 1.4,
+		"message_s": 1.8,
+		"message_font": 18
+	},
 	"prompt": {
 		"bob_px": 2,
 		"bob_hz": 1.6,

@@ -44,6 +44,10 @@
 	"life.butterfly": "res://art/butterfly.png",
 	"life.firefly": "res://art/firefly.png",
 	"ui.paw": "res://art/paw.png",
+	"prop.fresh_catch": "res://art/fresh_catch.png",
+	"ui.icon_prey": "res://art/icon_prey.png",
+	"ui.icon_drop": "res://art/icon_drop.png",
+	"fx.ripple": "res://art/ripple.png",
 	"font.dialogue": "res://fonts/PixelifySans.ttf",
 	"shader.sway": "res://shaders/sway.gdshader",
 	"shader.pond": "res://shaders/pond.gdshader"

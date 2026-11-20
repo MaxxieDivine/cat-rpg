@@ -28,8 +28,10 @@
 		"pos": [392, 334],
 		"size": [88, 42],
 		"footprint_inset": [6, 6],
-		"lap_radius": 40
+		"lap_radius": 40,
+		"drink_radius": 12
 	},
+	"fresh_catch": {"art": "prop.fresh_catch", "pos": [104, 194], "footprint": [18, 5], "talk_radius": 22, "prey": 5, "max": 5, "refill_s": 60, "shadow": "shadow.m"},
 	"ground": [
 		{"art": "decor.sunspot", "pos": [170, 126]}
 	],

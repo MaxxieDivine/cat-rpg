@@ -37,6 +37,10 @@ const PAINTED := {
 	"cloud_shadow": ["cloud_shadow", 200, 110, 61],
 	"forest": ["forest_tile", 64, 71],
 	"firefly": ["firefly"],
+	"fresh_catch": ["fresh_catch", 5, 30, 15],
+	"icon_prey": ["icon_prey"],
+	"icon_drop": ["icon_drop"],
+	"ripple": ["ripple", 11, 5],
 }
 
 const SPRITES := {
