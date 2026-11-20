@@ -15,6 +15,11 @@
 		"pond_lap": {"files": ["res://audio/sfx/pond_lap_1.wav", "res://audio/sfx/pond_lap_2.wav"], "volume_db": -16, "pitch_jitter": 0.1},
 		"drink": {"files": ["res://audio/sfx/pond_lap_1.wav", "res://audio/sfx/pond_lap_2.wav"], "volume_db": -12, "pitch_jitter": 0.15},
 		"eat": {"files": ["res://audio/sfx/rustle.wav"], "volume_db": -16, "pitch_jitter": 0.2},
+		"squeak": {"files": ["res://audio/sfx/squeak_1.wav", "res://audio/sfx/squeak_2.wav"], "volume_db": -20, "pitch_jitter": 0.12},
+		"flee": {"files": ["res://audio/sfx/squeak_2.wav"], "volume_db": -14, "pitch_jitter": 0.05},
+		"pounce": {"files": ["res://audio/sfx/pounce.wav"], "volume_db": -14, "pitch_jitter": 0.1},
+		"catch": {"files": ["res://audio/sfx/catch.wav"], "volume_db": -16},
+		"drop": {"files": ["res://audio/sfx/rustle.wav"], "volume_db": -18, "pitch_jitter": 0.2},
 		"bird": {"files": ["res://audio/sfx/bird_1.wav", "res://audio/sfx/bird_2.wav", "res://audio/sfx/bird_3.wav"], "volume_db": -24, "pitch_jitter": 0.08, "bus": "Ambience"}
 	},
 	"ui": {

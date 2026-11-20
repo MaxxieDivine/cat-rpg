@@ -4,8 +4,9 @@ extends Control
 ## debug overlay: always on the title screen, so a phone can check the
 ## build; in the game only while Settings.debug_overlay is on, toggled by F3
 ## or three quick taps in the top-left corner). In the game the label also
-## names the area and the spawn Fern arrived at, and two debug buttons (keys
-## H / T) set hunger / thirst to 5 to try passing out.
+## names the area and the spawn Fern arrived at and lists each mouse (spot,
+## head up / down, alert %); debug buttons (keys H / T / M) set hunger /
+## thirst to 5 or put a mouse at the nearest prey spot.
 
 const ScreenMetrics := preload("res://scripts/view/screen_metrics.gd")
 const GameStrings := preload("res://scripts/core/game_strings.gd")
@@ -90,14 +91,19 @@ func _ready() -> void:
 	volume_button = VolumeButton.new()
 	add_child(volume_button)
 	volume_button.configure(JsonData.load_dict("res://data/tuning.json").get("audio", {}).get("volume_steps", []))
-	for which in ["hunger", "thirst"]:
+	for which in ["hunger", "thirst", "mouse"]:
 		var b := Button.new()
 		b.name = "Debug_" + which
 		b.text = GameStrings.text("debug." + which)
 		b.focus_mode = Control.FOCUS_NONE
 		b.visible = false
 		b.add_theme_font_size_override("font_size", 13)
-		b.pressed.connect(func() -> void: debug_set_need(which))
+		if which == "mouse":
+			b.pressed.connect(func() -> void:
+				if game != null:
+					game.debug_spawn_mouse())
+		else:
+			b.pressed.connect(func() -> void: debug_set_need(which))
 		add_child(b)
 		debug_buttons.append(b)
 	Player.area_changed.connect(func(_a: String, _s: String) -> void: _update_hud())
@@ -162,6 +168,9 @@ func _input(event: InputEvent) -> void:
 			return
 		if key.keycode == KEY_T:
 			debug_set_need("thirst")
+			return
+		if key.keycode == KEY_M:
+			game.debug_spawn_mouse()
 			return
 	var tap := event as InputEventScreenTouch
 	if tap == null or not tap.pressed:
@@ -234,6 +243,11 @@ func _update_hud() -> void:
 	if game != null and game.world != null:
 		var where := GameStrings.text("hud.area", {"area": game.world.display_name, "spawn": Player.spawn()})
 		hud.text += "   " + where
+		if game.world.hunt != null:
+			for m: Dictionary in game.world.hunt.mice:
+				var spot: String = game.world.hunt.spots[m["spot"]]["id"]
+				var st: String = {"feed": "down", "look": "UP", "flee": "fled"}.get(m["state"], m["state"])
+				hud.text += "   " + GameStrings.text("hud.mouse", {"spot": spot, "state": st, "alert": roundi(float(m["alert"]) * 100.0)})
 	_place_hud()
 	if ScreenMetrics.is_web() and fps > 0:
 		# Lets a browser test (or a curious tester's console) read frame stats.
@@ -263,6 +277,10 @@ func _update_hud() -> void:
 			"thirst": Needs.thirst(),
 			"travel": game.travel.phase if game != null else "",
 			"collapses": Player.state.collapses,
+			"carried": Player.carried_item(),
+			"crouching": game.world.crouching if game != null else false,
+			"pile": int(game.world.pile.get("prey", -1)) if game != null and not game.world.pile.is_empty() else -1,
+			"mice": game.world.hunt.mice.map(func(m): return {"id": m["id"], "state": m["state"], "alert": snappedf(m["alert"], 0.01), "pos": [m["pos"].x, m["pos"].y]}) if game != null and game.world.hunt != null else [],
 		}), true)
 
 

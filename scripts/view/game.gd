@@ -40,6 +40,14 @@ extends Control
 ## camp) with Needs restore values and nothing carried, and stretches before
 ## control comes back. travel.gd runs the sequence; it can't start twice.
 ##
+## Hunting (Milestone 1.2): Crouch (held C / Ctrl / a shoulder button, or
+## the touch toggle) stalks; Pounce (Space / E / South, or the touch button)
+## leaps at a mouse in range, otherwise those keys interact as before.
+## Carrying a mouse, interact at the pile delivers it, at Sorrel gives it,
+## with nothing in focus eats it (the touch Eat button too). Squeaks get
+## quieter with distance (hunt.hear_px). The World gets the Hunting
+## autoload's tuning and the Player autoload's state on every area load.
+##
 ## Time of day (scripts/core/day_cycle.gd): after the last of the three
 ## conversations, afternoon turns to dusk and night; the world view, the
 ## music and the ambience follow it. Sound (sound.gd) is created here, after
@@ -182,6 +190,12 @@ func _ready() -> void:
 	touch.name = "TouchControls"
 	touch.configure(tuning.get("touch", {}))
 	touch.interact_pressed.connect(_on_touch_interact)
+	touch.pounce_pressed.connect(func() -> void:
+		if not paused and not travel.busy():
+			pounce())
+	touch.eat_pressed.connect(func() -> void:
+		if not paused and not travel.busy():
+			eat_carried())
 	touch.visible = ScreenMetrics.is_touch()
 	add_child(touch)
 
@@ -247,6 +261,8 @@ func load_area(id: String, spawn_name: String) -> bool:
 	if not w.spawns.has(spawn_name):
 		push_warning("game: area '%s' has no spawn '%s'; using start" % [id, spawn_name])
 		spawn_name = "start"
+	w.hunt_tuning = Hunting.tuning
+	w.player_state = Player.state
 	w.place_at_spawn(spawn_name)
 	if world_view != null:
 		viewport.remove_child(world_view)
@@ -399,7 +415,7 @@ func _process(dt: float) -> void:
 		_set_last_input("touch")
 	# No control while fading or passed out.
 	var locked: bool = travel.busy()
-	_handle(world.step(dt, Vector2.ZERO if locked else inp["move"], false if locked else inp["run"]))
+	_handle(world.step(dt, Vector2.ZERO if locked else inp["move"], false if locked else inp["run"], inp["crouch"] and not locked))
 	if travel.busy():
 		_handle_travel(travel.step(dt))
 	else:
@@ -418,7 +434,7 @@ func _process(dt: float) -> void:
 ## Hunger or thirst at 0 makes Fern pass out, once: not mid-conversation or
 ## mid-meal (those finish first), and never while a fade already runs.
 func _check_collapse() -> void:
-	if Needs.needs.collapsed() and not is_talking() and not world.is_talking() and not world.is_busy():
+	if Needs.needs.collapsed() and not is_talking() and not world.is_talking() and not world.is_busy() and not world.is_leaping():
 		collapse()
 
 
@@ -482,6 +498,30 @@ func debug_set_need(which: String, value: int) -> void:
 	Needs.set_value(which, value)
 
 
+## Debug overlay helper: a mouse at the prey spot nearest Fern (if free).
+func debug_spawn_mouse() -> bool:
+	if world.hunt == null:
+		return false
+	return not world.hunt.spawn_at(world.hunt.nearest_spot(world.player_pos)).is_empty()
+
+
+## Leaps at the mouse in range (if any).
+func pounce() -> bool:
+	if is_talking() or travel.busy():
+		return false
+	var ev: Array[Dictionary] = world.pounce()
+	_handle(ev)
+	return not ev.is_empty()
+
+
+## Eats the carried mouse (the touch Eat button).
+func eat_carried() -> void:
+	if is_talking() or travel.busy():
+		return
+	_handle(world.eat_carried(Needs.needs))
+	Needs.refresh()
+
+
 func _layout_fade(m) -> void:
 	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var safe: Rect2 = m.safe_rect
@@ -523,7 +563,8 @@ func _update_sound() -> void:
 	if world.distance - _step_at >= every and not world.is_busy():
 		_step_at = world.distance
 		if world.speed() >= world_view.idle_speed:
-			sound.footstep(world.surface())
+			# Stalking is quieter.
+			sound.footstep(world.surface(), -12.0 if world.crouching else 0.0)
 	sound.set_time(day.day_amount(), day.night_amount())
 	var r := float(world.pond.get("lap_radius", 40)) if not world.pond.is_empty() else 1.0
 	sound.set_pond_near(1.0 - clampf(world.pond_distance() / r, 0.0, 1.0))
@@ -563,6 +604,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if is_talking():
 		_dialogue_input(event)
+		return
+	# Pounce shares Interact's keys: a mouse in range wins.
+	if event.is_action_pressed("pounce") and not event.is_echo() and world.can_pounce():
+		pounce()
+		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("interact") and not event.is_echo():
 		interact()
@@ -619,6 +665,28 @@ func _handle(events: Array[Dictionary]) -> void:
 			"eat":
 				if sound != null:
 					sound.play("eat")
+				if ev.get("carried", false):
+					say(GameStrings.text("hunt.ate"))
+			"pounce":
+				if sound != null:
+					sound.play("pounce")
+			"catch":
+				if sound != null:
+					sound.play("catch")
+			"miss", "mouse_flee":
+				if sound != null:
+					sound.play("flee", _distance_db(ev.get("pos", world.player_pos)))
+			"squeak":
+				var db := _distance_db(ev["pos"])
+				if sound != null and db > -60.0:
+					sound.play("squeak", db)
+			"deliver":
+				if sound != null:
+					sound.play("drop")
+				say(GameStrings.text("hunt.delivered"))
+			"give":
+				if sound != null:
+					sound.play("drop")
 			"drink":
 				if sound != null:
 					sound.play("drink")
@@ -626,6 +694,15 @@ func _handle(events: Array[Dictionary]) -> void:
 				say(GameStrings.text(ev["key"]))
 			"exit":
 				_on_exit(ev)
+
+
+## Quieter with distance from Fern; -80 dB (silent) past hunt.hear_px.
+func _distance_db(p: Vector2) -> float:
+	var hear := float(tuning.get("hunt", {}).get("hear_px", 260))
+	var d: float = world.player_pos.distance_to(p)
+	if d > hear:
+		return -80.0
+	return -18.0 * d / maxf(1.0, hear)
 
 
 ## Shows a short line over Fern for a moment (needs_hud.message_s).
@@ -685,7 +762,10 @@ func _place_overlays() -> void:
 		return
 	# The paw button lights up when someone is in range (the world view
 	# shows the paw-print prompt over them).
-	touch.highlight = world.focus_id != "" and not world.is_talking() and not world.is_busy()
+	touch.highlight = world.focus_id != "" and not world.is_talking() and not world.is_busy() and not world.is_leaping()
+	touch.hunt_buttons = world.hunt != null
+	touch.can_pounce = world.can_pounce()
+	touch.carrying = world.carrying() != ""
 	message.visible = _message_t > 0.0 and not is_talking()
 	if message.visible:
 		# Over Fern's head, kept inside the safe area.

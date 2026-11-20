@@ -29,6 +29,7 @@
 		{"id": "spot_3", "pos": [800, 135]},
 		{"id": "spot_4", "pos": [410, 342]}
 	],
+	"hunt_seed": 8117,
 	"npc_spacing": [24, 16],
 	"npcs": [],
 	"path": {

@@ -196,8 +196,8 @@ func play(kind: String, db_offset: float = 0.0) -> void:
 	played[kind] = int(played.get(kind, 0)) + 1
 
 
-func footstep(surface: String) -> void:
-	play("step_path" if surface == "path" else "step_grass")
+func footstep(surface: String, db_offset: float = 0.0) -> void:
+	play("step_path" if surface == "path" else "step_grass", db_offset)
 
 
 func _load(path: String, loop: bool) -> AudioStream:

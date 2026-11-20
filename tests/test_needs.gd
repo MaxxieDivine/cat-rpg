@@ -92,7 +92,8 @@ func test_pile_loads_from_world_json() -> void:
 	var fc: Dictionary = wdata["fresh_catch"]
 	check(not w.pile.is_empty(), "the pile exists")
 	check_eq(w.pile["prey"], int(fc["prey"]), "starts with world.json prey")
-	check_eq(w.pile["max"], 5, "holds up to 5")
+	check_eq(w.pile["max"], int(fc["max"]), "holds up to world.json max")
+	check(int(fc["prey"]) < int(fc["max"]), "room on the pile for hunted prey")
 	check_eq(w.pile["talk_radius"], float(fc["talk_radius"]), "same radius as the cats")
 	check_near(float(fc["talk_radius"]), 22.0, 0.1, "radius 22 like the NPCs")
 	check(w.solids.has(w.pile["rect"]), "its footprint (at its base) blocks Fern")
@@ -183,22 +184,12 @@ func test_empty_pile_says_so() -> void:
 	check_eq(n.hunger, 10, "nothing eaten")
 
 
-func test_pile_refills_one_prey_per_interval_up_to_max() -> void:
-	var every: float = w.pile["refill_s"]
-	check_near(every, 60.0, 0.1, "refill every 60 s")
+func test_pile_never_refills_by_itself() -> void:
+	check(not wdata["fresh_catch"].has("refill_s"), "no refill timer in world.json")
 	w.pile["prey"] = 3
-	var events: Array[Dictionary] = []
-	for i in roundi((every - 1.0) * 10.0):
-		events.append_array(w.step(0.1, Vector2.ZERO, false))
-	check_eq(w.pile["prey"], 3, "not yet")
-	for i in 20:
-		events.append_array(w.step(0.1, Vector2.ZERO, false))
-	check_eq(w.pile["prey"], 4, "+1 after %s s" % every)
-	check(events.any(func(e): return e["type"] == "pile" and e["prey"] == 4), "pile event")
-	for i in roundi(every * 10.0 * 4):
+	for i in 60 * 10 * 3:
 		w.step(0.1, Vector2.ZERO, false)
-	check_eq(w.pile["prey"], 5, "never more than max")
-
+	check_eq(w.pile["prey"], 3, "only hunting refills the pile")
 
 func test_strings_for_the_pile_exist() -> void:
 	var s := JsonData.load_dict("res://data/strings.json")

@@ -10,6 +10,10 @@ const ACTIONS := {
 	"move_down": [KEY_S, KEY_DOWN],
 	"run": [KEY_SHIFT],
 	"interact": [KEY_E, KEY_SPACE, KEY_ENTER, KEY_KP_ENTER],
+	# Hunting: hold to stalk; pounce shares Interact's keys (game.gd
+	# pounces when a mouse is in range, else interacts).
+	"crouch": [KEY_C, KEY_CTRL],
+	"pounce": [KEY_SPACE, KEY_E],
 }
 const PAD_BUTTONS := {
 	"move_left": [JOY_BUTTON_DPAD_LEFT],
@@ -18,6 +22,8 @@ const PAD_BUTTONS := {
 	"move_down": [JOY_BUTTON_DPAD_DOWN],
 	"run": [JOY_BUTTON_B],
 	"interact": [JOY_BUTTON_A],
+	"crouch": [JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER],
+	"pounce": [JOY_BUTTON_A],
 }
 const PAD_AXES := {
 	"move_left": [JOY_AXIS_LEFT_X, -1.0],
@@ -47,10 +53,14 @@ static func ensure_actions() -> void:
 			InputMap.action_add_event(action, ja)
 
 
-## Returns {"move": Vector2 (length <= 1), "run": bool}. The touch stick wins
-## while a thumb is on it.
+## Returns {"move": Vector2 (length <= 1), "run": bool, "crouch": bool}.
+## The touch stick wins while a thumb is on it. Crouch: held (keys / pad) or
+## the touch Crouch toggle.
 static func read(touch) -> Dictionary:
-	if touch != null and touch.is_visible_in_tree() and touch.stick_vector != Vector2.ZERO:
-		return {"move": touch.stick_vector, "run": touch.trot}
+	var crouch := Input.is_action_pressed("crouch")
+	if touch != null and touch.is_visible_in_tree():
+		crouch = crouch or touch.crouch_on
+		if touch.stick_vector != Vector2.ZERO:
+			return {"move": touch.stick_vector, "run": touch.trot, "crouch": crouch}
 	var move := Input.get_vector("move_left", "move_right", "move_up", "move_down")
-	return {"move": move, "run": Input.is_action_pressed("run")}
+	return {"move": move, "run": Input.is_action_pressed("run"), "crouch": crouch}

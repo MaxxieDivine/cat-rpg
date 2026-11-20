@@ -37,7 +37,7 @@ const PAINTED := {
 	"cloud_shadow": ["cloud_shadow", 200, 110, 61],
 	"forest": ["forest_tile", 64, 71],
 	"firefly": ["firefly"],
-	"fresh_catch": ["fresh_catch", 5, 30, 15],
+	"fresh_catch": ["fresh_catch", 8, 30, 15],
 	"icon_prey": ["icon_prey"],
 	"icon_drop": ["icon_drop"],
 	"ripple": ["ripple", 11, 5],
@@ -46,6 +46,10 @@ const PAINTED := {
 	"flower_white": ["flower", "white"],
 	"den": ["den", 30, 12],
 	"trail": ["trail", 36, 11],
+	"mouse": ["mouse"],
+	"mouse_carried": ["mouse_carried"],
+	"alert_mark": ["alert_mark"],
+	"pounce_ring": ["pounce_ring", 18, 7],
 }
 
 ## Each area's baked floor: art/<name>.png -> the area file it is painted

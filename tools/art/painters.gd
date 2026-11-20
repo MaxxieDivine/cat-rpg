@@ -610,7 +610,7 @@ const PREY_ROWS := [
 ]
 const PREY_COLS := {"o": "ink", "b": "prey.1", "l": "prey.2", "e": "ink", "n": "prey_tail", "t": "prey_tail"}
 ## Where each prey lies on the pile (bottom row first), frame-local.
-const PILE_SLOTS := [Vector2i(3, 8), Vector2i(12, 9), Vector2i(19, 8), Vector2i(7, 5), Vector2i(15, 4)]
+const PILE_SLOTS := [Vector2i(3, 8), Vector2i(12, 9), Vector2i(19, 8), Vector2i(7, 5), Vector2i(15, 4), Vector2i(0, 5), Vector2i(20, 4), Vector2i(11, 1)]
 
 
 ## The fresh-catch pile: a sheet of `count + 1` frames (`w` x `h`), frame n
@@ -688,4 +688,106 @@ func ripple(w: int, h: int) -> Image:
 				var q := ((Vector2(x + 0.5, y + 0.5) - c0) / c0).length()
 				if absf(q - r) < 0.14:
 					img.set_pixel(f * w + x, y, c("water.4", 1.0 - f * 0.3))
+	return img
+
+
+# --- Hunting: the live mouse, the carried mouse, the "!" and the landing ring
+
+## A live mouse, side view facing right, 12x8 frames (feet on the bottom
+## row): 0-1 head down nibbling, 2 head up with ears up (looking around),
+## 3-4 running.
+const MOUSE_FRAMES := [
+	[
+		"............",
+		"............",
+		"..ooooo.....",
+		".obbbbbooo..",
+		"obbbbbbbbbo.",
+		"obllllbbbbeo",
+		"toollllobbbn",
+		"t..oo..oo...",
+	],
+	[
+		"............",
+		"............",
+		"..ooooo.....",
+		".obbbbbooo..",
+		"obbbbbbbbbo.",
+		"obllllbbbbeo",
+		"toollllobbno",
+		"t..oo..oo...",
+	],
+	[
+		"........o.o.",
+		".......onono",
+		"..oooo.obbbo",
+		".obbbboobbeo",
+		"obbbbbbbbbbn",
+		"obllllllbbo.",
+		"toollllloo..",
+		"t..oo..oo...",
+	],
+	[
+		"............",
+		"............",
+		"............",
+		"...ooooooo..",
+		"toobbbbbbbbo",
+		"t.obllllbben",
+		"...oooooooo.",
+		"..o......o..",
+	],
+	[
+		"............",
+		"............",
+		"............",
+		"...ooooooo..",
+		"toobbbbbbbbo",
+		"t.obllllbben",
+		"...oooooooo.",
+		"....o..o....",
+	],
+]
+const MOUSE_COLS := {"o": "ink", "b": "prey.1", "l": "prey.2", "e": "ink", "n": "prey_tail", "t": "prey_tail"}
+
+
+func mouse() -> Image:
+	var fw := 12
+	var img := Image.create(fw * MOUSE_FRAMES.size(), 8, false, Image.FORMAT_RGBA8)
+	for f in MOUSE_FRAMES.size():
+		var rows: Array = []
+		for r: String in MOUSE_FRAMES[f]:
+			rows.append(r.substr(0, fw))
+		_stamp(img, rows, MOUSE_COLS, Vector2i(f * fw, 0))
+	return img
+
+
+## The mouse in Fern's mouth: limp, on its side (the fresh-kill look), 10x5.
+func mouse_carried() -> Image:
+	var img := Image.create(10, 5, false, Image.FORMAT_RGBA8)
+	_stamp(img, PREY_ROWS, PREY_COLS, Vector2i.ZERO, true)
+	return img
+
+
+## "!" over a mouse that has its head up: 3x8, yellow on ink.
+func alert_mark() -> Image:
+	var img := Image.create(3, 8, false, Image.FORMAT_RGBA8)
+	_stamp(img, ["ooo", "oyo", "oyo", "oyo", "ooo", "ooo", "oyo", "ooo"], {"o": "ink", "y": "ui.select"}, Vector2i.ZERO)
+	return img
+
+
+## The landing circle under a mouse Fern can pounce on: a flat ring of ink
+## and paper dashes (reads on green and golden grass alike).
+func pounce_ring(w: int, h: int) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var ctr := Vector2(w, h) / 2.0
+	for y in h:
+		for x in w:
+			var d := ((Vector2(x, y) + Vector2(0.5, 0.5) - ctr) / ctr).length()
+			if d <= 1.0 and d > 0.62:
+				var ang := atan2(y + 0.5 - ctr.y, x + 0.5 - ctr.x)
+				if posmod(int(floor((ang + PI) / TAU * 12.0)), 2) == 0:
+					img.set_pixel(x, y, c("ink"))
+				else:
+					img.set_pixel(x, y, c("ui.paper"))
 	return img
