@@ -309,7 +309,8 @@ static func footprint_rect(feet: Vector2, fp: Vector2) -> Rect2:
 ## Whole pixels, so pixel art stays crisp.
 ## `center` (world px) overrides the point to centre on (the view frames a
 ## conversation above the dialogue box with it).
-func camera_rect(view_size: Vector2, center: Vector2 = Vector2.INF) -> Rect2:
+## `whole` = false leaves the position unrounded (game.gd rounds it itself).
+func camera_rect(view_size: Vector2, center: Vector2 = Vector2.INF, whole: bool = true) -> Rect2:
 	if center == Vector2.INF:
 		center = player_pos - Vector2(0, player_footprint.y * 2.0)
 	var top_left := center - view_size / 2.0
@@ -319,7 +320,7 @@ func camera_rect(view_size: Vector2, center: Vector2 = Vector2.INF) -> Rect2:
 			top_left[axis] = lim.position[axis] + (lim.size[axis] - view_size[axis]) / 2.0
 		else:
 			top_left[axis] = clampf(top_left[axis], lim.position[axis], lim.end[axis] - view_size[axis])
-	return Rect2(top_left.floor(), view_size)
+	return Rect2(top_left.floor() if whole else top_left, view_size)
 
 
 func player_rect() -> Rect2:

@@ -1,6 +1,9 @@
 extends Control
 ## Main scene. Owns ScreenMetrics, swaps the title screen for the game, shows
-## the rotate-your-phone overlay in portrait and the build / fps label.
+## the rotate-your-phone overlay in portrait and the build / fps label (the
+## debug overlay: always on the title screen, so a phone can check the
+## build; in the game only while Settings.debug_overlay is on, toggled by F3
+## or three quick taps in the top-left corner).
 
 const ScreenMetrics := preload("res://scripts/view/screen_metrics.gd")
 const GameStrings := preload("res://scripts/core/game_strings.gd")
@@ -11,6 +14,11 @@ const RotateOverlay := preload("res://scripts/view/rotate_overlay.gd")
 const FullscreenButton := preload("res://scripts/view/fullscreen_button.gd")
 const VolumeButton := preload("res://scripts/view/volume_button.gd")
 const BUILD_PATH := "res://data/build.json"
+
+## Inspector hooks for trying values (0 = use Settings): camera zoom 1..3
+## (see game.gd pick_zoom) and dialogue text scale 1 / 2.
+@export var zoom_override := 0
+@export var text_scale_override := 0
 
 var metrics := ScreenMetrics.new()
 var title: Control
@@ -29,6 +37,8 @@ var fps_low := 0
 var logic_ms := 0.0
 
 var _laying_out := false
+## Times of the last corner taps (debug overlay toggle).
+var _corner_taps: Array[float] = []
 var _frames := 0
 var _frame_time := 0.0
 var _worst_dt := 0.0
@@ -85,6 +95,11 @@ func _ready() -> void:
 	add_child(start)
 	process_priority = 100000  # app._process runs last: measures the frame's logic
 
+	if zoom_override > 0:
+		Settings.camera_zoom = zoom_override
+	if text_scale_override > 0:
+		Settings.text_scale = text_scale_override
+	Settings.changed.connect(relayout)
 	get_window().size_changed.connect(relayout)
 	relayout()
 
@@ -119,11 +134,36 @@ func relayout() -> void:
 	_laying_out = false
 
 
+## F3, or three taps within a second in the top-left corner, toggles the
+## build / fps overlay.
+func _input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_F3:
+		Settings.debug_overlay = not Settings.debug_overlay
+		return
+	var tap := event as InputEventScreenTouch
+	if tap == null or not tap.pressed:
+		return
+	var corner := float(JsonData.load_dict("res://data/tuning.json").get("touch", {}).get("min_target", 48))
+	var p: Vector2 = get_global_transform_with_canvas().affine_inverse() * tap.position
+	if p.x > metrics.safe_rect.position.x + corner or p.y > metrics.safe_rect.position.y + corner:
+		_corner_taps.clear()
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	_corner_taps.append(now)
+	_corner_taps = _corner_taps.filter(func(t: float) -> bool: return now - t < 1.0)
+	if _corner_taps.size() >= 3:
+		_corner_taps.clear()
+		Settings.debug_overlay = not Settings.debug_overlay
+
+
 ## Fullscreen button in the top-right corner; the volume button just left
 ## of it (or in the corner while the fullscreen one is hidden).
 func _place_buttons() -> void:
 	fullscreen_button.refresh()
-	fullscreen_button.place(metrics.safe_rect, 4.0)
+	# In from the edge: rounded screen corners cut into the safe rect.
+	var inset := float(JsonData.load_dict("res://data/tuning.json").get("ui", {}).get("button_inset", 12))
+	fullscreen_button.place(metrics.safe_rect, inset)
 	var x := fullscreen_button.position.x
 	if fullscreen_button.visible:
 		x -= volume_button.min_target
@@ -190,6 +230,7 @@ func _update_hud() -> void:
 
 
 func _place_hud() -> void:
+	hud.visible = game == null or Settings.debug_overlay
 	if metrics.ui_size == Vector2.ZERO:
 		return
 	var margin := 6.0

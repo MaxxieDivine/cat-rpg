@@ -139,20 +139,20 @@ func _beside(npc: Dictionary, gap: float = 4.0) -> void:
 
 
 func test_focus_and_interact() -> void:
-	var cow: Dictionary = w.npc_by_id("cow")
-	var spec := _npc_spec("cow")
+	var bram: Dictionary = w.npc_by_id("bram")
+	var spec := _npc_spec("bram")
 	_open_spot()
 	check_eq(w.interact().size(), 0, "nothing to talk to in open grass")
-	# Walk up to the cow from the left.
-	w.player_pos = Vector2(cow["rect"].position.x - 30, cow["rect"].end.y)
+	# Walk up to Bram from the left.
+	w.player_pos = Vector2(bram["rect"].position.x - 30, bram["rect"].end.y)
 	var events := _run(1.0, Vector2.RIGHT)
-	check_eq(w.focus_id, "cow", "cow in focus when next to it")
-	check(events.any(func(e): return e["type"] == "focus" and e["id"] == "cow"), "focus event sent")
+	check_eq(w.focus_id, "bram", "Bram in focus when next to him")
+	check(events.any(func(e): return e["type"] == "focus" and e["id"] == "bram"), "focus event sent")
 	var said: Array = w.interact()
 	check_eq(said.size(), 1, "one talk event")
 	if said.size() == 1:
 		check_eq(said[0]["type"], "talk", "event type")
-		check_eq(said[0]["dialogue"], spec["dialogue"], "cow's dialogue file from world.json")
+		check_eq(said[0]["dialogue"], spec["dialogue"], "Bram's dialogue file from world.json")
 	w.end_talk()
 	# Walk away: focus clears.
 	events = _run(1.5, Vector2.LEFT)
@@ -175,19 +175,19 @@ func test_talk_radius_from_data() -> void:
 
 func test_only_the_nearest_npc_has_focus() -> void:
 	var bram: Dictionary = w.npc_by_id("bram")
-	var cow: Dictionary = w.npc_by_id("cow")
-	# Move the cow next to Bram so both are in range of one spot.
-	cow["pos"] = bram["pos"] + Vector2(40, 0)
-	cow["rect"] = World.footprint_rect(cow["pos"], cow["footprint"])
-	w.solids.assign([bram["rect"], cow["rect"]])
-	var between: float = (bram["rect"].end.x + cow["rect"].position.x) / 2.0
+	var other: Dictionary = w.npc_by_id("sorrel")
+	# Move Sorrel next to Bram so both are in range of one spot.
+	other["pos"] = bram["pos"] + Vector2(40, 0)
+	other["rect"] = World.footprint_rect(other["pos"], other["footprint"])
+	w.solids.assign([bram["rect"], other["rect"]])
+	var between: float = (bram["rect"].end.x + other["rect"].position.x) / 2.0
 	w.player_pos = Vector2(between - 3.0, bram["rect"].end.y)
 	w.step(0.0, Vector2.ZERO, false)
-	check(w.distance_to_rect(cow["rect"]) <= cow["talk_radius"], "cow in range too")
+	check(w.distance_to_rect(other["rect"]) <= other["talk_radius"], "Sorrel in range too")
 	check_eq(w.focus_id, "bram", "nearer Bram wins")
 	w.player_pos.x = between + 3.0
 	w.step(0.0, Vector2.ZERO, false)
-	check_eq(w.focus_id, "cow", "nearer cow wins")
+	check_eq(w.focus_id, "sorrel", "nearer Sorrel wins")
 
 
 func test_talking_locks_movement_and_faces_each_other() -> void:

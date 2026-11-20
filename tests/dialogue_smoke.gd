@@ -14,6 +14,9 @@ const MAIN_SCENE := "res://scenes/app.tscn"
 ## name, CSS size, devicePixelRatio, insets [top, right, bottom, left] (CSS px), touch
 const PHONE := ["phone", Vector2i(844, 390), 3.0, [0.0, 47.0, 21.0, 47.0], true]
 const SMALL_PHONE := ["small_phone", Vector2i(667, 375), 2.0, [0.0, 0.0, 0.0, 0.0], true]
+## The tester's phone: 2424x1080 device px in landscape (DPR 2.625), a
+## camera hole on the left.
+const TARGET_PHONE := ["target_phone", Vector2i(923, 411), 2.625, [0.0, 0.0, 0.0, 30.0], true]
 const DESKTOP := ["desktop", Vector2i(1280, 720), 1.0, [0.0, 0.0, 0.0, 0.0], false]
 
 var tuning: Dictionary
@@ -24,7 +27,7 @@ var convs: Dictionary = {}
 func before_each() -> void:
 	tuning = JsonData.load_dict("res://data/tuning.json")
 	speakers = JsonData.load_dict("res://data/speakers.json")
-	for id in ["bram", "sorrel", "wick", "cow"]:
+	for id in ["bram", "sorrel", "wick"]:
 		convs[id] = JsonData.load_dict("res://data/dialogue/%s.json" % id)
 
 
@@ -49,7 +52,7 @@ func test_all_conversations_by_touch_on_a_phone() -> void:
 	var wick := await _converse(app, "wick", [0, 1], true)
 	check(wick.has("good_one") and wick.has("say_hi"), "phone: Wick's shared path (%s)" % [wick])
 	var sorrel := await _converse(app, "sorrel", [], true)
-	check_eq(sorrel, ["come", "river", "stones", "grandmother", "walk_first"] as Array[String], "phone: Sorrel's story")
+	check_eq(sorrel, ["come", "river", "stones", "grandmother", "wet_paws", "walk_first"] as Array[String], "phone: Sorrel's story")
 	var bram := await _converse(app, "bram", [0], true)
 	check(bram.has("bram_eager"), "phone: Bram eager")
 	check_eq(GameState.get_flag("vole"), "shared", "phone: vole shared")
@@ -80,13 +83,6 @@ func test_all_conversations_by_keyboard_on_desktop() -> void:
 	check_eq(GameState.bond("bram"), 0, "desktop: no bond for nervous")
 	check_eq(await _converse(app, "sorrel", [], false), ["empty_pile"] as Array[String], "desktop: Sorrel notices the empty pile")
 	check_eq(await _converse(app, "wick", [], false), ["repeat_kept"] as Array[String], "desktop: Wick's secret")
-	_close(app)
-
-
-func test_the_cow_still_says_moo() -> void:
-	var app: Control = await _start(DESKTOP)
-	var seen := await _converse(app, "cow", [], false)
-	check_eq(seen, ["moo"] as Array[String], "cow: one line")
 	_close(app)
 
 
@@ -160,23 +156,23 @@ func test_only_the_nearest_npc_gets_the_paw_prompt() -> void:
 	var g: Control = app.game
 	var w = g.world
 	var bram: Dictionary = w.npc_by_id("bram")
-	var cow: Dictionary = w.npc_by_id("cow")
-	cow["pos"] = bram["pos"] + Vector2(40, 0)
-	cow["rect"] = World.footprint_rect(cow["pos"], cow["footprint"])
-	w.solids.assign([bram["rect"], cow["rect"]])
-	var between: float = (bram["rect"].end.x + cow["rect"].position.x) / 2.0
+	var other: Dictionary = w.npc_by_id("sorrel")
+	other["pos"] = bram["pos"] + Vector2(40, 0)
+	other["rect"] = World.footprint_rect(other["pos"], other["footprint"])
+	w.solids.assign([bram["rect"], other["rect"]])
+	var between: float = (bram["rect"].end.x + other["rect"].position.x) / 2.0
 	w.player_vel = Vector2.ZERO
 	w.player_pos = Vector2(between - 3.0, bram["rect"].end.y)
 	await tree.process_frame
 	await tree.process_frame
 	var paw: Sprite2D = g.world_view.paw
-	check(w.distance_to_rect(cow["rect"]) <= cow["talk_radius"], "both in range")
+	check(w.distance_to_rect(other["rect"]) <= other["talk_radius"], "both in range")
 	check(paw.visible, "one paw prompt")
 	check_near(paw.position.x + paw.texture.get_width() / 2.0, g.world_view.npc_head("bram").x, 1.0, "prompt over the nearer Bram")
 	w.player_pos.x = between + 3.0
 	await tree.process_frame
 	await tree.process_frame
-	check_near(paw.position.x + paw.texture.get_width() / 2.0, g.world_view.npc_head("cow").x, 1.0, "prompt moves to the nearer cow")
+	check_near(paw.position.x + paw.texture.get_width() / 2.0, g.world_view.npc_head("sorrel").x, 1.0, "prompt moves to the nearer cat")
 	_close(app)
 
 
@@ -267,7 +263,7 @@ func test_every_conversation_is_framed_above_the_box() -> void:
 		var app: Control = await _start(cfg)
 		var g: Control = app.game
 		var w = g.world
-		for id in ["bram", "sorrel", "wick", "cow"]:
+		for id in ["bram", "sorrel", "wick"]:
 			await _open_talk(app, id, cfg[4])
 			check(g.dialogue.is_open, "%s: talking to %s" % [cfg[0], id])
 			await tree.create_timer(0.8).timeout
@@ -287,8 +283,29 @@ func test_every_conversation_is_framed_above_the_box() -> void:
 # --- Phone layout
 
 
+## Every line of every conversation wraps into the box's `lines` lines even
+## at its narrowest text width (text_min_px), so nothing is ever cut off.
+func test_every_line_fits_the_narrowest_box() -> void:
+	var app: Control = await _start(PHONE)
+	var box: Control = app.game.dialogue
+	var d: Dictionary = tuning["dialogue"]
+	for f in DirAccess.get_files_at("res://data/dialogue"):
+		if not f.ends_with(".json"):
+			continue
+		var nodes: Dictionary = JsonData.load_dict("res://data/dialogue/" + f)["nodes"]
+		for id in nodes:
+			if not nodes[id].has("text"):
+				continue
+			var para := TextParagraph.new()
+			para.add_string(str(nodes[id]["text"]), box.font, box.font_size)
+			para.width = float(d["text_min_px"])
+			para.break_flags = TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE
+			check(para.get_line_count() <= int(d["lines"]), "%s/%s: %d lines at %s px (max %s)" % [f, id, para.get_line_count(), d["text_min_px"], d["lines"]])
+	_close(app)
+
+
 func test_phone_layout_hides_joystick_and_keeps_targets_big() -> void:
-	for cfg in [PHONE, SMALL_PHONE]:
+	for cfg in [PHONE, TARGET_PHONE, SMALL_PHONE]:
 		var app: Control = await _start(cfg)
 		var g: Control = app.game
 		var m = app.metrics
@@ -313,6 +330,9 @@ func test_phone_layout_hides_joystick_and_keeps_targets_big() -> void:
 			check(css_h >= float(d["min_choice_css"]) - 0.01 and css_h <= float(d["max_choice_css"]) + 1.0, "%s: touch choice %s is %s CSS px tall (%s-%s)" % [name, r, css_h, d["min_choice_css"], d["max_choice_css"]])
 			check(safe.encloses(r), "%s: choice %s inside the safe area" % [name, r])
 			check(not r.intersects(app.hud.get_global_rect()), "%s: choice clear of the build label" % name)
+		for i in range(1, box.choice_rects.size()):
+			var gap_css: float = (box.choice_rects[i].position.y - box.choice_rects[i - 1].end.y) * m.px_per_unit.y / m.dpr
+			check(gap_css >= float(d["touch_choice_gap_css"]) - 0.01, "%s: %s CSS px between touch choices (>= %s)" % [name, gap_css, d["touch_choice_gap_css"]])
 		_check_choice_stack(app, name)
 		# A tap that misses every choice does nothing.
 		var miss := Vector2(box.box_rect.position.x + 30, safe.position.y + 30)
@@ -327,8 +347,10 @@ func test_phone_layout_hides_joystick_and_keeps_targets_big() -> void:
 		after_each()
 
 
-## The box is at most max_height of the screen (name plate included), fits
-## `lines` lines, and draws at the world's pixel scale.
+## The box is at most max_height of the screen (name plate included) and
+## max_width wide, centred, fits `lines` lines of at least text_min_px, and
+## draws at its own whole pixel scale: never smaller than the old one (the
+## world's base fit), independent of the camera zoom.
 func _check_box_size(app: Control, name: String) -> void:
 	var g: Control = app.game
 	var box: Control = g.dialogue
@@ -337,8 +359,17 @@ func _check_box_size(app: Control, name: String) -> void:
 	var top := minf(box.box_rect.position.y, box.plate_rect.position.y)
 	var h: float = box.box_rect.end.y - top
 	check(h <= m.ui_size.y * float(d["max_height"]) + 0.01, "%s: box %s UI tall, at most %d%% of %s" % [name, h, roundi(float(d["max_height"]) * 100), m.ui_size.y])
-	check_eq(box.k, g.view_scale, "%s: box pixels are world pixels (k)" % name)
-	check_near(box.unit, float(g.view_scale) / m.px_per_unit.y, 0.0001, "%s: box unit = k / px_per_unit" % name)
+	var screen := Vector2(m.px_size)
+	var fit := ScreenMetrics.integer_fit(Vector2(tuning["view"]["base"][0], tuning["view"]["base"][1]), screen)
+	var safe_px: Rect2i = m.safe_rect_px()
+	check_eq(box.k, box.pick_scale(screen, float(safe_px.size.x), screen.y - safe_px.end.y, fit, Settings.text_scale), "%s: box scale" % name)
+	check(box.k >= fit, "%s: box scale %d at least the old one (%d)" % [name, box.k, fit])
+	check(box.k <= fit * 2, "%s: box scale %d at most twice the old one (%d)" % [name, box.k, fit])
+	check_near(box.unit, float(box.k) / m.px_per_unit.y, 0.0001, "%s: box unit = k / px_per_unit" % name)
+	check(box.box_rect.size.x <= m.ui_size.x * float(d["max_width"]) + box.unit, "%s: box %s wide, at most %d%% of %s" % [name, box.box_rect.size.x, roundi(float(d["max_width"]) * 100), m.ui_size.x])
+	check_near(box.box_rect.get_center().x, m.safe_rect.get_center().x, box.unit, "%s: box centred" % name)
+	check(box.text_rect.size.x / box.unit >= float(d["text_min_px"]) - 0.01, "%s: text at least %s box px wide" % [name, d["text_min_px"]])
+	check(box.text_rect.size.x / box.unit <= float(d["text_max_px"]) + 0.01, "%s: text at most %s box px wide" % [name, d["text_max_px"]])
 	var lines := int(d["lines"])
 	var need: int = lines * int(box.font.get_height(box.font_size)) + (lines - 1) * (int(d["line_px"]) - int(box.font.get_height(box.font_size)))
 	check(box.text_rect.size.y / box.unit >= need - 0.01, "%s: text area fits %d lines" % [name, lines])
@@ -348,7 +379,7 @@ func _check_box_size(app: Control, name: String) -> void:
 	check_near(box.portrait_rect.size.x / box.unit, float(d["portrait_px"]), 0.01, "%s: portrait %s native px" % [name, d["portrait_px"]])
 	check_eq(box.font_size, int(d["font_px"]), "%s: font at its pixel size" % name)
 	var css: float = box.font_size * box.k / m.dpr
-	check(css >= 11.0, "%s: text %s CSS px (readable)" % [name, css])
+	check(css >= 17.0, "%s: text %s CSS px (readable)" % [name, css])
 	check(m.safe_rect.encloses(box.box_rect) and m.safe_rect.encloses(box.plate_rect), "%s: box inside the safe area" % name)
 
 
@@ -362,7 +393,6 @@ func _check_choice_stack(app: Control, name: String) -> void:
 		var r: Rect2 = box.choice_rects[i]
 		check_near(r.end.x, box.box_rect.end.x, 0.01, "%s: choice %d flush with the box's right edge" % [name, i])
 		check(r.end.y <= box.box_rect.position.y + 0.01, "%s: choice %d above the box" % [name, i])
-		check(r.size.x < box.box_rect.size.x * 0.6, "%s: choice %d is not a full-width slab (%s of %s)" % [name, i, r.size.x, box.box_rect.size.x])
 		var text_w: float = box.font.get_string_size(str(texts[i]), HORIZONTAL_ALIGNMENT_LEFT, -1, box.font_size).x * box.unit
 		check(r.size.x <= text_w + 20.0 * box.unit, "%s: choice %d only as wide as its text" % [name, i])
 		widths[r.size.x] = true
@@ -370,7 +400,7 @@ func _check_choice_stack(app: Control, name: String) -> void:
 			check(r.position.y > box.choice_rects[i - 1].end.y - 0.01, "%s: choices stack downwards in order" % name)
 	check(widths.size() > 1 or texts.size() < 2, "%s: choices sized to their own text" % name)
 	var gap: float = box.box_rect.position.y - box.choice_rects[-1].end.y
-	check(gap <= 4.0 * box.unit + 0.01, "%s: the stack sits just above the box (gap %s)" % [name, gap])
+	check(gap <= box.choice_gap_px * box.unit + 0.01, "%s: the stack sits just above the box (gap %s)" % [name, gap])
 
 
 # --- Voice
@@ -421,6 +451,10 @@ func _any_audio_player(n: Node) -> bool:
 
 func test_box_pixels_phone() -> void:
 	await _box_pixels(PHONE)
+
+
+func test_box_pixels_target_phone() -> void:
+	await _box_pixels(TARGET_PHONE)
 
 
 func test_box_pixels_desktop() -> void:

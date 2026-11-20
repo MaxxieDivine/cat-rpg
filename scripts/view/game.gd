@@ -1,14 +1,18 @@
 extends Control
 ## The game screen. The world renders into a small SubViewport (cheap on
-## phones) shown at a whole-number scale k in device pixels. k is the largest
-## scale at which the 480x270 base view fits the screen; the view then
-## *expands* to fill the rest of the screen at that k (stretch aspect
-## "expand"), so wider screens see more meadow and the world always reaches
-## every edge (no letterbox up to view.max, which no real screen reaches).
-## A Camera2D follows the cat, limited to the meadow plus its forest border;
-## past that the forest is drawn further out, so it never shows flat colour.
-## Text, the dialogue box and touch controls are drawn at full resolution on
-## top, in UI units (about 1 CSS px).
+## phones) shown at a whole-number scale k in device pixels: the camera zoom.
+## Auto zoom (Settings.camera_zoom 0) picks the k at which the screen shows
+## about `view.target_rows` world pixels top to bottom (within `view.rows`,
+## 135..180); zoom 1 / 2 / 3 is that many times the largest scale at which
+## the whole 480x270 base view fits (1 = the Milestone 3 view). The view
+## then *expands* to fill the screen at that k (stretch aspect "expand"), so
+## wider screens see more meadow and the world always reaches every edge.
+## A Camera2D follows the cat with smoothing, in whole world pixels, limited
+## to the meadow plus its forest border; past that the forest is drawn
+## further out, so it never shows flat colour.
+## Text, the dialogue box (its own pixel scale, see dialogue_box.gd) and
+## touch controls are drawn on top, outside the world's SubViewport, so the
+## camera zoom never changes them.
 ##
 ## Talking: Interact next to an NPC starts its conversation (DialogueManager
 ## autoload); the box shows it, movement is locked, the joystick hides and
@@ -35,6 +39,13 @@ var tuning: Dictionary = {}
 var metrics
 ## Device pixels per world pixel (whole number).
 var view_scale := 1
+## Inspector / remote-debugger hook: 0 = use Settings.camera_zoom, else that
+## zoom (1..3, or any larger whole number to try).
+@export var zoom_override := 0:
+	set(v):
+		zoom_override = maxi(0, v)
+		if metrics != null:
+			layout(metrics)
 ## Where the world is drawn, in UI units.
 var view_rect := Rect2()
 ## World pixels the camera shows (SubViewport size).
@@ -142,7 +153,7 @@ func layout(m) -> void:
 	var base := _vec(v.get("base", [480, 270]))
 	var max_view := _vec(v.get("max", [640, 400]))
 	var screen_px := Vector2(m.px_size)
-	view_scale = ScreenMetrics.integer_fit(base, screen_px)
+	view_scale = pick_zoom(v, screen_px, zoom_override if zoom_override > 0 else Settings.camera_zoom)
 	# Expand: fill the whole screen at this scale (ceil, so no gap at the
 	# edges), but never more than max_view (then letterbox, centred).
 	var want := (screen_px / view_scale).ceil().min(max_view)
@@ -155,7 +166,10 @@ func layout(m) -> void:
 	view.scale = Vector2(view_scale, view_scale) / m.px_per_unit
 	touch.layout(m)
 	dialogue.touch_rows = ScreenMetrics.is_touch()
-	dialogue.layout(m, view_rect, view_size, view_scale)
+	var fit := ScreenMetrics.integer_fit(base, screen_px)
+	var safe_px: Rect2i = m.safe_rect_px()
+	dialogue.layout(m, dialogue.pick_scale(screen_px, float(safe_px.size.x), screen_px.y - float(safe_px.end.y), fit, Settings.text_scale))
+	_cam_center = Vector2.INF
 	_update_camera(0.0)
 	_place_overlays()
 
@@ -164,6 +178,26 @@ func set_paused(p: bool) -> void:
 	paused = p
 	if p:
 		touch.reset()
+
+
+## Device pixels per world pixel for `screen_px` (tuning.json "view").
+## `zoom` 0 = auto: the whole number k whose view height (screen / k) lies in
+## `rows` and is closest to `target_rows` (if none does, the nearest k).
+## `zoom` n > 0 = n times the largest k at which `base` fits the screen.
+static func pick_zoom(v: Dictionary, screen_px: Vector2, zoom: int) -> int:
+	var base := _vec(v.get("base", [480, 270]))
+	if zoom > 0:
+		return ScreenMetrics.integer_fit(base, screen_px) * zoom
+	var target := float(v.get("target_rows", 160))
+	var rows := _vec(v.get("rows", [135, 180]))
+	var best := maxi(1, roundi(screen_px.y / target))
+	var best_d := INF
+	for k in range(1, int(screen_px.y / maxf(1.0, rows.x)) + 1):
+		var h := screen_px.y / k
+		if h >= rows.x and h <= rows.y and absf(h - target) < best_d:
+			best_d = absf(h - target)
+			best = k
+	return best
 
 
 ## World pixels -> UI units.
@@ -175,23 +209,33 @@ func is_talking() -> bool:
 	return dialogue.is_open
 
 
-## Follows the cat. While talking, eases so the middle of the two cats sits
-## in the middle of the world left visible above the dialogue box, then
-## eases back afterwards.
+## Follows the cat with smoothing (`view.camera_follow`). While talking,
+## eases (`dialogue.camera_ease`) so the middle of the two cats sits in the
+## middle of the world left visible above the dialogue box, then eases back.
+## The camera sits on whole world pixels, and while it trails a walking cat
+## its offset from her is rounded (not its position), so she never jitters
+## by a pixel against the screen while the meadow scrolls under her.
 func _update_camera(dt: float) -> void:
-	var follow: Rect2 = world.camera_rect(Vector2(view_size))
-	var target := follow.get_center()
+	var vs := Vector2(view_size)
+	var target: Vector2 = world.camera_rect(vs).get_center()
+	var rate := float(tuning.get("view", {}).get("camera_follow", 8))
 	if world.is_talking():
 		target = _talk_center()
 		_cam_easing = true
-	if _cam_easing and _cam_center != Vector2.INF:
-		var k := 1.0 - exp(-float(tuning.get("dialogue", {}).get("camera_ease", 10)) * dt)
-		_cam_center = _cam_center.lerp(target, k) if dt > 0.0 else target
-		if not world.is_talking() and _cam_center.distance_to(target) < 0.5:
-			_cam_easing = false
-	else:
+	if _cam_easing:
+		rate = float(tuning.get("dialogue", {}).get("camera_ease", 10))
+	if _cam_center == Vector2.INF or dt <= 0.0 or rate <= 0.0:
 		_cam_center = target
-	camera_rect = world.camera_rect(Vector2(view_size), _cam_center) if _cam_easing else follow
+	else:
+		_cam_center = _cam_center.lerp(target, 1.0 - exp(-rate * dt))
+	if _cam_easing and not world.is_talking() and _cam_center.distance_to(target) < 0.5:
+		_cam_easing = false
+	if _cam_center.distance_to(target) < 0.25:
+		_cam_center = target
+	var top_left: Vector2 = world.camera_rect(vs, _cam_center, false).position
+	var anchor: Vector2 = world.player_pos.round()
+	top_left = anchor + (top_left - world.player_pos).round()
+	camera_rect = world.camera_rect(vs, top_left + vs / 2.0)
 	camera.position = camera_rect.position
 
 

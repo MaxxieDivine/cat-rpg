@@ -16,8 +16,7 @@
 	"npcs": [
 		{"id": "bram", "art": "cat.bram.sit", "pos": [292, 196], "footprint": [20, 5], "talk_radius": 22, "behavior": "sit", "facing": -1, "dialogue": "res://data/dialogue/bram.json"},
 		{"id": "sorrel", "art": "cat.sorrel.sleep", "pos": [172, 128], "footprint": [22, 5], "talk_radius": 22, "behavior": "lie", "facing": 1, "dialogue": "res://data/dialogue/sorrel.json"},
-		{"id": "wick", "art": "cat.wick.idle", "path": [[542, 224], [584, 224], [584, 236], [542, 236]], "speed": 18, "pause": 0.7, "footprint": [16, 5], "talk_radius": 22, "behavior": "pace", "dialogue": "res://data/dialogue/wick.json"},
-		{"id": "cow", "art": "cow.idle", "pos": [470, 200], "footprint": [30, 8], "talk_radius": 22, "behavior": "stand", "dialogue": "res://data/dialogue/cow.json"}
+		{"id": "wick", "art": "cat.wick.idle", "path": [[542, 224], [584, 224], [584, 236], [542, 236]], "speed": 18, "pause": 0.7, "footprint": [16, 5], "talk_radius": 22, "behavior": "pace", "dialogue": "res://data/dialogue/wick.json"}
 	],
 	"path": {
 		"width": 11,

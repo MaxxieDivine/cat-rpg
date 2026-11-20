@@ -1,30 +1,35 @@
 extends "res://tests/test_base.gd"
 ## Runs the real main scene at phone and desktop sizes: title, tap to start,
-## integer-scaled game view, touch controls / keyboard, talking to the cow
+## integer-scaled game view, touch controls / keyboard, talking to Bram (his one-line repeat)
 ## (the dialogue system's test NPC), portrait. The conversations with the
 ## cats are in dialogue_smoke.gd.
 
 const ScreenMetrics := preload("res://scripts/view/screen_metrics.gd")
 const JsonData := preload("res://scripts/core/json_data.gd")
+const GameScreen := preload("res://scripts/view/game.gd")
 const MAIN_SCENE := "res://scenes/app.tscn"
 
 ## name, CSS size, devicePixelRatio, insets [top, right, bottom, left] (CSS px), touch
 const PHONE := ["phone", Vector2i(844, 390), 3.0, [0.0, 47.0, 21.0, 47.0], true]
 const SMALL_PHONE := ["small_phone", Vector2i(667, 375), 2.0, [0.0, 0.0, 0.0, 0.0], true]
 const DESKTOP := ["desktop", Vector2i(1280, 720), 1.0, [0.0, 0.0, 0.0, 0.0], false]
+## The tester's phone: 2424x1080 device px in landscape (DPR 2.625), a
+## camera hole on the left.
+const TARGET_PHONE := ["target_phone", Vector2i(923, 411), 2.625, [0.0, 0.0, 0.0, 30.0], true]
 const DESKTOP_HD := ["desktop_hd", Vector2i(1920, 1080), 1.0, [0.0, 0.0, 0.0, 0.0], false]
 
 var strings: Dictionary
 var tuning: Dictionary
 var world_data: Dictionary
-var cow_line: String
+## Bram's repeat line: one line, then the box closes.
+var bram_line: String
 
 
 func before_each() -> void:
 	strings = JsonData.load_dict("res://data/strings.json")
 	tuning = JsonData.load_dict("res://data/tuning.json")
 	world_data = JsonData.load_dict("res://data/world.json")
-	cow_line = str(JsonData.load_dict("res://data/dialogue/cow.json")["nodes"]["moo"]["text"])
+	bram_line = str(JsonData.load_dict("res://data/dialogue/bram.json")["nodes"]["repeat"]["text"])
 
 
 func after_each() -> void:
@@ -42,6 +47,10 @@ func after_each() -> void:
 
 func test_phone() -> void:
 	await _run_config(PHONE)
+
+
+func test_target_phone() -> void:
+	await _run_config(TARGET_PHONE)
 
 
 func test_small_phone() -> void:
@@ -123,7 +132,9 @@ func test_volume_button_cycles_and_sits_by_fullscreen() -> void:
 		await _tap(app, m.safe_rect.get_center(), m)
 		app.relayout()
 		check(not fb.visible, "%s: fullscreen button hidden while fullscreen" % cfg[0])
-		check(absf(vb.get_global_rect().end.x - (m.safe_rect.end.x - 4.0)) <= 1.0, "%s: volume button moves into the corner" % cfg[0])
+		var inset := float(tuning["ui"]["button_inset"])
+		check(absf(vb.get_global_rect().end.x - (m.safe_rect.end.x - inset)) <= 1.0, "%s: volume button moves into the corner, %s in from the edge" % [cfg[0], inset])
+		check(absf(vb.get_global_rect().position.y - (m.safe_rect.position.y + inset)) <= 1.0, "%s: volume button %s below the top of the safe area" % [cfg[0], inset])
 		_close(app)
 		after_each()
 
@@ -248,14 +259,14 @@ func _fullscreen_switch(sw: Array) -> void:
 	_touch(app, 3, Vector2(safe.position.x + 120 - radius, safe.get_center().y), false)
 	await tree.process_frame
 
-	# The paw at its new spot talks to the cow.
-	_place_next_to_cow(w)
+	# The paw at its new spot talks to Bram.
+	_place_next_to_bram(w)
 	await tree.process_frame
 	await tree.process_frame
 	_touch(app, 1, tc.button_center, true)
 	_touch(app, 1, tc.button_center, false)
 	await tree.process_frame
-	await _check_cow_talk(app, name, true)
+	await _check_bram_talk(app, name, true)
 	if not is_headless():
 		await _check_view_pixels(app, name)
 		if shots_dir != "":
@@ -350,8 +361,9 @@ func _run_config(cfg: Array) -> void:
 	_close(app)
 
 
-## Expand with integer scaling: k is the largest whole scale at which the
-## 480x270 base fits the screen; the view then fills the screen at k (up to
+## Expand with integer scaling: k (the camera zoom) is the whole scale at
+## which the screen shows about view.target_rows world px top to bottom
+## (within view.rows); the view then fills the screen at k (up to
 ## view.max), and the camera never shows past the world's edge.
 func _check_view(app: Control, name: String) -> void:
 	var g: Control = app.game
@@ -360,11 +372,13 @@ func _check_view(app: Control, name: String) -> void:
 	var base := Vector2(v["base"][0], v["base"][1])
 	var max_view := Vector2(v["max"][0], v["max"][1])
 	var screen := Vector2(m.px_size)
-	var expect_k := maxi(1, floori(minf(screen.x / base.x, screen.y / base.y)))
+	var expect_k: int = GameScreen.pick_zoom(v, screen, 0)
 	check_eq(g.view_scale, expect_k, "%s: world view scale" % name)
 	var expect_size := (screen / expect_k).ceil().min(max_view)
 	check_eq(Vector2(g.view_size), expect_size, "%s: view expands to fill the screen" % name)
-	check(Vector2(g.view_size).x >= base.x and Vector2(g.view_size).y >= base.y, "%s: at least the base view is visible" % name)
+	var rows := screen.y / expect_k
+	check(rows >= float(v["rows"][0]) and rows <= float(v["rows"][1]), "%s: %s world px top to bottom (%s-%s)" % [name, rows, v["rows"][0], v["rows"][1]])
+	check(g.view_size.x > g.view_size.y, "%s: the view is landscape (%s)" % [name, g.view_size])
 	var vp: Vector2 = g.view_rect.position * m.px_per_unit
 	var vs: Vector2 = g.view_rect.size * m.px_per_unit
 	check_near(vs.x, g.view_size.x * expect_k, 0.01, "%s: view width in device px" % name)
@@ -427,15 +441,15 @@ func _check_touch(app: Control, name: String) -> void:
 	check_eq(tc.stick_vector, Vector2.ZERO, "%s: stick released" % name)
 	check_eq(w.speed(), 0.0, "%s: cat stops when the thumb lifts" % name)
 
-	# Walk up to the cow and press the paw button with a second finger.
-	_place_next_to_cow(w)
+	# Walk up to Bram and press the paw button with a second finger.
+	_place_next_to_bram(w)
 	await tree.process_frame
 	await tree.process_frame
-	check(tc.highlight, "%s: paw button lights up next to the cow" % name)
+	check(tc.highlight, "%s: paw button lights up next to Bram" % name)
 	_touch(app, 1, tc.button_center, true)
 	_touch(app, 1, tc.button_center, false)
 	await tree.process_frame
-	await _check_cow_talk(app, name, true)
+	await _check_bram_talk(app, name, true)
 	# A tap on the right half away from the button does nothing.
 	_touch(app, 2, Vector2(safe.end.x - 60, safe.position.y + 60), true)
 	_touch(app, 2, Vector2(safe.end.x - 60, safe.position.y + 60), false)
@@ -457,31 +471,34 @@ func _check_keyboard(app: Control, name: String) -> void:
 	await tree.create_timer(0.2).timeout
 	check_eq(w.speed(), 0.0, "%s: stops when the key is released" % name)
 
-	_place_next_to_cow(w)
+	_place_next_to_bram(w)
 	await tree.process_frame
 	await tree.process_frame
 	var paw: Sprite2D = g.world_view.paw
-	check(paw.visible, "%s: paw prompt shown next to the cow" % name)
-	var head: Vector2 = g.world_view.npc_head("cow")
-	check(paw.position.y + paw.texture.get_height() <= head.y and absf(paw.position.x + paw.texture.get_width() / 2.0 - head.x) <= 1.0, "%s: paw prompt above the cow's head" % name)
+	check(paw.visible, "%s: paw prompt shown next to Bram" % name)
+	var head: Vector2 = g.world_view.npc_head("bram")
+	check(paw.position.y + paw.texture.get_height() <= head.y and absf(paw.position.x + paw.texture.get_width() / 2.0 - head.x) <= 1.0, "%s: paw prompt above Bram's head" % name)
 	_key(KEY_E)
 	await tree.process_frame
-	check(not paw.visible, "%s: paw prompt hidden while the cow talks" % name)
-	await _check_cow_talk(app, name, false)
+	check(not paw.visible, "%s: paw prompt hidden while Bram talks" % name)
+	await _check_bram_talk(app, name, false)
 
 
-## The cow's conversation is open: one "Moo!" line in the box, inside the
+## Bram's repeat conversation is open: one line in the box, inside the
 ## safe area, movement locked. Finishes and closes it with a tap or a key.
-func _check_cow_talk(app: Control, name: String, by_touch: bool) -> void:
+func _check_bram_talk(app: Control, name: String, by_touch: bool) -> void:
 	var g: Control = app.game
 	var box: Control = g.dialogue
 	check(box.is_open, "%s: dialogue box open" % name)
-	check_eq(str(box.line.get("speaker", "")), "cow", "%s: the cow speaks" % name)
+	check_eq(str(box.line.get("speaker", "")), "bram", "%s: Bram speaks" % name)
 	check(g.world.is_talking(), "%s: talking locks movement" % name)
 	check(not g.touch.visible, "%s: touch controls hidden while talking" % name)
 	check(app.metrics.safe_rect.encloses(box.box_rect.grow(0.01)), "%s: box inside safe area" % name)
-	await tree.create_timer(0.4).timeout
-	check_eq(box.visible_text(), cow_line, "%s: cow line from cow.json" % name)
+	var waited := 0.0
+	while box.is_typing() and waited < 4.0:
+		await tree.create_timer(0.1).timeout
+		waited += 0.1
+	check_eq(box.visible_text(), bram_line, "%s: Bram's repeat line from bram.json" % name)
 	if by_touch:
 		_touch(app, 4, app.metrics.safe_rect.get_center(), true)
 		_touch(app, 4, app.metrics.safe_rect.get_center(), false)
@@ -502,10 +519,12 @@ func _key(code: Key) -> void:
 		tree.root.push_input(ev)
 
 
-func _place_next_to_cow(w) -> void:
-	var cow: Rect2 = w.npc_by_id("cow")["rect"]
+## Next to Bram, who has already talked (so he says his one repeat line).
+func _place_next_to_bram(w) -> void:
+	GameState.set_flag("talked_bram", true)
+	var bram: Rect2 = w.npc_by_id("bram")["rect"]
 	w.player_vel = Vector2.ZERO
-	w.player_pos = Vector2(cow.position.x - w.player_footprint.x / 2.0 - 4.0, cow.end.y)
+	w.player_pos = Vector2(bram.position.x - w.player_footprint.x / 2.0 - 4.0, bram.end.y)
 
 
 ## The world view on screen must be the SubViewport image scaled by exactly k:
@@ -516,7 +535,8 @@ func _check_view_pixels(app: Control, name: String) -> void:
 	var paused_was: bool = g.paused
 	g.paused = true  # freeze overlay updates (hiding touch would show the keyboard prompt)
 	g.touch.visible = false
-	app.hud.visible = false
+	var debug_was: bool = Settings.debug_overlay
+	Settings.debug_overlay = false
 	app.volume_button.visible = false
 	var box_was: bool = g.dialogue.visible
 	g.dialogue.visible = false
@@ -548,7 +568,7 @@ func _check_view_pixels(app: Control, name: String) -> void:
 	g.touch.visible = touch_was
 	g.paused = paused_was
 	g.dialogue.visible = box_was
-	app.hud.visible = true
+	Settings.debug_overlay = debug_was
 	app.volume_button.visible = true
 
 

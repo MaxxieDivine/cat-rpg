@@ -78,11 +78,14 @@ func layout(m) -> void:
 	var cat_px: Vector2 = m.ui_to_px(Vector2(safe.get_center().x - cat_ui.x / 2.0, top)).floor()
 	cat.position = m.px_to_ui(cat_px)
 	var y := cat.position.y + cat_ui.y + 4.0
+	# Whole UI units inside the safe area (a left inset at DPR 2.625 isn't).
+	var x0 := ceilf(safe.position.x)
+	var w := floorf(safe.end.x) - x0
 	for l: Label in [title_label, start_label, controls_label, home_label]:
-		l.size = Vector2(safe.size.x, 0)
+		l.size = Vector2(w, 0)
 		l.reset_size()
-		l.size.x = safe.size.x
-		l.position = Vector2(safe.position.x, y).round()
+		l.size.x = w
+		l.position = Vector2(x0, roundf(y))
 		y += l.get_combined_minimum_size().y + 6.0
 
 

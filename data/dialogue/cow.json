@@ -1,6 +1,0 @@
-{
-	"start": "moo",
-	"nodes": {
-		"moo": {"speaker": "cow", "expression": "happy", "text": "Moo!", "end": true}
-	}
-}
