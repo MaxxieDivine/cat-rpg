@@ -9,6 +9,7 @@ const SUITES := [
 	"res://tests/test_data.gd",
 	"res://tests/test_world.gd",
 	"res://tests/test_needs.gd",
+	"res://tests/test_areas.gd",
 	"res://tests/test_day_cycle.gd",
 	"res://tests/test_art.gd",
 	"res://tests/test_cats.gd",
@@ -19,6 +20,7 @@ const SUITES := [
 	"res://tests/app_smoke.gd",
 	"res://tests/dialogue_smoke.gd",
 	"res://tests/needs_smoke.gd",
+	"res://tests/travel_smoke.gd",
 	"res://tests/perf_smoke.gd",
 ]
 

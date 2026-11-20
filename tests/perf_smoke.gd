@@ -65,40 +65,42 @@ func test_frame_cost_stays_in_budget() -> void:
 	await tree.process_frame
 	app.start_game()
 	var g: Control = app.game
-	var w = g.world
-	var results := {}
-	for phase in ["day", "night"]:
-		if phase == "night":
-			g.day.set_t(1.0)
-		# Trot back and forth through the first tall-grass patch.
-		var patch: Array = JsonData.load_dict("res://data/world.json")["tall_grass"]["patches"][0]["rect"]
-		w.player_pos = Vector2(patch[0] - 10, patch[1] + patch[3] / 2.0)
-		w.player_vel = Vector2.ZERO
-		Input.action_press("run")
-		for i in 30:
-			await tree.process_frame
-		box["sum"] = 0
-		box["n"] = 0
-		var draws := 0
-		var frames := 0
-		for leg in 4:
-			var dir := "move_right" if leg % 2 == 0 else "move_left"
-			Input.action_press(dir)
-			for i in 45:
+	var areas_data: Dictionary = JsonData.load_dict("res://data/areas.json")["areas"]
+	for area: String in areas_data:
+		g.load_area(area, "start")
+		g.day.set_t(0.0)
+		await tree.process_frame
+		var w = g.world
+		for phase in ["day", "night"]:
+			if phase == "night":
+				g.day.set_t(1.0)
+			# Trot back and forth through the area's first tall-grass patch.
+			var patch: Array = JsonData.load_dict(areas_data[area]["file"])["tall_grass"]["patches"][0]["rect"]
+			w.player_pos = Vector2(patch[0] - 10, patch[1] + patch[3] / 2.0)
+			w.player_vel = Vector2.ZERO
+			Input.action_press("run")
+			for i in 30:
 				await tree.process_frame
-				draws = maxi(draws, int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)))
-				frames += 1
-			Input.action_release(dir)
-		Input.action_release("run")
-		var ms: float = box["sum"] / 1000.0 / maxi(1, box["n"])
-		results[phase] = {"logic_ms": ms, "draw_calls": draws}
-		print("     perf %s: logic %.3f ms/frame, max draw calls %d (display %s)" % [phase, ms, draws, DisplayServer.get_name()])
-		check(ms <= float(budget["logic_ms"]), "%s: game logic %.3f ms per frame, budget %s ms (data/perf.json)" % [phase, ms, budget["logic_ms"]])
-		if not is_headless():
-			check(draws <= int(budget["draw_calls"]), "%s: %d draw calls per frame, budget %s (data/perf.json)" % [phase, draws, budget["draw_calls"]])
-	var nodes := _count(g)
-	print("     perf: %d nodes under the game screen" % nodes)
-	check(nodes <= int(budget["nodes"]), "%d nodes under the game screen, budget %s" % [nodes, budget["nodes"]])
+			box["sum"] = 0
+			box["n"] = 0
+			var draws := 0
+			for leg in 4:
+				var dir := "move_right" if leg % 2 == 0 else "move_left"
+				Input.action_press(dir)
+				for i in 45:
+					await tree.process_frame
+					draws = maxi(draws, int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)))
+				Input.action_release(dir)
+			Input.action_release("run")
+			var ms: float = box["sum"] / 1000.0 / maxi(1, box["n"])
+			print("     perf %s %s: logic %.3f ms/frame, max draw calls %d (display %s)" % [area, phase, ms, draws, DisplayServer.get_name()])
+			check(ms <= float(budget["logic_ms"]), "%s %s: game logic %.3f ms per frame, budget %s ms (data/perf.json)" % [area, phase, ms, budget["logic_ms"]])
+			if not is_headless():
+				check(draws <= int(budget["draw_calls"]), "%s %s: %d draw calls per frame, budget %s (data/perf.json)" % [area, phase, draws, budget["draw_calls"]])
+		await tree.process_frame  # the previous area's view is freed at the end of a frame
+		var nodes := _count(g)
+		print("     perf %s: %d nodes under the game screen" % [area, nodes])
+		check(nodes <= int(budget["nodes"]), "%s: %d nodes under the game screen, budget %s" % [area, nodes, budget["nodes"]])
 	tree.root.remove_child(app)
 	app.free()
 	a.free()

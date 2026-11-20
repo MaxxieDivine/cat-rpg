@@ -79,12 +79,17 @@
 		"drink": 50,
 		"full_above": 90,
 		"eat_s": 1.6,
-		"drink_s": 1.6
+		"drink_s": 1.6,
+		"restore_hunger": 60,
+		"restore_thirst": 60
 	},
 	"needs_hud": {
 		"_note": "Hunger / thirst bars in the top-left of the safe area. Drawn in hud pixels of about hud_px_css CSS px each (whole device px). bar_px = bar size incl. its 1 px outline; pulse_hz when under needs.low.",
 		"hud_px_css": 2.5,
-		"bar_px": [40, 6],
+		"bar_px": [
+			40,
+			6
+		],
 		"icon_gap_px": 2,
 		"row_gap_px": 3,
 		"pulse_hz": 1.4,
@@ -146,5 +151,20 @@
 			0.5,
 			0.0
 		]
+	},
+	"travel": {
+		"_note": "Walking into an exit: fade to black over fade_s, load the other area at the spawn the exit names, fade back in.",
+		"fade_s": 0.3
+	},
+	"collapse": {
+		"_note": "Hunger or thirst at 0: Fern sinks down (lie_s), the screen fades to black (fade_s), the message (strings.json collapse.message) shows until a tap / key (after min_message_s) or message_s, then she wakes at recovery_area / recovery_spawn with needs.restore_* and stretches (wake_s) before control comes back.",
+		"lie_s": 1.2,
+		"fade_s": 0.8,
+		"message_s": 2.0,
+		"min_message_s": 0.4,
+		"wake_s": 1.3,
+		"recovery_area": "camp",
+		"recovery_spawn": "den",
+		"message_font": 20
 	}
 }

@@ -1,8 +1,9 @@
 extends RefCounted
 ## Fern's needs: hunger and thirst, whole numbers from 0 to `max_value`.
 ## Each drops by 1 every `hunger_every_s` / `thirst_every_s` seconds of game
-## time (step()); eating and drinking raise them (capped). Nothing bad
-## happens at 0 yet: the HUD only warns below `low`.
+## time (step()); eating and drinking raise them (capped). The HUD warns
+## below `low`; when either reaches 0 Fern passes out (collapsed(); game.gd
+## runs the collapse) and wakes in camp with restore() values.
 ## Plain data, no Nodes (the `Needs` autoload wraps it). preload(), no
 ## class_name. Tuning: data/tuning.json "needs".
 
@@ -23,6 +24,9 @@ var eat_amount := 40
 var drink_amount := 50
 ## Above this Fern isn't hungry and won't take prey from the pile.
 var full_above := 90
+## What hunger and thirst are set to when Fern wakes after passing out.
+var restore_hunger := 60
+var restore_thirst := 60
 
 var _hunger_t := 0.0
 var _thirst_t := 0.0
@@ -39,6 +43,8 @@ func _init(t: Dictionary = {}) -> void:
 	eat_amount = int(t.get("eat", eat_amount))
 	drink_amount = int(t.get("drink", drink_amount))
 	full_above = int(t.get("full_above", full_above))
+	restore_hunger = int(t.get("restore_hunger", restore_hunger))
+	restore_thirst = int(t.get("restore_thirst", restore_thirst))
 	reset()
 
 
@@ -71,6 +77,20 @@ func eat(amount: int = -1) -> void:
 
 func drink(amount: int = -1) -> void:
 	thirst = mini(max_value, thirst + (drink_amount if amount < 0 else amount))
+
+
+## Hunger or thirst is at 0: Fern passes out.
+func collapsed() -> bool:
+	return hunger <= 0 or thirst <= 0
+
+
+## After passing out: both set to the restore values (the timers restart,
+## so she gets the full interval before the next point drops).
+func restore() -> void:
+	hunger = clampi(restore_hunger, 0, max_value)
+	thirst = clampi(restore_thirst, 0, max_value)
+	_hunger_t = 0.0
+	_thirst_t = 0.0
 
 
 func is_full() -> bool:

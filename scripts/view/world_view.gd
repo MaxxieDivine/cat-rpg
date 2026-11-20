@@ -21,6 +21,13 @@ extends Node2D
 ## amplitudes from tuning.json "wind". Fern brushing tall grass or a bush
 ## gives it a short rustle (a skew) and emits `rustled`.
 ## Cosmetic randomness (butterflies, birds) uses the view's own RNG.
+## Areas: one WorldView per area (game.gd builds a new one on every area
+## change). Exits become AreaExit nodes (scenes/area_exit.tscn, Inspector
+## exports) and prey spots Marker2D nodes, under "Markers"; both are
+## invisible in play. An area may override the palette's grade colours
+## (world.grade: the Hunting Grounds is more golden).
+## Passing out: `pose` "down" sinks Fern into the low crouch of her stretch
+## and holds it; "wake" plays the whole stretch, then she is herself again.
 
 signal rustled(kind: String)
 
@@ -28,6 +35,7 @@ const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
 const JsonData := preload("res://scripts/core/json_data.gd")
 const NpcScene := preload("res://scenes/npc.tscn")
 const PileScene := preload("res://scenes/fresh_catch_pile.tscn")
+const ExitScene := preload("res://scenes/area_exit.tscn")
 const CatAnim := preload("res://scripts/view/cat_anim.gd")
 const PLAYER_ID := "fern"
 const MEOW_KEY := "fx.meow"
@@ -35,6 +43,11 @@ const PAW_KEY := "ui.paw"
 const RIPPLE_KEY := "fx.ripple"
 ## Fern's animation while eating or drinking (world.action).
 const ACTION_ANIM := "lick"
+## Passing out and waking: the stretch sheet. Its first frames lower her
+## into a crouch (held while she is "down"); the whole sheet is her waking.
+const COLLAPSE_ANIM := "stretch"
+const COLLAPSE_LOW_FRAME := 2
+const COLLAPSE_FPS := 4.0
 const SPEAKERS_PATH := "res://data/speakers.json"
 const PALETTE_PATH := "res://data/palette.json"
 ## How far past the camera bounds the forest tile is drawn (world px).
@@ -100,6 +113,18 @@ var _amb: Dictionary = {}
 var _bird_wait := 6.0
 var _bird_vel := Vector2.ZERO
 var _butterfly_state: Array[Dictionary] = []
+## "", "down" (passed out) or "wake" (stretching awake). Set by game.gd.
+var pose := "":
+	set(v):
+		if v != pose:
+			pose = v
+			_pose_t = 0.0
+			if v == "wake":
+				player.play(COLLAPSE_ANIM, true)
+var _pose_t := 0.0
+## AreaExit nodes and prey-spot markers (Marker2D, named after the spot).
+var exit_nodes: Array[Node2D] = []
+var prey_markers: Array[Marker2D] = []
 
 
 func setup(w, tuning: Dictionary, day_cycle = null) -> void:
@@ -156,6 +181,7 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 		decal.position = (g["pos"] as Vector2).round()
 		decal.offset = -(decal.texture.get_size() / 2.0).floor()
 		decal.centered = false
+		decal.flip_h = g.get("flip", false)
 		_ground.add_child(decal)
 	for pr: Dictionary in world.props:
 		if pr["shadow"] != "" and pr["trunk"]:
@@ -233,6 +259,7 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 		_sorted.add_child(s)
 		_rustlers.append({"node": s, "kind": "grass", "t": 0.0, "h": float(s.texture.get_height()), "dir": 1.0})
 
+	_make_markers()
 	_make_life()
 	_make_sky()
 
@@ -258,6 +285,24 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 	meow.visible = false
 	overlay.add_child(meow)
 	sync()
+
+
+## Exits (AreaExit nodes, Inspector-editable) and prey spots (empty
+## Marker2D nodes for now: mice come next milestone).
+func _make_markers() -> void:
+	var markers := _layer("Markers")
+	for e: Dictionary in world.exits:
+		var n: Node2D = ExitScene.instantiate()
+		n.setup(e)
+		markers.add_child(n)
+		exit_nodes.append(n)
+	for ps: Dictionary in world.prey_spots:
+		var m := Marker2D.new()
+		m.name = "PreySpot_" + str(ps["id"])
+		m.position = ps["pos"]
+		m.set_meta("prey_spot", ps["id"])
+		markers.add_child(m)
+		prey_markers.append(m)
 
 
 func _layer(n: String) -> Node2D:
@@ -473,6 +518,8 @@ func _sync_time() -> void:
 
 
 func _pal_grade(stage: String) -> Color:
+	if world != null and world.grade.has(stage):
+		return Color(str(world.grade[stage]))
 	return Color(str(palette.get("grade", {}).get(stage, "#ffffff")))
 
 
@@ -540,6 +587,20 @@ func _sync_sky(dt: float) -> void:
 ## cats.json fidget_after_s plays a fidget (lick, itch, stretch) in turn.
 ## A meow plays out unless she starts moving.
 func _sync_player(dt: float) -> void:
+	if pose == "down":
+		# Sinks into the crouch, then lies still.
+		_pose_t += dt
+		player.hold(COLLAPSE_ANIM, mini(int(_pose_t * COLLAPSE_FPS), COLLAPSE_LOW_FRAME))
+		_still = 0.0
+		return
+	if pose == "wake":
+		player.step(dt)
+		_still = 0.0
+		# Walking off mid-stretch ends it.
+		if player.finished() or world.speed() >= idle_speed:
+			pose = ""
+			player.play("idle")
+		return
 	if world.is_busy():
 		# Eating or drinking: lap / chew (the lick animation) until done.
 		if _action_seen != world.action:

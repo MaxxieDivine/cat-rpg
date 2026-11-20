@@ -48,6 +48,12 @@
 	"ui.icon_prey": "res://art/icon_prey.png",
 	"ui.icon_drop": "res://art/icon_drop.png",
 	"fx.ripple": "res://art/ripple.png",
+	"ground.hunting": "res://art/ground_hunting.png",
+	"decor.tall_grass_gold": "res://art/tall_grass_gold.png",
+	"decor.tuft_gold": "res://art/tuft_gold.png",
+	"decor.flower_white": "res://art/flower_white.png",
+	"decor.den": "res://art/den.png",
+	"decor.trail": "res://art/trail.png",
 	"font.dialogue": "res://fonts/PixelifySans.ttf",
 	"shader.sway": "res://shaders/sway.gdshader",
 	"shader.pond": "res://shaders/pond.gdshader"

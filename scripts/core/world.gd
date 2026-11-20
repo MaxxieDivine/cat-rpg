@@ -1,5 +1,6 @@
 extends RefCounted
-## The meadow: player movement, collision and interaction. Plain data, no
+## One area (the camp meadow, the Hunting Grounds...): player movement,
+## collision and interaction. Plain data, no
 ## Nodes, so it runs and tests headless. The view calls step() every frame with
 ## the input it read and interact() when the player presses interact; both
 ## return events (Dictionaries with a "type") for the view to show.
@@ -9,6 +10,13 @@ extends RefCounted
 ##
 ## Positions are "feet" positions in world pixels: the bottom-centre of a
 ## sprite. Footprints are small rects at the feet used for collision.
+##
+## Areas: each area is one JSON file like data/world.json (the camp), listed
+## in data/areas.json. An area has named `spawns` ({"pos", "facing"}) and
+## `exits` ({"id", "rect", "to" (area id), "spawn" (spawn name there)}).
+## Walking into an exit gives an "exit" event once; an exit only fires after
+## Fern has stood clear of every exit (so arriving next to one, or on one,
+## can never bounce her straight back). place_at_spawn() moves her.
 
 const JsonData := preload("res://scripts/core/json_data.gd")
 const WORLD_PATH := "res://data/world.json"
@@ -18,6 +26,9 @@ const MAX_STEP_PX := 2.0
 ## Longest frame we simulate; slower frames are slowed down, not skipped.
 const MAX_DT := 0.1
 
+## Area id and display name (data/areas.json, the area file's "id" / "name").
+var id := ""
+var display_name := ""
 var size := Vector2(480, 270)
 ## Where the player's footprint may be.
 var bounds := Rect2()
@@ -55,7 +66,8 @@ var npcs: Array[Dictionary] = []
 ## whole pacing loop) and Fern's start: side-view cats are wider than their
 ## footprints, so closer than this their sprites overlap.
 var npc_spacing := Vector2(24, 16)
-## Flat decals under everything (Sorrel's sunny spot). Each: {"art", "pos"}
+## Flat decals under everything (Sorrel's sunny spot, the den, the trail
+## out of an exit). Each: {"art", "pos" (centre), "flip"}
 var ground: Array[Dictionary] = []
 ## id of the NPC the player is talking to, or "".
 var talk_id := ""
@@ -84,6 +96,20 @@ var action := ""
 var action_t := 0.0
 var eat_s := 1.6
 var drink_s := 1.6
+## Named places Fern can appear: name -> {"pos", "facing"}. "start" is
+## world.json's player.start.
+var spawns: Dictionary = {}
+## Each: {"id", "rect", "to", "spawn"}. Walking into one gives an "exit" event.
+var exits: Array[Dictionary] = []
+## False until Fern stands clear of every exit (set again on each exit).
+var exits_armed := true
+## Where prey will appear (next milestone): each {"id", "pos"}.
+var prey_spots: Array[Dictionary] = []
+## Optional colour grade for this area (palette.json grade keys ->
+## colours), over the palette's own: the Hunting Grounds is more golden.
+var grade: Dictionary = {}
+## Gaps in the generated tree line: each [x, y, radius] (world px).
+var tree_gaps: Array[Vector3] = []
 
 var walk_speed := 70.0
 var run_speed := 125.0
@@ -113,6 +139,9 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 	eat_s = float(nd.get("eat_s", eat_s))
 	drink_s = float(nd.get("drink_s", drink_s))
 
+	id = str(w.get("id", ""))
+	display_name = str(w.get("name", id))
+	grade = w.get("grade", {})
 	size = _vec(w.get("size", [480, 270]))
 	var margin := float(w.get("edge_margin", 0))
 	bounds = Rect2(Vector2(margin, margin), size - Vector2(margin, margin) * 2.0)
@@ -131,6 +160,18 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 	var pl: Dictionary = w.get("player", {})
 	player_pos = _vec(pl.get("start", [size.x / 2, size.y / 2]))
 	player_footprint = _vec(pl.get("footprint", [12, 5]))
+	spawns["start"] = {"pos": player_pos, "facing": int(pl.get("facing", 1))}
+	var sp: Dictionary = w.get("spawns", {})
+	for n: String in sp:
+		spawns[n] = {"pos": _vec(sp[n].get("pos", [0, 0])), "facing": int(sp[n].get("facing", 1))}
+	for e: Dictionary in w.get("exits", []):
+		var r: Array = e.get("rect", [0, 0, 0, 0])
+		exits.append({"id": str(e.get("id", "")), "rect": Rect2(float(r[0]), float(r[1]), float(r[2]), float(r[3])),
+			"to": str(e.get("to", "")), "spawn": str(e.get("spawn", ""))})
+	for ps: Dictionary in w.get("prey_spots", []):
+		prey_spots.append({"id": str(ps.get("id", "")), "pos": _vec(ps.get("pos", [0, 0]))})
+	for g in w.get("tree_line", {}).get("gaps", []):
+		tree_gaps.append(Vector3(float(g[0]), float(g[1]), float(g[2])))
 
 	for n: Dictionary in w.get("npcs", []):
 		var npc := {
@@ -189,7 +230,7 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 	_rebuild_solids()
 
 	for g: Dictionary in w.get("ground", []):
-		ground.append({"art": str(g.get("art", "")), "pos": _vec(g.get("pos", [0, 0]))})
+		ground.append({"art": str(g.get("art", "")), "pos": _vec(g.get("pos", [0, 0])), "flip": bool(g.get("flip", false))})
 
 	var tg: Dictionary = w.get("tall_grass", {})
 	rng.seed = int(tg.get("seed", 0))
@@ -225,7 +266,107 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 			var pos := Vector2(rng.randi_range(4, int(size.x) - 4), rng.randi_range(8, int(size.y) - 2))
 			if _decor_spot_ok(pos):
 				decor.append({"art": art, "pos": pos})
+	_scatter(w.get("scatter", {}), types)
+	exits_armed = not _on_exit()
 	_update_focus()
+
+
+## Random fill for an area: decor (tufts, flowers) and small props (rocks)
+## inside rects, never on the path, a collider, an exit or a spawn point.
+## world.json "scatter": {"seed", "areas": [{"rect": [x, y, w, h],
+## "decor": {art key: count}, "props": {prop type: count}}]}. Important
+## things are placed by hand in "props"; this only fills in.
+func _scatter(sc: Dictionary, types: Dictionary) -> void:
+	if sc.is_empty():
+		return
+	rng.seed = int(sc.get("seed", 0))
+	for a: Dictionary in sc.get("areas", []):
+		var r: Array = a.get("rect", [0, 0, size.x, size.y])
+		var rect := Rect2(float(r[0]), float(r[1]), float(r[2]), float(r[3]))
+		var items: Dictionary = a.get("decor", {})
+		for art: String in items:
+			for i in int(items[art]):
+				var pos := _random_in(rect)
+				if _decor_spot_ok(pos) and not _near_solid(Rect2(pos - Vector2(2, 2), Vector2(4, 3))):
+					decor.append({"art": art, "pos": pos})
+		var props_in: Dictionary = a.get("props", {})
+		for kind: String in props_in:
+			var fp := _vec(types.get(kind, {}).get("footprint", [8, 4]))
+			for i in int(props_in[kind]):
+				# A few tries per prop; a crowded rect just gets fewer.
+				for attempt in 8:
+					var pos := _random_in(rect)
+					var fr := footprint_rect(pos, fp)
+					if _decor_spot_ok(pos) and not on_path(pos, fp.x / 2.0 + 2.0) and not _near_solid(fr.grow(10.0)) and _clear_of_paths_in(fr.grow(12.0)):
+						_add_prop({"type": kind, "pos": [pos.x, pos.y], "flip": rng.randf() < 0.5}, types)
+						break
+	_rebuild_solids()
+
+
+func _random_in(rect: Rect2) -> Vector2:
+	return Vector2(rng.randf_range(rect.position.x, rect.end.x), rng.randf_range(rect.position.y, rect.end.y)).round()
+
+
+func _near_solid(r: Rect2) -> bool:
+	for s in _prop_solids:
+		if s.intersects(r):
+			return true
+	for npc in npcs:
+		if npc_zone(npc).intersects(r):
+			return true
+	return false
+
+
+## Clear of exits and spawn points (so nothing ever blocks the way in or out).
+func _clear_of_paths_in(r: Rect2) -> bool:
+	for e in exits:
+		if (e["rect"] as Rect2).grow(16.0).intersects(r):
+			return false
+	for n: String in spawns:
+		if footprint_rect(spawns[n]["pos"], player_footprint).grow(16.0).intersects(r):
+			return false
+	return true
+
+
+## Puts Fern at spawn `name`, standing still and facing its way. Exits stay
+## quiet until she has stepped clear of them. False (and nothing moves) if
+## there is no such spawn.
+func place_at_spawn(name: String) -> bool:
+	if not spawns.has(name):
+		return false
+	player_pos = spawns[name]["pos"]
+	player_vel = Vector2.ZERO
+	running = false
+	facing = 1 if int(spawns[name]["facing"]) >= 0 else -1
+	talk_id = ""
+	action = ""
+	action_t = 0.0
+	exits_armed = not _on_exit()
+	_update_focus()
+	return true
+
+
+## The exit Fern's footprint touches, or {}.
+func exit_at_player() -> Dictionary:
+	var pr := player_rect()
+	for e in exits:
+		if (e["rect"] as Rect2).intersects(pr):
+			return e
+	return {}
+
+
+func _on_exit() -> bool:
+	return not exit_at_player().is_empty()
+
+
+func _check_exits(events: Array[Dictionary]) -> void:
+	var e := exit_at_player()
+	if e.is_empty():
+		exits_armed = true
+		return
+	if exits_armed and not is_talking() and not is_busy():
+		exits_armed = false
+		events.append({"type": "exit", "id": e["id"], "to": e["to"], "spawn": e["spawn"]})
 
 
 func _add_prop(pr: Dictionary, types: Dictionary) -> void:
@@ -278,7 +419,17 @@ func _add_tree_line(tl: Dictionary, types: Dictionary) -> void:
 		# Only the top row stands in the meadow; the others are canopies
 		# over the forest floor (no trunk, no shadow).
 		var inside := p.y >= 0.0 and p.y < size.y and p.x >= 0.0 and p.x <= size.x
+		if _in_tree_gap(p):
+			continue
 		_add_prop({"type": kinds[r.randi_range(0, kinds.size() - 1)], "pos": [roundf(p.x + j.x), roundf(p.y + j.y)], "flip": r.randf() < 0.5, "trunk": inside}, types)
+
+
+## Inside one of tree_line "gaps" (where a path leaves the area).
+func _in_tree_gap(p: Vector2) -> bool:
+	for g in tree_gaps:
+		if p.distance_to(Vector2(g.x, g.y)) <= g.z:
+			return true
+	return false
 
 
 func _decor_spot_ok(p: Vector2) -> bool:
@@ -449,6 +600,7 @@ func step(dt: float, move: Vector2, run: bool) -> Array[Dictionary]:
 	_update_focus()
 	if focus_id != old_focus:
 		events.append({"type": "focus", "id": focus_id})
+	_check_exits(events)
 	return events
 
 

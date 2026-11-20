@@ -281,3 +281,27 @@ func test_nearest_of_cat_and_pile_wins() -> void:
 	var ev: Array = w.interact(n)
 	check(ev.any(func(e): return e["type"] == "talk"), "interact talks to the focused cat")
 	check_eq(w.pile["prey"], int(wdata["fresh_catch"]["prey"]), "and doesn't eat")
+
+
+func test_collapsed_at_zero_and_restore() -> void:
+	var t: Dictionary = JsonData.load_dict("res://data/tuning.json")["needs"]
+	var n = Needs.new(t)
+	check(not n.collapsed(), "not collapsed at the start")
+	n.hunger = 0
+	check(n.collapsed(), "hunger at 0 collapses")
+	n.hunger = 40
+	n.thirst = 0
+	check(n.collapsed(), "thirst at 0 collapses")
+	n.restore()
+	check_eq(n.hunger, int(t["restore_hunger"]), "hunger restored")
+	check_eq(n.thirst, int(t["restore_thirst"]), "thirst restored")
+	check(not n.collapsed(), "rested")
+
+
+## Milestone 1.1: a trip to the Hunting Grounds (about a minute of walking
+## plus 3 minutes there) fits in a full bar of either need, with room left.
+func test_full_bars_last_a_hunting_trip() -> void:
+	var t: Dictionary = JsonData.load_dict("res://data/tuning.json")["needs"]
+	var trip_s := 4.0 * 60.0
+	check(float(t["max"]) * float(t["hunger_every_s"]) >= trip_s * 1.5, "a full hunger bar lasts 1.5 trips")
+	check(float(t["max"]) * float(t["thirst_every_s"]) >= trip_s * 1.5, "a full thirst bar lasts 1.5 trips")

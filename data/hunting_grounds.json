@@ -1,0 +1,91 @@
+{
+	"id": "hunting_grounds",
+	"name": "Hunting Grounds",
+	"size": [960, 420],
+	"edge_margin": 6,
+	"border": 72,
+	"background": "#a9ae52",
+	"ground_art": "ground.hunting",
+	"forest_art": "forest.tile",
+	"ground_paint": {
+		"seed": 7311,
+		"patch_frequency": 0.006,
+		"ramp": "grass_gold"
+	},
+	"grade": {"afternoon": "#ffe8b4", "dusk": "#e2a68c", "night": "#5a6094"},
+	"player": {
+		"start": [44, 218],
+		"footprint": [12, 5]
+	},
+	"spawns": {
+		"from_camp": {"pos": [44, 218], "facing": 1}
+	},
+	"exits": [
+		{"id": "to_camp", "rect": [6, 198, 14, 36], "to": "camp", "spawn": "from_hunting"}
+	],
+	"prey_spots": [
+		{"id": "spot_1", "pos": [292, 104]},
+		{"id": "spot_2", "pos": [575, 282]},
+		{"id": "spot_3", "pos": [800, 135]},
+		{"id": "spot_4", "pos": [410, 342]}
+	],
+	"npc_spacing": [24, 16],
+	"npcs": [],
+	"path": {
+		"width": 11,
+		"lines": [[[-8, 216], [40, 218], [96, 210], [150, 196], [196, 188]]]
+	},
+	"ground": [
+		{"art": "decor.trail", "pos": [-18, 216], "flip": true}
+	],
+	"prop_types": {
+		"bush_round": {"art": "prop.bush_round", "footprint": [19, 5], "shadow": "shadow.m", "sway": "bush", "rustle": true},
+		"bush_wide": {"art": "prop.bush_wide", "footprint": [26, 5], "shadow": "shadow.m", "sway": "bush", "rustle": true},
+		"bush_small": {"art": "prop.bush_small", "footprint": [11, 4], "shadow": "shadow.s", "sway": "bush", "rustle": true},
+		"rock_big": {"art": "prop.rock_big", "footprint": [14, 4], "shadow": "shadow.s"},
+		"rock_small": {"art": "prop.rock_small", "footprint": [7, 3], "shadow": "shadow.s"},
+		"log": {"art": "prop.log", "footprint": [22, 4], "shadow": "shadow.m"},
+		"tree_a": {"art": "prop.trunk", "canopy": "prop.canopy_a", "canopy_offset": [0, -22], "footprint": [8, 4], "shadow": "shadow.xl", "sway": "canopy"},
+		"tree_b": {"art": "prop.trunk", "canopy": "prop.canopy_b", "canopy_offset": [0, -20], "footprint": [8, 4], "shadow": "shadow.l", "sway": "canopy"}
+	},
+	"props": [
+		{"type": "bush_round", "pos": [36, 192]},
+		{"type": "bush_small", "pos": [34, 250]},
+		{"type": "bush_wide", "pos": [330, 210]},
+		{"type": "bush_round", "pos": [610, 90]},
+		{"type": "bush_round", "pos": [880, 250], "flip": true},
+		{"type": "bush_small", "pos": [470, 180]},
+		{"type": "bush_wide", "pos": [200, 350], "flip": true},
+		{"type": "rock_big", "pos": [420, 130]},
+		{"type": "rock_big", "pos": [700, 360]},
+		{"type": "rock_big", "pos": [880, 90]},
+		{"type": "log", "pos": [560, 200]},
+		{"type": "log", "pos": [118, 300]},
+		{"type": "tree_b", "pos": [760, 230]},
+		{"type": "tree_a", "pos": [470, 30]}
+	],
+	"tree_line": {
+		"seed": 412,
+		"spacing": 30,
+		"jitter": 7,
+		"types": ["tree_a", "tree_b"],
+		"top_y": 10,
+		"bottom_y": 451,
+		"left_x": -18,
+		"right_x": 978,
+		"gaps": [[-18, 236, 50]]
+	},
+	"tall_grass": {
+		"art": "decor.tall_grass_gold",
+		"seed": 2207,
+		"patches": [{"rect": [240, 80, 110, 60], "count": 40}, {"rect": [500, 250, 140, 70], "count": 50}, {"rect": [740, 110, 110, 60], "count": 38}, {"rect": [360, 320, 100, 50], "count": 30}, {"rect": [810, 290, 90, 50], "count": 28}]
+	},
+	"flowers": {
+		"seed": 5150,
+		"clusters": [{"pos": [180, 150], "radius": 16, "count": 12, "colors": ["yellow"]}, {"pos": [640, 170], "radius": 18, "count": 14, "colors": ["yellow", "white"]}, {"pos": [880, 170], "radius": 14, "count": 9, "colors": ["white"]}, {"pos": [90, 370], "radius": 16, "count": 10, "colors": ["yellow"]}, {"pos": [560, 380], "radius": 14, "count": 9, "colors": ["yellow", "white"]}]
+	},
+	"scatter": {
+		"seed": 3301,
+		"areas": [{"rect": [12, 24, 936, 384], "decor": {"decor.tuft_gold": 90, "decor.flower_yellow": 24, "decor.flower_white": 14}, "props": {"rock_small": 7}}]
+	}
+}
