@@ -25,7 +25,7 @@
 	"npc_spacing": [24, 16],
 	"npcs": [
 		{"id": "bram", "art": "cat.bram.sit", "pos": [292, 196], "footprint": [20, 5], "talk_radius": 22, "behavior": "sit", "facing": -1, "dialogue": "res://data/dialogue/bram.json"},
-		{"id": "sorrel", "art": "cat.sorrel.sleep", "pos": [172, 128], "footprint": [22, 5], "talk_radius": 22, "behavior": "lie", "facing": 1, "dialogue": "res://data/dialogue/sorrel.json"},
+		{"id": "sorrel", "art": "cat.sorrel.sleep", "pos": [172, 128], "footprint": [22, 5], "talk_radius": 22, "behavior": "lie", "facing": 1, "dialogue": "res://data/dialogue/sorrel.json", "gift": "hunt.sorrel_thanks"},
 		{"id": "wick", "art": "cat.wick.idle", "path": [[542, 224], [584, 224], [584, 236], [542, 236]], "speed": 18, "pause": 0.7, "footprint": [16, 5], "talk_radius": 22, "behavior": "pace", "dialogue": "res://data/dialogue/wick.json"}
 	],
 	"path": {
@@ -40,7 +40,7 @@
 		"lap_radius": 40,
 		"drink_radius": 12
 	},
-	"fresh_catch": {"art": "prop.fresh_catch", "pos": [104, 194], "footprint": [18, 5], "talk_radius": 22, "prey": 5, "max": 5, "refill_s": 60, "shadow": "shadow.m"},
+	"fresh_catch": {"art": "prop.fresh_catch", "pos": [104, 194], "footprint": [18, 5], "talk_radius": 22, "prey": 5, "max": 8, "shadow": "shadow.m"},
 	"ground": [
 		{"art": "decor.sunspot", "pos": [170, 126]},
 		{"art": "decor.den", "pos": [140, 166]},

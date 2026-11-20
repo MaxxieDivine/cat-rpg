@@ -2,7 +2,7 @@
 	"title.name": "Cat RPG",
 	"title.start_touch": "Tap to start",
 	"title.start_desktop": "Click or press Enter to start",
-	"title.controls_desktop": "Move: WASD / arrows   Trot: Shift   Interact: E / Space",
+	"title.controls_desktop": "Move: WASD / arrows   Trot: Shift   Crouch: C / Ctrl   Interact / pounce: E / Space",
 	"title.controls_touch": "Left thumb: move (push far to trot)   Paw: interact",
 	"rotate.touch": "Rotate your phone",
 	"rotate.desktop": "Make the window wider",
@@ -19,5 +19,14 @@
 	"collapse.continue_keys": "Press E to continue",
 	"hud.area": "{area} @ {spawn}",
 	"debug.hunger": "Hunger 5",
-	"debug.thirst": "Thirst 5"
+	"debug.thirst": "Thirst 5",
+	"hunt.pile_full": "The pile is full.",
+	"hunt.sorrel_thanks": "Sorrel: \"For me? Thank you, young one.\"",
+	"hunt.delivered": "Fresh-kill for the Clan.",
+	"hunt.ate": "You ate the mouse.",
+	"ui.crouch": "Crouch",
+	"ui.pounce": "Pounce",
+	"ui.eat": "Eat",
+	"debug.mouse": "Mouse",
+	"hud.mouse": "{spot} {state} {alert}%"
 }

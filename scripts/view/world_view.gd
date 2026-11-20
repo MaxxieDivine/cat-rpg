@@ -26,6 +26,15 @@ extends Node2D
 ## exports) and prey spots Marker2D nodes, under "Markers"; both are
 ## invisible in play. An area may override the palette's grade colours
 ## (world.grade: the Hunting Grounds is more golden).
+## Hunting: mice (life.mouse sheet) are y-sorted with Fern, so tall grass
+## hides them; feeding mice shake the blades near them now and then (the
+## sign to look for). A "!" (ui.alert_mark) bobs over a mouse with its head
+## up; an alert bar shows over mice near Fern; the landing ring
+## (ui.pounce_ring, on the ground under it) marks the mouse a pounce would go for. Fern crouches in
+## the low frames of her stretch, leaps (her sprite rises, her shadow stays
+## on the ground), bounces after a catch and carries the mouse in her mouth
+## (life.mouse_carried, hunt.mouth_px from her feet). These go on the
+## Overlay layer so they stay readable at night.
 ## Passing out: `pose` "down" sinks Fern into the low crouch of her stretch
 ## and holds it; "wake" plays the whole stretch, then she is herself again.
 
@@ -125,6 +134,17 @@ var _pose_t := 0.0
 ## AreaExit nodes and prey-spot markers (Marker2D, named after the spot).
 var exit_nodes: Array[Node2D] = []
 var prey_markers: Array[Marker2D] = []
+## Mouse sprites and their "!" marks by mouse id; the landing ring; the
+## mouse in Fern's mouth; her shadow while she leaps.
+var mouse_nodes: Dictionary = {}
+var mouse_marks: Dictionary = {}
+var ring: Sprite2D
+var mouth: Sprite2D
+var fern_shadow: Sprite2D
+var alert_bars: Node2D
+var _hunt: Dictionary = {}
+var _mouse_rustle_t: Dictionary = {}
+var _palette_ui: Dictionary = {}
 
 
 func setup(w, tuning: Dictionary, day_cycle = null) -> void:
@@ -252,6 +272,20 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 	player.setup(PLAYER_ID)
 	player.position = world.player_pos.round()
 	_sorted.add_child(player)
+	mouth = Sprite2D.new()
+	mouth.name = "Mouth"
+	mouth.texture = AssetCatalog.texture("life.mouse_carried")
+	mouth.centered = false
+	mouth.offset = -(mouth.texture.get_size() / 2.0).floor()
+	mouth.visible = false
+	player.add_child(mouth)
+	fern_shadow = Sprite2D.new()
+	fern_shadow.name = "FernShadow"
+	fern_shadow.texture = AssetCatalog.texture("shadow.s")
+	fern_shadow.centered = false
+	fern_shadow.offset = -(fern_shadow.texture.get_size() / 2.0).floor()
+	fern_shadow.visible = false
+	_ground.add_child(fern_shadow)
 	for blade: Dictionary in world.tall_grass:
 		var s := _sprite(blade["art"], blade["pos"])
 		s.flip_h = blade["flip"]
@@ -277,6 +311,20 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 	paw.centered = false
 	paw.visible = false
 	overlay.add_child(paw)
+	_hunt = tuning.get("hunt", {})
+	_palette_ui = palette.get("ui", {})
+	ring = Sprite2D.new()
+	ring.name = "PounceRing"
+	ring.texture = AssetCatalog.texture("ui.pounce_ring")
+	ring.centered = false
+	ring.offset = -(ring.texture.get_size() / 2.0).floor()
+	ring.visible = false
+	# Under the mouse (the Ground layer), so it never hides it.
+	_ground.add_child(ring)
+	alert_bars = Node2D.new()
+	alert_bars.name = "AlertBars"
+	alert_bars.draw.connect(_draw_alert_bars)
+	overlay.add_child(alert_bars)
 	meow = Sprite2D.new()
 	meow.name = "Meow"
 	meow.texture = AssetCatalog.texture(MEOW_KEY)
@@ -428,9 +476,10 @@ func _draw_forest() -> void:
 ## Copies the world state onto the sprites. Positions are whole pixels.
 func sync(dt: float = 0.0) -> void:
 	_t += dt
-	player.position = world.player_pos.round()
+	player.position = world.player_pos.round() - Vector2(0, roundf(world.leap_height()))
 	player.flip_h = world.facing < 0
 	_sync_player(dt)
+	_sync_hunt(dt)
 	for npc: Dictionary in world.npcs:
 		var id: String = npc["id"]
 		npc_nodes[id].sync(npc, dt, world.focus_id == id, world.talk_id == id)
@@ -438,7 +487,7 @@ func sync(dt: float = 0.0) -> void:
 		pile.sync(world.pile)
 	_sync_ripple()
 	var focus: String = world.focus_id
-	paw.visible = focus != "" and not world.is_talking() and not world.is_busy()
+	paw.visible = focus != "" and not world.is_talking() and not world.is_busy() and not world.is_leaping()
 	if paw.visible:
 		var head := focus_head()
 		var bob := roundf((0.5 + 0.5 * sin(_t * TAU * bob_hz)) * bob_px)
@@ -601,6 +650,27 @@ func _sync_player(dt: float) -> void:
 			pose = ""
 			player.play("idle")
 		return
+	if world.is_leaping():
+		# Mid-air: stretched out like a trot stride.
+		player.hold("run", 2)
+		_still = 0.0
+		return
+	if world.is_busy() and world.action in ["catch", "stumble", "drop"]:
+		_still = 0.0
+		_action_seen = world.action
+		match world.action:
+			"catch":
+				# A tiny happy bounce.
+				var k: float = world.action_t / maxf(0.01, world.hunt_tuning.catch_s)
+				player.play("idle")
+				player.step(dt)
+				player.position.y -= roundf(sin(k * PI * 2.0) * 2.0) if k > 0.5 else 0.0
+			"stumble":
+				player.hold(COLLAPSE_ANIM, 1)
+			_:
+				player.play("idle")
+				player.step(dt)
+		return
 	if world.is_busy():
 		# Eating or drinking: lap / chew (the lick animation) until done.
 		if _action_seen != world.action:
@@ -610,6 +680,14 @@ func _sync_player(dt: float) -> void:
 		player.step(dt)
 		if player.finished():
 			player.play(ACTION_ANIM, true)
+		return
+	if world.crouching:
+		# Stalking: low, shuffling between the two lowest stretch frames.
+		_still = 0.0
+		if world.speed() >= idle_speed:
+			player.hold(COLLAPSE_ANIM, 1 + int(world.distance / 4.0) % 2)
+		else:
+			player.hold(COLLAPSE_ANIM, COLLAPSE_LOW_FRAME)
 		return
 	if _action_seen != "":
 		_action_seen = ""
@@ -633,6 +711,108 @@ func _sync_player(dt: float) -> void:
 		return
 	player.play("idle")
 	player.step(dt)
+
+
+## Mice, their "!" and alert bars, the landing ring, the mouse in Fern's
+## mouth, her leap shadow, and grass shaking over feeding mice.
+func _sync_hunt(dt: float) -> void:
+	var carrying: bool = world.carrying() != ""
+	mouth.visible = carrying
+	if carrying:
+		var mp: Array = _hunt.get("mouth_px", [9, -6])
+		mouth.position = Vector2(float(mp[0]) * world.facing, float(mp[1]))
+		mouth.flip_h = world.facing < 0
+	fern_shadow.visible = world.is_leaping()
+	if fern_shadow.visible:
+		fern_shadow.position = (world.player_pos + Vector2(0, -1)).round()
+	var target: Dictionary = world.pounce_target()
+	ring.visible = not target.is_empty()
+	if ring.visible:
+		ring.position = (target["pos"] as Vector2).round() + Vector2(0, -1)
+	alert_bars.queue_redraw()
+	if world.hunt == null:
+		return
+	var seen := {}
+	var every: Array = _hunt.get("rustle_every", [0.9, 1.8])
+	for m: Dictionary in world.hunt.mice:
+		var id: int = m["id"]
+		seen[id] = true
+		if not mouse_nodes.has(id):
+			var s := Sprite2D.new()
+			s.name = "Mouse%d" % id
+			s.texture = AssetCatalog.texture("life.mouse")
+			s.hframes = 5
+			s.centered = false
+			s.offset = Vector2(-6, -8)
+			_sorted.add_child(s)
+			mouse_nodes[id] = s
+			var mk := Sprite2D.new()
+			mk.name = "Alert%d" % id
+			mk.texture = AssetCatalog.texture("ui.alert_mark")
+			mk.centered = false
+			overlay.add_child(mk)
+			mouse_marks[id] = mk
+			_mouse_rustle_t[id] = _rng.randf_range(0.2, 1.0)
+		var sp: Sprite2D = mouse_nodes[id]
+		var pos: Vector2 = (m["pos"] as Vector2).round()
+		sp.position = pos
+		sp.flip_h = m["facing"] < 0
+		match m["state"]:
+			"feed":
+				# Nibbles in short bursts.
+				sp.frame = int(_t * 6.0) % 2 if int(_t * 1.3 + id) % 2 == 0 else 0
+			"look":
+				sp.frame = 2
+			_:
+				sp.frame = 3 + int(_t * 12.0) % 2
+		var mk: Sprite2D = mouse_marks[id]
+		mk.visible = m["state"] == "look"
+		if mk.visible:
+			var bob := roundf(0.5 + 0.5 * sin(_t * TAU * 2.0))
+			mk.position = pos + Vector2(float(m["facing"]) * 3.0 - 1.0, -22.0 - bob)
+		# The grass over a feeding mouse shakes now and then.
+		if m["state"] != "look" and dt > 0.0:
+			_mouse_rustle_t[id] -= dt
+			if _mouse_rustle_t[id] <= 0.0:
+				_mouse_rustle_t[id] = _rng.randf_range(float(every[0]), float(every[1]))
+				_shake_grass_near(pos, 12.0)
+	for id in mouse_nodes.keys():
+		if not seen.has(id):
+			mouse_nodes[id].queue_free()
+			mouse_marks[id].queue_free()
+			mouse_nodes.erase(id)
+			mouse_marks.erase(id)
+			_mouse_rustle_t.erase(id)
+
+
+## Gives the tall-grass blades near `p` a rustle (no sound: a mouse is quiet).
+func _shake_grass_near(p: Vector2, radius: float) -> void:
+	var dur := float(_wind.get("rustle_s", 0.45))
+	for r in _rustlers:
+		var n: Sprite2D = r["node"]
+		if n.position.distance_to(p) <= radius and r["t"] <= 0.0:
+			r["t"] = dur
+			r["dir"] = 1.0 if _rng.randf() < 0.5 else -1.0
+
+
+## A small bar over each mouse near Fern: how close it is to bolting.
+func _draw_alert_bars() -> void:
+	if world == null or world.hunt == null:
+		return
+	var show := float(world.hunt_tuning.show_px)
+	var back := Color(str(_palette_ui.get("bar_back", "#3a3444")))
+	var calm := Color(str(_palette_ui.get("select", "#ffd873")))
+	var scared := Color(str(palette.get("berry", "#d8465a")))
+	var ink := Color(str(palette.get("ink", "#1c1824")))
+	for m: Dictionary in world.hunt.mice:
+		if m["state"] == "flee" or world.player_pos.distance_to(m["pos"]) > show:
+			continue
+		var at: Vector2 = (m["pos"] as Vector2).round() + Vector2(-6, -12)
+		alert_bars.draw_rect(Rect2(at, Vector2(12, 3)), ink)
+		alert_bars.draw_rect(Rect2(at + Vector2(1, 1), Vector2(10, 1)), back)
+		var w := roundf(10.0 * float(m["alert"]))
+		if w > 0.0:
+			alert_bars.draw_rect(Rect2(at + Vector2(1, 1), Vector2(w, 1)), calm.lerp(scared, float(m["alert"])))
 
 
 ## A cat starts speaking: it meows (if it can in its pose) and a "meow"

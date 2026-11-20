@@ -17,6 +17,7 @@ DialogueManager="*res://scripts/autoload/dialogue_manager.gd"
 Settings="*res://scripts/autoload/settings.gd"
 Needs="*res://scripts/autoload/needs.gd"
 Player="*res://scripts/autoload/player.gd"
+Hunting="*res://scripts/autoload/hunting.gd"
 
 [audio]
 

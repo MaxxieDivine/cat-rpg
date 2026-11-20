@@ -11,6 +11,14 @@ extends RefCounted
 ## Positions are "feet" positions in world pixels: the bottom-centre of a
 ## sprite. Footprints are small rects at the feet used for collision.
 ##
+## Hunting (an area with prey_spots has a `hunt`, scripts/core/hunt.gd): a
+## crouch flag in step() slows Fern to hunt_tuning.crouch_speed; pounce()
+## leaps her in leap_s to the nearest mouse in range (crouched, carrying
+## nothing), control locked; landing catches it (player_state.carried_item =
+## "mouse", a short "catch" pause) or misses (it runs, a "stumble" pause).
+## Carrying, interact delivers it to the fresh-catch pile (+1), gives it to a
+## cat with a `gift` line (Sorrel), or with nothing in focus eats it.
+##
 ## Areas: each area is one JSON file like data/world.json (the camp), listed
 ## in data/areas.json. An area has named `spawns` ({"pos", "facing"}) and
 ## `exits` ({"id", "rect", "to" (area id), "spawn" (spawn name there)}).
@@ -19,6 +27,11 @@ extends RefCounted
 ## can never bounce her straight back). place_at_spawn() moves her.
 
 const JsonData := preload("res://scripts/core/json_data.gd")
+const Hunt := preload("res://scripts/core/hunt.gd")
+const HuntTuning := preload("res://scripts/core/hunt_tuning.gd")
+const PlayerState := preload("res://scripts/core/player_state.gd")
+## What Fern carries after a catch (player_state.carried_item).
+const MOUSE := "mouse"
 const WORLD_PATH := "res://data/world.json"
 const TUNING_PATH := "res://data/tuning.json"
 ## Longest distance the player moves in one collision sub-step (px).
@@ -86,7 +99,8 @@ var focus_id := ""
 const PILE_ID := "fresh_catch"
 const POND_ID := "pond"
 ## The fresh-catch pile: {"id", "art", "pos", "footprint", "rect",
-## "talk_radius", "prey", "max", "refill_s", "refill_t", "shadow"} or empty.
+## "talk_radius", "prey", "max", "shadow"} or empty. It never refills by
+## itself: hunting is the only way (deliver()).
 var pile: Dictionary = {}
 ## How close to the water's edge Fern must be to drink (world px).
 var drink_radius := 12.0
@@ -96,6 +110,17 @@ var action := ""
 var action_t := 0.0
 var eat_s := 1.6
 var drink_s := 1.6
+## Mice here (null in an area without prey_spots), and the shared hunting
+## numbers (game.gd swaps in the Hunting autoload's, for the Inspector).
+var hunt = null
+var hunt_tuning = HuntTuning.new()
+## Fern's carried item lives here (game.gd passes the Player autoload's).
+var player_state = PlayerState.new()
+## Crouched (stalking) this frame.
+var crouching := false
+## The leap of a pounce: {"from", "to", "t", "mouse"} or {}.
+var leap: Dictionary = {}
+var _hunt_filled := false
 ## Named places Fern can appear: name -> {"pos", "facing"}. "start" is
 ## world.json's player.start.
 var spawns: Dictionary = {}
@@ -135,6 +160,8 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 	run_speed = float(p.get("run_speed", run_speed))
 	accel = float(p.get("accel", accel))
 	decel = float(p.get("decel", decel))
+	if t.has("hunt"):
+		hunt_tuning = HuntTuning.new(t["hunt"])
 	var nd: Dictionary = t.get("needs", {})
 	eat_s = float(nd.get("eat_s", eat_s))
 	drink_s = float(nd.get("drink_s", drink_s))
@@ -184,6 +211,7 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 			"dialogue": str(n.get("dialogue", "")),
 			"behavior": str(n.get("behavior", "stand")),
 			"facing": int(n.get("facing", 1)),
+			"gift": str(n.get("gift", "")),
 			"moving": false,
 			"distance": 0.0,
 		}
@@ -224,7 +252,6 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 		pile = {"id": PILE_ID, "art": str(fc.get("art", "")), "pos": fpos, "footprint": ffp,
 			"rect": footprint_rect(fpos, ffp), "talk_radius": float(fc.get("talk_radius", 22)),
 			"max": most, "prey": clampi(int(fc.get("prey", most)), 0, most),
-			"refill_s": float(fc.get("refill_s", 60)), "refill_t": 0.0,
 			"shadow": str(fc.get("shadow", ""))}
 		_prop_solids.append(pile["rect"])
 	_rebuild_solids()
@@ -267,6 +294,8 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 			if _decor_spot_ok(pos):
 				decor.append({"art": art, "pos": pos})
 	_scatter(w.get("scatter", {}), types)
+	if not prey_spots.is_empty():
+		hunt = Hunt.new(prey_spots, tall_grass_patches, int(w.get("hunt_seed", 1)), hunt_tuning)
 	exits_armed = not _on_exit()
 	_update_focus()
 
@@ -341,6 +370,7 @@ func place_at_spawn(name: String) -> bool:
 	talk_id = ""
 	action = ""
 	action_t = 0.0
+	leap = {}
 	exits_armed = not _on_exit()
 	_update_focus()
 	return true
@@ -564,24 +594,33 @@ func speed() -> float:
 
 
 ## Advances the world by dt seconds. `move` is the wanted direction; its
-## length (0..1) scales speed, so a half-pushed stick walks slowly.
-func step(dt: float, move: Vector2, run: bool) -> Array[Dictionary]:
+## length (0..1) scales speed, so a half-pushed stick walks slowly. `crouch`
+## stalks at hunt_tuning.crouch_speed (no trotting).
+func step(dt: float, move: Vector2, run: bool, crouch: bool = false) -> Array[Dictionary]:
 	dt = clampf(dt, 0.0, MAX_DT)
 	var events: Array[Dictionary] = []
-	if is_talking() or is_busy():
+	if is_talking() or is_busy() or is_leaping():
 		move = Vector2.ZERO
+		run = false
+	crouching = crouch and not is_talking()
+	if crouching:
 		run = false
 	if is_busy():
 		action_t = maxf(0.0, action_t - dt)
 		if action_t <= 0.0:
 			events.append({"type": "action_done", "action": action})
 			action = ""
-	_step_pile(dt, events)
 	_step_npcs(dt)
+	if is_leaping():
+		_step_leap(dt, events)
+		_step_hunt(dt, true, events)
+		return events
 	if move.length() > 1.0:
 		move = move.normalized()
 	running = run and move.length() > 0.0
 	var top := run_speed if running else walk_speed
+	if crouching:
+		top = hunt_tuning.crouch_speed
 	var target := move * top
 	var rate := accel if target.length() > 0.0 else decel
 	player_vel = player_vel.move_toward(target, rate * dt)
@@ -601,7 +640,110 @@ func step(dt: float, move: Vector2, run: bool) -> Array[Dictionary]:
 	if focus_id != old_focus:
 		events.append({"type": "focus", "id": focus_id})
 	_check_exits(events)
+	_step_hunt(dt, speed() >= hunt_tuning.still_speed, events)
 	return events
+
+
+func _step_hunt(dt: float, moving: bool, events: Array[Dictionary]) -> void:
+	if hunt == null:
+		return
+	hunt.tuning = hunt_tuning
+	if not _hunt_filled:
+		_hunt_filled = true
+		events.append_array(hunt.fill(player_pos))
+	events.append_array(hunt.step(dt, {"pos": player_pos, "moving": moving, "crouched": crouching}))
+
+
+# --- Hunting
+
+
+func is_leaping() -> bool:
+	return not leap.is_empty()
+
+
+func carrying() -> String:
+	return player_state.carried_item if player_state != null else ""
+
+
+## The mouse a pounce would go for now ({} if none): crouched, carrying
+## nothing, not mid-leap / talk / meal, a mouse within pounce_range.
+func pounce_target() -> Dictionary:
+	if hunt == null or not crouching or carrying() != "" or is_talking() or is_busy() or is_leaping():
+		return {}
+	return hunt.pounce_target(player_pos)
+
+
+func can_pounce() -> bool:
+	return not pounce_target().is_empty()
+
+
+## Leaps at the nearest mouse in range. Lands where the mouse is (or as near
+## as the colliders allow) after leap_s; see _step_leap().
+func pounce() -> Array[Dictionary]:
+	var m := pounce_target()
+	if m.is_empty():
+		return []
+	var to := _landing_spot(m["pos"])
+	leap = {"from": player_pos, "to": to, "t": 0.0, "mouse": m["id"]}
+	player_vel = Vector2.ZERO
+	running = false
+	if absf(to.x - player_pos.x) >= 1.0:
+		facing = 1 if to.x > player_pos.x else -1
+	return [{"type": "pounce", "id": m["id"], "to": to}]
+
+
+## How high Fern is in her leap (world px, 0 on the ground).
+func leap_height() -> float:
+	if not is_leaping():
+		return 0.0
+	var u := clampf(leap["t"] / maxf(0.01, hunt_tuning.leap_s), 0.0, 1.0)
+	return hunt_tuning.leap_height * 4.0 * u * (1.0 - u)
+
+
+## Where on the line to `target` Fern can land without standing in a collider.
+func _landing_spot(target: Vector2) -> Vector2:
+	var from := player_pos
+	for i in range(10, -1, -1):
+		var p := from.lerp(target, i / 10.0)
+		var r := footprint_rect(p, player_footprint)
+		if bounds.encloses(r) and not solids.any(func(s: Rect2) -> bool: return s.intersects(r)):
+			return p
+	return from
+
+
+func _step_leap(dt: float, events: Array[Dictionary]) -> void:
+	leap["t"] += dt
+	var u := clampf(leap["t"] / maxf(0.01, hunt_tuning.leap_s), 0.0, 1.0)
+	var before := player_pos
+	player_pos = (leap["from"] as Vector2).lerp(leap["to"], u)
+	distance += before.distance_to(player_pos)
+	if u < 1.0:
+		return
+	var id: int = leap["mouse"]
+	leap = {}
+	var caught: bool = hunt != null and hunt.land(id)
+	if caught:
+		player_state.carried_item = MOUSE
+		_begin_action("catch", hunt_tuning.catch_s, player_pos + Vector2(facing, 0))
+		events.append({"type": "catch", "id": id})
+	else:
+		_begin_action("stumble", hunt_tuning.stumble_s, player_pos + Vector2(facing, 0))
+		events.append({"type": "miss", "id": id})
+	_update_focus()
+
+
+## Eats what Fern carries (the phone's Eat button; interact with nothing in
+## focus does the same): +hunger like a bite from the pile.
+func eat_carried(needs = null) -> Array[Dictionary]:
+	if carrying() == "" or is_talking() or is_busy() or is_leaping():
+		return []
+	if needs != null and needs.is_full():
+		return [{"type": "message", "key": "needs.not_hungry"}]
+	player_state.carried_item = ""
+	if needs != null:
+		needs.eat()
+	_begin_action("eat", eat_s, player_pos + Vector2(facing, 0))
+	return [{"type": "eat", "carried": true}]
 
 
 ## The player pressed interact, on whatever has focus:
@@ -612,8 +754,20 @@ func step(dt: float, move: Vector2, run: bool) -> Array[Dictionary]:
 ## Eating and drinking face the thing and lock movement for eat_s / drink_s.
 ## `needs` is a scripts/core/needs.gd (null: eat / drink change nothing).
 func interact(needs = null) -> Array[Dictionary]:
-	if is_talking() or is_busy():
+	if is_talking() or is_busy() or is_leaping():
 		return []
+	if carrying() != "":
+		var gift := npc_by_id(focus_id)
+		if focus_id == PILE_ID:
+			return _deliver()
+		if not gift.is_empty() and gift["gift"] != "":
+			player_state.carried_item = ""
+			begin_talk(gift["id"])
+			end_talk()
+			_begin_action("drop", 0.4, gift["pos"])
+			return [{"type": "give", "id": gift["id"]}, {"type": "message", "key": gift["gift"]}]
+		if focus_id == "":
+			return eat_carried(needs)
 	if focus_id == PILE_ID:
 		if needs != null and needs.is_full():
 			return [{"type": "message", "key": "needs.not_hungry"}]
@@ -673,19 +827,14 @@ func _begin_action(kind: String, seconds: float, toward: Vector2) -> void:
 		facing = 1 if toward.x > player_pos.x else -1
 
 
-## Temporary refill: one prey every refill_s while the pile isn't full
-## (hunting and patrols replace this later). Emits "pile" when it grows.
-func _step_pile(dt: float, events: Array[Dictionary]) -> void:
-	if pile.is_empty():
-		return
-	if pile["prey"] >= pile["max"] or pile["refill_s"] <= 0.0:
-		pile["refill_t"] = 0.0
-		return
-	pile["refill_t"] += dt
-	if pile["refill_t"] >= pile["refill_s"]:
-		pile["refill_t"] -= pile["refill_s"]
-		pile["prey"] += 1
-		events.append({"type": "pile", "prey": pile["prey"]})
+## Drops the carried mouse on the fresh-catch pile (+1), unless it's full.
+func _deliver() -> Array[Dictionary]:
+	if pile["prey"] >= pile["max"]:
+		return [{"type": "message", "key": "hunt.pile_full"}]
+	player_state.carried_item = ""
+	pile["prey"] += 1
+	_begin_action("drop", 0.4, pile["pos"])
+	return [{"type": "deliver", "prey": pile["prey"]}, {"type": "pile", "prey": pile["prey"]}]
 
 
 ## Locks movement, stops the cat and the NPC, and turns them to face each other.

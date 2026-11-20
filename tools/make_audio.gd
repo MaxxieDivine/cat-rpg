@@ -33,6 +33,10 @@ func _initialize() -> void:
 		ok = _save("sfx/step_path_%d" % (i + 1), _step_path(i)) and ok
 		ok = _save("sfx/pond_lap_%d" % (i + 1), _lap(i)) and ok
 	ok = _save("sfx/rustle", _rustle()) and ok
+	for i in 2:
+		ok = _save("sfx/squeak_%d" % (i + 1), _squeak(i)) and ok
+	ok = _save("sfx/pounce", _pounce()) and ok
+	ok = _save("sfx/catch", _notes([880.0, 1320.0, 1760.0], 0.05, 0.35)) and ok
 	ok = _save("ui/open", _notes([660.0, 990.0], 0.05, 0.35)) and ok
 	ok = _save("ui/move", _tick(1500.0, 0.03, 0.25)) and ok
 	ok = _save("ui/confirm", _notes([740.0, 1110.0], 0.06, 0.4)) and ok
@@ -236,6 +240,38 @@ func _chirp(variant: int) -> PackedFloat32Array:
 				b[i0 + i] += sin(phase) * env * 0.5
 		t += dur + _rng.randf_range(0.03, 0.07)
 	return _normalize(b, 0.7)
+
+
+## A mouse's squeak: two or three tiny high peeps.
+func _squeak(variant: int) -> PackedFloat32Array:
+	_rng.seed = 1100 + variant
+	var b := _buf(0.35)
+	var t := 0.0
+	for c in 2 + variant:
+		var dur := _rng.randf_range(0.035, 0.06)
+		var f0 := _rng.randf_range(3800.0, 4600.0)
+		var i0 := int(t * RATE)
+		var phase := 0.0
+		for i in int(dur * RATE):
+			var u := float(i) / (dur * RATE)
+			phase += TAU * (f0 + sin(u * PI) * 900.0) / RATE
+			if i0 + i < b.size():
+				b[i0 + i] += sin(phase) * sin(PI * u) * 0.5
+		t += dur + _rng.randf_range(0.04, 0.08)
+	return _normalize(b, 0.6)
+
+
+## A pounce: a quick rising swish of air and grass.
+func _pounce() -> PackedFloat32Array:
+	_rng.seed = 1200
+	var b := _noise(0.3)
+	var lo := b.duplicate()
+	_lowpass(lo, 700.0)
+	for i in b.size():
+		var u := float(i) / b.size()
+		b[i] = (b[i] - lo[i]) * sin(PI * u) * (0.4 + u)
+	_lowpass(b, 4000.0)
+	return _normalize(b, 0.5)
 
 
 ## A soft swish of grass underfoot.

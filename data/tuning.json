@@ -14,7 +14,10 @@
 		"stick_trot": 0.85,
 		"button_radius": 38,
 		"edge_margin": 28,
-		"min_target": 48
+		"min_target": 48,
+		"crouch_radius": 34,
+		"pounce_radius": 32,
+		"button_gap": 14
 	},
 	"ui": {
 		"corner_margin": 8,
@@ -166,5 +169,54 @@
 		"recovery_area": "camp",
 		"recovery_spawn": "den",
 		"message_font": 20
+	},
+	"hunt": {
+		"_note": "Hunting (scripts/core/hunt_tuning.gd; exported on the Hunting autoload). Alert is 0..1: rises per second by look_rise (Fern moves while the head is up), walk_rise (moves uncrouched within noise_px), close_rise (moves uncrouched within close_px); falls by alert_fall while she holds still. Ranges are [min, max] seconds.",
+		"crouch_speed": 30,
+		"feed_s": [
+			2.0,
+			4.0
+		],
+		"look_s": [
+			1.0,
+			2.0
+		],
+		"look_rise": 1.4,
+		"walk_rise": 0.8,
+		"close_rise": 2.5,
+		"alert_fall": 0.2,
+		"noise_px": 64,
+		"close_px": 24,
+		"notice_px": 120,
+		"show_px": 90,
+		"pounce_range": 40,
+		"leap_s": 0.45,
+		"leap_height": 10,
+		"catch_s": 0.4,
+		"stumble_s": 0.6,
+		"respawn_s": 30,
+		"max_mice": 2,
+		"spawn_min_px": 160,
+		"wander_px": 6,
+		"wander_speed": 8,
+		"wander_every": [
+			1.5,
+			3.5
+		],
+		"flee_speed": 70,
+		"squeak_every": [
+			5.0,
+			10.0
+		],
+		"still_speed": 4,
+		"hear_px": 260,
+		"rustle_every": [
+			0.9,
+			1.8
+		],
+		"mouth_px": [
+			9,
+			-6
+		]
 	}
 }

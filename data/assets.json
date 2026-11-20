@@ -54,6 +54,10 @@
 	"decor.flower_white": "res://art/flower_white.png",
 	"decor.den": "res://art/den.png",
 	"decor.trail": "res://art/trail.png",
+	"life.mouse": "res://art/mouse.png",
+	"life.mouse_carried": "res://art/mouse_carried.png",
+	"ui.alert_mark": "res://art/alert_mark.png",
+	"ui.pounce_ring": "res://art/pounce_ring.png",
 	"font.dialogue": "res://fonts/PixelifySans.ttf",
 	"shader.sway": "res://shaders/sway.gdshader",
 	"shader.pond": "res://shaders/pond.gdshader"
