@@ -393,3 +393,27 @@ func test_brushing_a_bush() -> void:
 	check_eq(w.brushing_prop(), 0, "next to the bush")
 	_open_spot()
 	check_eq(w.brushing_prop(), -1, "open grass")
+
+
+## The NPCs in world.json are already far enough apart (and from Fern's
+## start) that none gets moved, and the sprites can't overlap.
+func test_npcs_in_world_json_keep_their_spacing() -> void:
+	for spec: Dictionary in wdata["npcs"]:
+		var npc: Dictionary = w.npc_by_id(spec["id"])
+		var at: Array = spec["path"][0] if spec.has("path") else spec["pos"]
+		check_eq(npc["pos"], Vector2(at[0], at[1]), "%s stays where world.json puts it" % spec["id"])
+	for i in w.npcs.size():
+		check(w.zones_apart(w.npc_zone(w.npcs[i]), World.footprint_rect(w.player_pos, w.player_footprint)), "%s clear of Fern's start" % w.npcs[i]["id"])
+		for j in range(i + 1, w.npcs.size()):
+			check(w.zones_apart(w.npc_zone(w.npcs[i]), w.npc_zone(w.npcs[j])), "%s and %s at least %s apart" % [w.npcs[i]["id"], w.npcs[j]["id"], w.npc_spacing])
+
+
+## Two NPCs put on the same spot get pushed apart on load.
+func test_npcs_on_one_spot_are_spaced_out() -> void:
+	var data: Dictionary = wdata.duplicate(true)
+	data["npcs"][1]["pos"] = data["npcs"][0]["pos"].duplicate()
+	var w2 := World.new(data)
+	var a: Dictionary = w2.npcs[0]
+	var b: Dictionary = w2.npcs[1]
+	check(w2.zones_apart(w2.npc_zone(a), w2.npc_zone(b)), "%s moved clear of %s (%s vs %s)" % [b["id"], a["id"], b["pos"], a["pos"]])
+	check(w2.bounds.has_point(b["pos"]), "still inside the meadow")

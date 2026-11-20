@@ -51,6 +51,10 @@ var distance := 0.0
 ## "dialogue" (file path), "behavior" (sit / lie / pace / stand), "facing",
 ## "rect", and for pacers "path", "speed", "pause", "moving", "distance"}
 var npcs: Array[Dictionary] = []
+## Least gap (world px, x / y) between two NPCs' zones (footprint, or the
+## whole pacing loop) and Fern's start: side-view cats are wider than their
+## footprints, so closer than this their sprites overlap.
+var npc_spacing := Vector2(24, 16)
 ## Flat decals under everything (Sorrel's sunny spot). Each: {"art", "pos"}
 var ground: Array[Dictionary] = []
 ## id of the NPC the player is talking to, or "".
@@ -137,6 +141,8 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 			npc["wait"] = npc["pause"]
 		npc["rect"] = footprint_rect(npc["pos"], npc["footprint"])
 		npcs.append(npc)
+	npc_spacing = _vec(w.get("npc_spacing", [24, 16]))
+	_space_npcs()
 
 	var types: Dictionary = w.get("prop_types", {})
 	for pr: Dictionary in w.get("props", []):
@@ -294,6 +300,50 @@ func pond_distance() -> float:
 
 
 ## The area the camera may show: the meadow plus the forest border.
+## The ground an NPC can stand on: its footprint, or its whole pacing loop.
+func npc_zone(npc: Dictionary) -> Rect2:
+	var r: Rect2 = footprint_rect(npc["pos"], npc["footprint"])
+	for pt: Vector2 in npc.get("path", []):
+		r = r.merge(footprint_rect(pt, npc["footprint"]))
+	return r
+
+
+## True when zones `a` and `b` are at least npc_spacing apart on x or on y.
+func zones_apart(a: Rect2, b: Rect2) -> bool:
+	var dx := maxf(a.position.x - b.end.x, b.position.x - a.end.x)
+	var dy := maxf(a.position.y - b.end.y, b.position.y - a.end.y)
+	return dx >= npc_spacing.x or dy >= npc_spacing.y
+
+
+## Keeps NPCs from spawning on top of each other (or of Fern): an NPC too
+## close to one placed before it moves sideways, a little further each try,
+## and a warning names it so world.json can be fixed.
+func _space_npcs() -> void:
+	var taken: Array[Rect2] = [footprint_rect(player_pos, player_footprint)]
+	for npc in npcs:
+		var shift := Vector2.ZERO
+		var tries := 0
+		while tries < 40 and not taken.all(func(r: Rect2) -> bool: return zones_apart(_shifted_zone(npc, shift), r)):
+			tries += 1
+			shift = Vector2(8.0 * ceili(tries / 2.0) * (1 if tries % 2 == 1 else -1), 0)
+		if shift != Vector2.ZERO and tries < 40:
+			push_warning("world.json: NPC '%s' too close to another; moved %s" % [npc["id"], shift])
+			npc["pos"] += shift
+			if npc.has("path"):
+				var moved: Array[Vector2] = []
+				for pt: Vector2 in npc["path"]:
+					moved.append(pt + shift)
+				npc["path"] = moved
+			npc["rect"] = footprint_rect(npc["pos"], npc["footprint"])
+		taken.append(npc_zone(npc))
+
+
+func _shifted_zone(npc: Dictionary, shift: Vector2) -> Rect2:
+	var r := npc_zone(npc)
+	r.position += shift
+	return r
+
+
 func camera_bounds() -> Rect2:
 	return Rect2(Vector2.ZERO, size).grow(border)
 
