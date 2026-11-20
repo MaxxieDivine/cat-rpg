@@ -121,6 +121,8 @@ func test_pass_out_in_the_hunting_grounds() -> void:
 	var app: Control = await _start(TARGET_PHONE)
 	var g: Control = app.game
 	_fast_collapse(g)
+	# Long enough to check the lock below on a slow CI machine; shortened after.
+	g.travel.lie_s = 5.0
 	Player.state.carried_item = "mouse"
 	g.load_area("hunting_grounds", "from_camp")
 	await _frames(2)
@@ -137,7 +139,9 @@ func test_pass_out_in_the_hunting_grounds() -> void:
 	Input.action_press("move_right")
 	await _frames(10)
 	Input.action_release("move_right")
+	check_eq(g.travel.phase, "lie", "still lying down during the check")
 	check(g.world.player_pos.distance_to(at) < 0.5, "can't walk while passing out")
+	g.travel.lie_s = 0.2
 	# Can't trigger twice.
 	check(not g.collapse(), "a second collapse can't start")
 	var until := Time.get_ticks_msec() + 4000
