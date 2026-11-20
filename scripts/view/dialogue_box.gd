@@ -1,19 +1,23 @@
 extends Control
-## The dialogue box, drawn at the world's pixel scale: everything (box,
-## text, portrait, choices) is laid out in world pixels inside its own
-## transparent SubViewport the size of the world view, which is shown at the
-## same whole-number scale k as the world. So one font pixel is one world
-## pixel is k x k device pixels, and nothing is ever blurry.
+## The dialogue box, drawn in whole "box pixels": everything (box, text,
+## portrait, choices) is laid out in box pixels inside its own transparent
+## SubViewport covering the screen, shown at a whole-number scale k (device
+## pixels per box pixel). One font pixel is one box pixel is k x k device
+## pixels, so nothing is ever blurry. k is the box's own, chosen for reading
+## (pick_scale()), not the world's: the camera zoom never changes the box.
 ##
-## Layout (tuning.json "dialogue", in world px): a box along the bottom of
-## the safe area, `lines` lines of `font_px` Pixelify Sans tall (never more
-## than `max_height` of the screen), a `portrait_px` square portrait (a plain
+## Layout (tuning.json "dialogue", in box px): a box centred along the bottom
+## of the safe area, at most `max_width` of the screen wide and holding
+## `text_min_px`..`text_max_px` of text per line (about 40-50 characters),
+## `lines` lines of `font_px` Pixelify Sans tall (never more than
+## `max_height` of the screen), a `portrait_px` square portrait (a plain
 ## colour with a tiny pixel face for the expression) and a name plate on the
 ## speaker's side: Fern on the right, everyone else on the left. Text types
 ## out (scripts/core/typewriter.gd) with voice blips; a blinking arrow shows
-## when the line is done. Choices are a compact stack just above the box on
-## the right, each only as wide as its text, with a cursor on the selected
-## one; on touch screens they are `touch_choice_css` CSS px tall for thumbs.
+## when the line is done. Choices are a stack just above the box on the
+## right, each as wide as its text, with a cursor on the selected one; on
+## touch screens each row is `touch_choice_css` CSS px tall with
+## `touch_choice_gap_css` between rows, for thumbs.
 ## The box slides and fades in and out over `anim_s` seconds.
 ##
 ## Input: game.gd forwards Interact (finish the line, then advance / pick)
@@ -23,7 +27,7 @@ extends Control
 ## browser's emulated mouse for a touch), so a tap never counts twice.
 ## The box only shows lines; DialogueManager runs the conversation.
 ## The rects below are in UI units (for input, tests and the camera); the
-## _bp_* ones are the same in box pixels (= world pixels).
+## _bp_* ones are the same in box pixels.
 
 signal advance_requested
 signal choice_made(index: int)
@@ -66,7 +70,7 @@ var text_rect := Rect2()
 var choice_rects: Array[Rect2] = []
 ## UI units per box pixel (k / px_per_unit).
 var unit := 1.0
-## Device pixels per box pixel (the world's k).
+## Device pixels per box pixel.
 var k := 1
 
 var viewport: SubViewport
@@ -82,6 +86,8 @@ var _bp_portrait := Rect2i()
 var _bp_plate := Rect2i()
 var _bp_text := Rect2i()
 var _bp_choices: Array[Rect2i] = []
+## Gap between choice rows and above the box (box px).
+var choice_gap_px := 2
 var _bp_safe := Rect2i()
 var _view_rect := Rect2()
 var _blink := 0.0
@@ -173,16 +179,50 @@ func _font_height() -> int:
 	return int(font.get_height(font_size))
 
 
-## Lays the box out over the world view: `view_rect` (UI units) shows
-## `view_size` world pixels at `scale` device pixels each.
-func layout(m, view_rect: Rect2 = Rect2(), view_size: Vector2i = Vector2i.ZERO, scale: int = 0) -> void:
+## Device pixels per box pixel for a screen of `px_size` device px whose
+## safe area is `safe_px` wide. `fit` is the largest scale at which the
+## world's whole base view fits (the Milestone 3 box scale);
+## `text_scale` 1 keeps that, 2 (default) allows up to twice it, as large as
+## a box with `text_min_px` of text still fits `max_width` of the screen
+## and `max_height` of its height.
+## `bottom_inset_px`: the gesture bar under the safe area (the box sits above
+## it, but max_height counts from the screen's bottom edge).
+func pick_scale(px_size: Vector2, safe_w_px: float, bottom_inset_px: float, fit: int, text_scale: int) -> int:
+	var w_max := float(px_size.x) * float(t.get("max_width", 0.65))
+	var h_max := float(px_size.y) * float(t.get("max_height", 0.36)) - bottom_inset_px
+	var want := maxi(1, fit * maxi(1, text_scale))
+	var margins := 2 * int(t.get("margin_px", 4))
+	for s in range(want, 0, -1):
+		if s * min_box_width() <= w_max and s * (min_box_width() + margins) <= safe_w_px \
+				and s * (box_height() + plate_height() + int(t.get("bottom_margin_px", 1))) <= h_max:
+			return s
+	return 1
+
+
+## The box at its narrowest (box px): `text_min_px` of text plus portrait,
+## padding and border.
+func min_box_width() -> int:
+	return int(t.get("text_min_px", 214)) + _chrome_width()
+
+
+func _chrome_width() -> int:
+	var pad := int(t.get("padding_px", 3))
+	return int(t.get("portrait_px", 32)) + pad * 3 + BORDER * 2
+
+
+func plate_height() -> int:
+	return int(t.get("plate_px", 13)) - BORDER
+
+
+## Lays the box out over the screen at `scale` device pixels per box pixel
+## (pick_scale(); 0 in tests of the box alone = 2).
+func layout(m, scale: int = 0) -> void:
 	metrics = m
 	if scale <= 0:
-		# No world view (tests of the box alone): box pixels = 2 device px.
 		scale = 2
-		view_size = Vector2i((Vector2(m.px_size) / scale).ceil())
-		view_rect = Rect2(Vector2.ZERO, m.px_to_ui(Vector2(view_size) * scale))
 	k = scale
+	var view_size := Vector2i((Vector2(m.px_size) / k).ceil())
+	var view_rect := Rect2(Vector2.ZERO, m.px_to_ui(Vector2(view_size) * k))
 	_view_rect = view_rect
 	unit = float(k) / float(m.px_per_unit.y)
 	viewport.size = view_size
@@ -406,9 +446,11 @@ func _relayout() -> void:
 	var pad := int(t.get("padding_px", 4))
 	var safe := _bp_safe
 	var h := box_height()
-	var w := safe.size.x - margin * 2
+	var avail := safe.size.x - margin * 2
+	var w := clampi(floori(float(metrics.px_size.x) * float(t.get("max_width", 0.65)) / k), min_box_width(), int(t.get("text_max_px", 275)) + _chrome_width())
+	w = mini(w, avail)
 	var bottom_margin := int(t.get("bottom_margin_px", margin))
-	_bp_box = Rect2i(safe.position.x + margin, safe.end.y - bottom_margin - h, w, h)
+	_bp_box = Rect2i(safe.position.x + (safe.size.x - w) / 2, safe.end.y - bottom_margin - h, w, h)
 	var b := _bp_box
 	var side := int(t.get("portrait_px", 32))
 	var inner_y := b.position.y + BORDER + pad
@@ -422,7 +464,7 @@ func _relayout() -> void:
 
 	var fh := _font_height()
 	var name_w := int(font.get_string_size(name_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
-	var plate_h := int(t.get("plate_px", 12))
+	var plate_h := int(t.get("plate_px", 13))
 	var plate_w := name_w + pad * 2 + BORDER * 2
 	var plate_x := b.end.x - pad - plate_w if right else b.position.x + pad
 	_bp_plate = Rect2i(plate_x, b.position.y - plate_h + BORDER, plate_w, plate_h)
@@ -438,8 +480,10 @@ func _relayout() -> void:
 	var cursor := 6
 	var row_h := fh - 2 + BORDER * 2
 	if touch_rows:
-		var css := clampf(float(t.get("touch_choice_css", 38)), float(t.get("min_choice_css", 36)), float(t.get("max_choice_css", 40)))
+		var css := clampf(float(t.get("touch_choice_css", 48)), float(t.get("min_choice_css", 44)), float(t.get("max_choice_css", 56)))
 		row_h = maxi(row_h, ceili(css * float(metrics.dpr) / float(k)))
+		gap = maxi(gap, ceili(float(t.get("touch_choice_gap_css", 8)) * float(metrics.dpr) / float(k)))
+	choice_gap_px = gap
 	var bottom := (_bp_plate.position.y if right else b.position.y) - gap
 	var top_limit := safe.position.y + int(t.get("top_reserved_px", 20))
 	var n := texts.size()
@@ -450,7 +494,8 @@ func _relayout() -> void:
 	for i in n:
 		var tw := int(font.get_string_size(str(texts[i]), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
 		# +2: Labels draw a pixel or two wider than get_string_size says.
-		var cw := mini(tw + 2 + cpad * 2 + cursor + BORDER * 2, w)
+		# Long choices may reach past the box's left edge, never the safe area's.
+		var cw := mini(tw + 2 + cpad * 2 + cursor + BORDER * 2, b.end.x - safe.position.x - margin)
 		var y := bottom - (n - i) * row_h - (n - 1 - i) * gap
 		_bp_choices.append(Rect2i(b.end.x - cw, y, cw, row_h))
 	for i in choice_labels.size():

@@ -8,7 +8,7 @@ const JsonData := preload("res://scripts/core/json_data.gd")
 
 func test_every_dialogue_file_is_valid() -> void:
 	var files := Validator.dialogue_files()
-	check(files.size() >= 4, "found the dialogue files (%s)" % [files])
+	check(files.size() >= 3, "found the dialogue files (%s)" % [files])
 	for f in files:
 		var errors := Validator.validate_file(f)
 		check(errors.is_empty(), "%s:\n       %s" % [f, "\n       ".join(errors)])

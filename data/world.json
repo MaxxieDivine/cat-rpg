@@ -13,11 +13,11 @@
 		"start": [200, 220],
 		"footprint": [12, 5]
 	},
+	"npc_spacing": [24, 16],
 	"npcs": [
 		{"id": "bram", "art": "cat.bram.sit", "pos": [292, 196], "footprint": [20, 5], "talk_radius": 22, "behavior": "sit", "facing": -1, "dialogue": "res://data/dialogue/bram.json"},
 		{"id": "sorrel", "art": "cat.sorrel.sleep", "pos": [172, 128], "footprint": [22, 5], "talk_radius": 22, "behavior": "lie", "facing": 1, "dialogue": "res://data/dialogue/sorrel.json"},
-		{"id": "wick", "art": "cat.wick.idle", "path": [[542, 224], [584, 224], [584, 236], [542, 236]], "speed": 18, "pause": 0.7, "footprint": [16, 5], "talk_radius": 22, "behavior": "pace", "dialogue": "res://data/dialogue/wick.json"},
-		{"id": "cow", "art": "cow.idle", "pos": [470, 200], "footprint": [30, 8], "talk_radius": 22, "behavior": "stand", "dialogue": "res://data/dialogue/cow.json"}
+		{"id": "wick", "art": "cat.wick.idle", "path": [[542, 224], [584, 224], [584, 236], [542, 236]], "speed": 18, "pause": 0.7, "footprint": [16, 5], "talk_radius": 22, "behavior": "pace", "dialogue": "res://data/dialogue/wick.json"}
 	],
 	"path": {
 		"width": 11,
@@ -34,12 +34,12 @@
 		{"art": "decor.sunspot", "pos": [170, 126]}
 	],
 	"prop_types": {
-		"bush_round": {"art": "prop.bush_round", "footprint": [26, 7], "shadow": "shadow.m", "sway": "bush", "rustle": true},
-		"bush_wide": {"art": "prop.bush_wide", "footprint": [36, 7], "shadow": "shadow.l", "sway": "bush", "rustle": true},
-		"bush_small": {"art": "prop.bush_small", "footprint": [16, 5], "shadow": "shadow.s", "sway": "bush", "rustle": true},
-		"rock_big": {"art": "prop.rock_big", "footprint": [20, 6], "shadow": "shadow.m"},
-		"rock_small": {"art": "prop.rock_small", "footprint": [10, 4], "shadow": "shadow.s"},
-		"log": {"art": "prop.log", "footprint": [30, 6], "shadow": "shadow.l"},
+		"bush_round": {"art": "prop.bush_round", "footprint": [19, 5], "shadow": "shadow.m", "sway": "bush", "rustle": true},
+		"bush_wide": {"art": "prop.bush_wide", "footprint": [26, 5], "shadow": "shadow.m", "sway": "bush", "rustle": true},
+		"bush_small": {"art": "prop.bush_small", "footprint": [11, 4], "shadow": "shadow.s", "sway": "bush", "rustle": true},
+		"rock_big": {"art": "prop.rock_big", "footprint": [14, 4], "shadow": "shadow.s"},
+		"rock_small": {"art": "prop.rock_small", "footprint": [7, 3], "shadow": "shadow.s"},
+		"log": {"art": "prop.log", "footprint": [22, 4], "shadow": "shadow.m"},
 		"tree_a": {"art": "prop.trunk", "canopy": "prop.canopy_a", "canopy_offset": [0, -22], "footprint": [8, 4], "shadow": "shadow.xl", "sway": "canopy"},
 		"tree_b": {"art": "prop.trunk", "canopy": "prop.canopy_b", "canopy_offset": [0, -20], "footprint": [8, 4], "shadow": "shadow.l", "sway": "canopy"}
 	},

@@ -139,20 +139,20 @@ func _beside(npc: Dictionary, gap: float = 4.0) -> void:
 
 
 func test_focus_and_interact() -> void:
-	var cow: Dictionary = w.npc_by_id("cow")
-	var spec := _npc_spec("cow")
+	var bram: Dictionary = w.npc_by_id("bram")
+	var spec := _npc_spec("bram")
 	_open_spot()
 	check_eq(w.interact().size(), 0, "nothing to talk to in open grass")
-	# Walk up to the cow from the left.
-	w.player_pos = Vector2(cow["rect"].position.x - 30, cow["rect"].end.y)
+	# Walk up to Bram from the left.
+	w.player_pos = Vector2(bram["rect"].position.x - 30, bram["rect"].end.y)
 	var events := _run(1.0, Vector2.RIGHT)
-	check_eq(w.focus_id, "cow", "cow in focus when next to it")
-	check(events.any(func(e): return e["type"] == "focus" and e["id"] == "cow"), "focus event sent")
+	check_eq(w.focus_id, "bram", "Bram in focus when next to him")
+	check(events.any(func(e): return e["type"] == "focus" and e["id"] == "bram"), "focus event sent")
 	var said: Array = w.interact()
 	check_eq(said.size(), 1, "one talk event")
 	if said.size() == 1:
 		check_eq(said[0]["type"], "talk", "event type")
-		check_eq(said[0]["dialogue"], spec["dialogue"], "cow's dialogue file from world.json")
+		check_eq(said[0]["dialogue"], spec["dialogue"], "Bram's dialogue file from world.json")
 	w.end_talk()
 	# Walk away: focus clears.
 	events = _run(1.5, Vector2.LEFT)
@@ -175,19 +175,19 @@ func test_talk_radius_from_data() -> void:
 
 func test_only_the_nearest_npc_has_focus() -> void:
 	var bram: Dictionary = w.npc_by_id("bram")
-	var cow: Dictionary = w.npc_by_id("cow")
-	# Move the cow next to Bram so both are in range of one spot.
-	cow["pos"] = bram["pos"] + Vector2(40, 0)
-	cow["rect"] = World.footprint_rect(cow["pos"], cow["footprint"])
-	w.solids.assign([bram["rect"], cow["rect"]])
-	var between: float = (bram["rect"].end.x + cow["rect"].position.x) / 2.0
+	var other: Dictionary = w.npc_by_id("sorrel")
+	# Move Sorrel next to Bram so both are in range of one spot.
+	other["pos"] = bram["pos"] + Vector2(40, 0)
+	other["rect"] = World.footprint_rect(other["pos"], other["footprint"])
+	w.solids.assign([bram["rect"], other["rect"]])
+	var between: float = (bram["rect"].end.x + other["rect"].position.x) / 2.0
 	w.player_pos = Vector2(between - 3.0, bram["rect"].end.y)
 	w.step(0.0, Vector2.ZERO, false)
-	check(w.distance_to_rect(cow["rect"]) <= cow["talk_radius"], "cow in range too")
+	check(w.distance_to_rect(other["rect"]) <= other["talk_radius"], "Sorrel in range too")
 	check_eq(w.focus_id, "bram", "nearer Bram wins")
 	w.player_pos.x = between + 3.0
 	w.step(0.0, Vector2.ZERO, false)
-	check_eq(w.focus_id, "cow", "nearer cow wins")
+	check_eq(w.focus_id, "sorrel", "nearer Sorrel wins")
 
 
 func test_talking_locks_movement_and_faces_each_other() -> void:
@@ -393,3 +393,27 @@ func test_brushing_a_bush() -> void:
 	check_eq(w.brushing_prop(), 0, "next to the bush")
 	_open_spot()
 	check_eq(w.brushing_prop(), -1, "open grass")
+
+
+## The NPCs in world.json are already far enough apart (and from Fern's
+## start) that none gets moved, and the sprites can't overlap.
+func test_npcs_in_world_json_keep_their_spacing() -> void:
+	for spec: Dictionary in wdata["npcs"]:
+		var npc: Dictionary = w.npc_by_id(spec["id"])
+		var at: Array = spec["path"][0] if spec.has("path") else spec["pos"]
+		check_eq(npc["pos"], Vector2(at[0], at[1]), "%s stays where world.json puts it" % spec["id"])
+	for i in w.npcs.size():
+		check(w.zones_apart(w.npc_zone(w.npcs[i]), World.footprint_rect(w.player_pos, w.player_footprint)), "%s clear of Fern's start" % w.npcs[i]["id"])
+		for j in range(i + 1, w.npcs.size()):
+			check(w.zones_apart(w.npc_zone(w.npcs[i]), w.npc_zone(w.npcs[j])), "%s and %s at least %s apart" % [w.npcs[i]["id"], w.npcs[j]["id"], w.npc_spacing])
+
+
+## Two NPCs put on the same spot get pushed apart on load.
+func test_npcs_on_one_spot_are_spaced_out() -> void:
+	var data: Dictionary = wdata.duplicate(true)
+	data["npcs"][1]["pos"] = data["npcs"][0]["pos"].duplicate()
+	var w2 := World.new(data)
+	var a: Dictionary = w2.npcs[0]
+	var b: Dictionary = w2.npcs[1]
+	check(w2.zones_apart(w2.npc_zone(a), w2.npc_zone(b)), "%s moved clear of %s (%s vs %s)" % [b["id"], a["id"], b["pos"], a["pos"]])
+	check(w2.bounds.has_point(b["pos"]), "still inside the meadow")

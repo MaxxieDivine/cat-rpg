@@ -35,8 +35,6 @@ func test_fern_and_every_npc_cat_have_what_they_need() -> void:
 		check(cats["fern"]["anims"].has(a), "Fern has %s" % a)
 	var w := JsonData.load_dict("res://data/world.json")
 	for npc: Dictionary in w["npcs"]:
-		if npc["id"] == "cow":
-			continue
 		if not check(cats.has(npc["id"]), "%s is in cats.json" % npc["id"]):
 			continue
 		for a: String in NEEDS[npc.get("behavior", "stand")]:

@@ -15,7 +15,7 @@ var convs: Dictionary = {}
 func before_each() -> void:
 	state = GameState.new()
 	d = Dialogue.new(state)
-	for id in ["bram", "sorrel", "wick", "cow"]:
+	for id in ["bram", "sorrel", "wick"]:
 		convs[id] = JsonData.load_dict("res://data/dialogue/%s.json" % id)
 
 
@@ -191,7 +191,7 @@ func test_wick_shared_changes_later_lines() -> void:
 
 func test_sorrel_before_wick() -> void:
 	var seen := _play("sorrel")
-	check_eq(seen, ["come", "river", "stones", "grandmother", "walk_first"] as Array[String], "Sorrel's story in order")
+	check_eq(seen, ["come", "river", "stones", "grandmother", "wet_paws", "walk_first"] as Array[String], "Sorrel's story in order")
 	check_eq(_play("sorrel"), ["dozing"] as Array[String], "repeat before the vole: dozing")
 	_play("wick", [1, 1])
 	check_eq(_play("sorrel"), ["thanks"] as Array[String], "vole shared later: thanks")
@@ -204,10 +204,3 @@ func test_any_order() -> void:
 			_play(id, [0, 0])
 		for id: String in order:
 			check_eq(state.get_flag("talked_" + id), true, "%s talked after order %s" % [id, order])
-
-
-func test_cow_says_moo() -> void:
-	var ev: Dictionary = d.start(convs["cow"])
-	check_eq(ev["text"], _text("cow", "moo"), "cow line")
-	check_eq(ev["speaker"], "cow", "cow speaks")
-	check_eq(d.advance()["type"], "end", "one line")
