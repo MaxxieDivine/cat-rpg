@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://col5h67j156aa"
-path="res://.godot/imported/cat.png-1c5c83ed13d42bfa8222cdf82ef5ee76.ctex"
+uid="uid://ctsuhidi6s75"
+path="res://.godot/imported/wick_idle.png-12210807be7b7bf3cd643d8c6411a67e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/cat.png"
-dest_files=["res://.godot/imported/cat.png-1c5c83ed13d42bfa8222cdf82ef5ee76.ctex"]
+source_file="res://art/cats/wick_idle.png"
+dest_files=["res://.godot/imported/wick_idle.png-12210807be7b7bf3cd643d8c6411a67e.ctex"]
 
 [params]
 

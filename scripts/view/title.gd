@@ -10,9 +10,12 @@ const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
 const GameStrings := preload("res://scripts/core/game_strings.gd")
 const ScreenMetrics := preload("res://scripts/view/screen_metrics.gd")
 const GameInput := preload("res://scripts/view/game_input.gd")
+const CatAnim := preload("res://scripts/view/cat_anim.gd")
+## The part of a 50x50 cat frame the cat itself fills (idle and meow).
+const TITLE_CROP := Rect2(12, 14, 26, 19)
 const INK := Color(0.11, 0.094, 0.141)
 
-var cat: Sprite2D
+var cat: CatAnim
 var cat_scale := 1
 var title_label: Label
 var start_label: Label
@@ -34,10 +37,12 @@ func _ready() -> void:
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
 
-	cat = Sprite2D.new()
-	cat.texture = AssetCatalog.texture("cat.sheet")
-	cat.hframes = 3
-	cat.centered = false
+	cat = CatAnim.new()
+	cat.setup("fern")
+	# Just the cat, not the whole 50x50 frame.
+	cat.crop = TITLE_CROP
+	cat.offset = Vector2.ZERO
+	cat.play("idle", true)
 	add_child(cat)
 
 	title_label = _label(GameStrings.text("title.name"), 40, INK)
@@ -63,7 +68,7 @@ func layout(m) -> void:
 	metrics = m
 	var safe: Rect2 = m.safe_rect
 	var safe_px: Rect2i = m.safe_rect_px()
-	var frame := Vector2(24, 24)
+	var frame := TITLE_CROP.size
 	# Cat about a third of the safe height, whole device pixels.
 	cat_scale = maxi(1, floori(safe_px.size.y * 0.3 / frame.y))
 	cat.scale = Vector2(cat_scale, cat_scale) / m.px_per_unit
@@ -84,7 +89,12 @@ func layout(m) -> void:
 func _process(dt: float) -> void:
 	_t += dt
 	start_label.modulate.a = 0.55 + 0.45 * absf(sin(_t * 2.5))
-	cat.frame = 0 if fmod(_t, 3.0) < 2.4 else 1 + int(_t * 6.0) % 2
+	# Idles, and meows every few seconds.
+	if cat.anim == "meow" and cat.finished():
+		cat.play("idle")
+	elif cat.anim == "idle" and fmod(_t, 4.0) < fmod(_t - dt, 4.0):
+		cat.play("meow", true)
+	cat.step(dt)
 
 
 func _gui_input(event: InputEvent) -> void:

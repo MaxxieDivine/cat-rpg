@@ -27,8 +27,9 @@ signal rustled(kind: String)
 const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
 const JsonData := preload("res://scripts/core/json_data.gd")
 const NpcScene := preload("res://scenes/npc.tscn")
-const CAT_KEY := "cat.sheet"
-const CAT_FRAMES := 3
+const CatAnim := preload("res://scripts/view/cat_anim.gd")
+const PLAYER_ID := "fern"
+const MEOW_KEY := "fx.meow"
 const PAW_KEY := "ui.paw"
 const SPEAKERS_PATH := "res://data/speakers.json"
 const PALETTE_PATH := "res://data/palette.json"
@@ -37,7 +38,16 @@ const FOREST_REACH := 1400.0
 
 var world
 var day  # day_cycle.gd, or null
-var player: Sprite2D
+## Fern (cat_anim.gd): idle, walk, run, meow and fidgets (data/cats.json).
+var player: CatAnim
+## The little "meow" puff over a cat that starts speaking.
+var meow: Sprite2D
+## Who the puff belongs to ("fern" or an NPC id) and seconds left.
+var _meow_who := ""
+var _meow_t := 0.0
+## Fern standing still: seconds since she stopped or finished a fidget.
+var _still := 0.0
+var _next_fidget := 0
 ## The talk prompt over the focused NPC.
 var paw: Sprite2D
 var walk_frame_px := 7.0
@@ -184,8 +194,10 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 		n.setup(npc, speakers.get(npc["id"], {}), tuning)
 		npc_nodes[npc["id"]] = n
 		_sorted.add_child(n)
-	player = _sprite(CAT_KEY, world.player_pos, CAT_FRAMES)
+	player = CatAnim.new()
 	player.name = "Player"
+	player.setup(PLAYER_ID)
+	player.position = world.player_pos.round()
 	_sorted.add_child(player)
 	for blade: Dictionary in world.tall_grass:
 		var s := _sprite(blade["art"], blade["pos"])
@@ -211,6 +223,13 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 	paw.centered = false
 	paw.visible = false
 	overlay.add_child(paw)
+	meow = Sprite2D.new()
+	meow.name = "Meow"
+	meow.texture = AssetCatalog.texture(MEOW_KEY)
+	meow.hframes = maxi(1, meow.texture.get_width() / maxi(1, meow.texture.get_height()))
+	meow.centered = false
+	meow.visible = false
+	overlay.add_child(meow)
 	sync()
 
 
@@ -339,10 +358,7 @@ func sync(dt: float = 0.0) -> void:
 	_t += dt
 	player.position = world.player_pos.round()
 	player.flip_h = world.facing < 0
-	if world.speed() < idle_speed:
-		player.frame = 0
-	else:
-		player.frame = 1 + int(world.distance / walk_frame_px) % 2
+	_sync_player(dt)
 	for npc: Dictionary in world.npcs:
 		var id: String = npc["id"]
 		npc_nodes[id].sync(npc, dt, world.focus_id == id, world.talk_id == id)
@@ -352,6 +368,7 @@ func sync(dt: float = 0.0) -> void:
 		var head := npc_head(focus)
 		var bob := roundf((0.5 + 0.5 * sin(_t * TAU * bob_hz)) * bob_px)
 		paw.position = (head - Vector2(floorf(paw.texture.get_width() / 2.0), paw.texture.get_height() + prompt_gap + bob)).round()
+	_sync_meow(dt)
 	_sync_rustle(dt)
 	_sync_canopies()
 	_sync_time()
@@ -391,7 +408,7 @@ func _sync_rustle(dt: float) -> void:
 
 ## A canopy over Fern goes see-through so she never disappears.
 func _sync_canopies() -> void:
-	var fern := Rect2(player.position + player.offset, Vector2(player.texture.get_width() / CAT_FRAMES, player.texture.get_height()))
+	var fern := player.body_rect()
 	var fade := float(_amb.get("canopy_fade", 0.55))
 	for i in canopies.size():
 		var a := fade if _canopy_rects[i].intersects(fern) else 1.0
@@ -487,6 +504,59 @@ func _sync_sky(dt: float) -> void:
 			bird.set_meta("pos", start)
 			bird.position = start.round()
 			bird.visible = true
+
+
+## Fern: walk / run by distance walked; standing still she idles, and after
+## cats.json fidget_after_s plays a fidget (lick, itch, stretch) in turn.
+## A meow plays out unless she starts moving.
+func _sync_player(dt: float) -> void:
+	if world.speed() >= idle_speed:
+		_still = 0.0
+		player.show_stride("run" if world.running else "walk", world.distance)
+		return
+	var spec := CatAnim.cat_spec(PLAYER_ID)
+	var fidgets: Array = spec.get("fidgets", [])
+	if (player.anim == "meow" or player.anim in fidgets) and not player.finished():
+		if player.anim != "meow" and world.is_talking():
+			player.play("idle")
+		player.step(dt)
+		return
+	_still += dt
+	if not world.is_talking() and not fidgets.is_empty() and _still >= float(spec.get("fidget_after_s", 5.0)):
+		_still = 0.0
+		player.play(fidgets[_next_fidget % fidgets.size()], true)
+		_next_fidget += 1
+		return
+	player.play("idle")
+	player.step(dt)
+
+
+## A cat starts speaking: it meows (if it can in its pose) and a "meow"
+## puff pops over its head. `who` is a speaker id; others are ignored.
+func speak(who: String) -> void:
+	if who == PLAYER_ID:
+		player.play("meow", true)
+	elif npc_nodes.has(who) and npc_nodes[who].cat != null:
+		npc_nodes[who].speak()
+	else:
+		return
+	_meow_who = who
+	_meow_t = float(CatAnim.data().get("meow_vfx_s", 0.9))
+
+
+func _sync_meow(dt: float) -> void:
+	_meow_t = maxf(0.0, _meow_t - dt)
+	meow.visible = _meow_t > 0.0 and _meow_who != ""
+	if not meow.visible:
+		return
+	var head := player.position + Vector2(0, player.top_y()) if _meow_who == PLAYER_ID else npc_head(_meow_who)
+	var w := meow.texture.get_width() / meow.hframes
+	var face := -1.0 if (player.flip_h if _meow_who == PLAYER_ID else npc_nodes[_meow_who].sprite.flip_h) else 1.0
+	# Over the head, a little towards the way the cat faces (its mouth).
+	meow.position = (head + Vector2(face * 6.0 - w / 2.0, -meow.texture.get_height() - 1.0)).round()
+	meow.flip_h = face < 0.0
+	var shown := float(CatAnim.data().get("meow_vfx_s", 0.9)) - _meow_t
+	meow.frame = mini(int(shown * float(CatAnim.data().get("meow_vfx_fps", 8))), meow.hframes - 1)
 
 
 ## Top-centre of an NPC's art, in world pixels.

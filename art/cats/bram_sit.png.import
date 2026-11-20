@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b5n33tsh71y0"
-path="res://.godot/imported/bram.png-6b94423cd16d8e0e06afb9019c225bfd.ctex"
+uid="uid://dnsiasqnxhygv"
+path="res://.godot/imported/bram_sit.png-aa53a568cda30b81b77607ec4958ae6b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/bram.png"
-dest_files=["res://.godot/imported/bram.png-6b94423cd16d8e0e06afb9019c225bfd.ctex"]
+source_file="res://art/cats/bram_sit.png"
+dest_files=["res://.godot/imported/bram_sit.png-aa53a568cda30b81b77607ec4958ae6b.ctex"]
 
 [params]
 

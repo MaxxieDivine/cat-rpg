@@ -57,6 +57,8 @@ var sound: Node
 var day
 ## Distance walked when the last footstep played (world px).
 var _step_at := 0.0
+## Who spoke the last line shown (a new speaker meows).
+var _speaker := ""
 ## Where the camera centres (world px) while easing to / from a conversation.
 var _cam_center := Vector2.INF
 var _cam_easing := false
@@ -314,12 +316,16 @@ func _on_choice(index: int) -> void:
 
 func _show(ev: Dictionary) -> void:
 	if ev["type"] == "line":
+		if ev["speaker"] != _speaker:
+			_speaker = ev["speaker"]
+			world_view.speak(_speaker)
 		dialogue.show_selection = last_input != "touch" and not touch.visible
 		var rows: bool = last_input == "touch" or (last_input == "" and ScreenMetrics.is_touch())
 		if dialogue.touch_rows != rows:
 			dialogue.touch_rows = rows
 		dialogue.show_line(ev)
 	else:
+		_speaker = ""
 		dialogue.close()
 		world.end_talk()
 	_update_touch_visibility()

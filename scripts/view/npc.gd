@@ -4,11 +4,17 @@ extends Node2D
 ## data/speakers.json. Its origin is the NPC's feet (y-sorted with the cat).
 ## Only shows state from the World core; never changes it.
 ##
-## Behaviours (world.json "behavior"): "sit" blinks now and then, "lie"
-## dozes and opens her eyes when Fern is near, "pace" walks its loop with a
-## two-frame walk, "stand" just stands.
+## Cats listed in data/cats.json are animated (cat_anim.gd); anything else
+## (the cow) is a plain sprite with world.json "frames".
+##
+## Behaviours (world.json "behavior"): "sit" sits and now and then plays a
+## fidget (licks a paw, scratches); "lie" sleeps, lies with her head up when
+## Fern is near and grooms if Fern lingers; "pace" walks its loop and idles
+## at the corners; "stand" just stands. A cat that starts speaking meows if
+## it has a meow animation (speak()).
 
 const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
+const CatAnim := preload("res://scripts/view/cat_anim.gd")
 
 @export var npc_id := ""
 @export var display_name := ""
@@ -26,6 +32,13 @@ var _t := 0.0
 var _phase := 0.0
 ## First opaque row of the art (for head()).
 var _top := 0.0
+## The animated cat (null for plain sprites such as the cow).
+var cat: CatAnim
+## Seconds since the last fidget ended (animated cats).
+var _idle := 0.0
+var _next_fidget := 0
+var _fidgets: Array = []
+var _fidget_after := 4.0
 
 
 func setup(npc: Dictionary, speaker: Dictionary, tuning: Dictionary) -> void:
@@ -39,6 +52,17 @@ func setup(npc: Dictionary, speaker: Dictionary, tuning: Dictionary) -> void:
 	walk_frame_px = float(tuning.get("player", {}).get("walk_frame_px", walk_frame_px))
 	name = "Npc_" + npc_id
 	_phase = float(npc_id.hash() % 1000) / 1000.0 * 3.0
+	if CatAnim.has_cat(npc_id):
+		cat = CatAnim.new()
+		cat.name = "Sprite"
+		cat.setup(npc_id)
+		var spec := CatAnim.cat_spec(npc_id)
+		_fidgets = spec.get("fidgets", [])
+		_fidget_after = float(spec.get("fidget_after_s", _fidget_after))
+		_idle = _phase
+		sprite = cat
+		add_child(sprite)
+		return
 	sprite = Sprite2D.new()
 	sprite.name = "Sprite"
 	sprite.texture = AssetCatalog.texture(art_key)
@@ -60,6 +84,9 @@ func sync(npc: Dictionary, dt: float, near: bool, talking: bool) -> void:
 	position = (npc["pos"] as Vector2).round()
 	if behavior != "stand":
 		sprite.flip_h = int(npc.get("facing", 1)) < 0
+	if cat != null:
+		_sync_cat(npc, dt, near, talking)
+		return
 	var f := 0
 	match behavior:
 		"sit":
@@ -72,6 +99,50 @@ func sync(npc: Dictionary, dt: float, near: bool, talking: bool) -> void:
 	sprite.frame = mini(f, frames - 1)
 
 
+func _sync_cat(npc: Dictionary, dt: float, near: bool, talking: bool) -> void:
+	if cat.anim == "meow" and not cat.finished():
+		cat.step(dt)
+		return
+	if behavior == "pace" and npc.get("moving", false):
+		cat.show_stride("walk", float(npc.get("distance", 0.0)))
+		return
+	if behavior == "lie" and not (near or talking):
+		cat.hold(cat.rest, 0)
+		_idle = 0.0
+		return
+	if cat.anim in _fidgets and not cat.finished():
+		if talking:
+			_rest(dt)
+		else:
+			cat.step(dt)
+		return
+	_idle += dt
+	if not talking and not _fidgets.is_empty() and _idle >= _fidget_after:
+		_idle = 0.0
+		cat.play(_fidgets[_next_fidget % _fidgets.size()], true)
+		_next_fidget += 1
+		return
+	_rest(dt)
+
+
+## The resting pose for this behaviour: Sorrel awake = the last frame of
+## lying down (head up).
+func _rest(dt: float) -> void:
+	if behavior == "lie" and cat.has_anim("lie_down"):
+		cat.hold("lie_down", -1)
+		return
+	cat.play("idle" if behavior == "pace" and cat.has_anim("idle") else cat.rest)
+	cat.step(dt)
+
+
+## Starts speaking: a meow, if this cat has one.
+func speak() -> void:
+	if cat != null and cat.has_anim("meow"):
+		cat.play("meow", true)
+
+
 ## Top-centre of the art's opaque pixels, in world pixels.
 func head() -> Vector2:
+	if cat != null:
+		return position + Vector2(0, cat.top_y())
 	return position + Vector2(0, sprite.offset.y + _top)

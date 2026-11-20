@@ -207,6 +207,58 @@ func test_face_each_other_and_lock_movement() -> void:
 	_close(app)
 
 
+## A cat that starts speaking meows and a "meow" puff pops over it; Fern
+## meows on her own lines.
+func test_speakers_meow() -> void:
+	var app: Control = await _start(DESKTOP)
+	var g: Control = app.game
+	var wv: Node2D = g.world_view
+	await _open_talk(app, "wick", false)
+	check_eq(str(g.dialogue.line["speaker"]), "wick", "Wick speaks first")
+	check_eq(wv.npc_nodes["wick"].cat.anim, "meow", "Wick meows")
+	check(wv.meow.visible, "meow puff shown")
+	check(wv.meow.position.y < wv.npc_head("wick").y, "puff above Wick's head")
+	wv.speak("fern")
+	await tree.process_frame
+	check_eq(wv.player.anim, "meow", "Fern meows on her lines")
+	await tree.create_timer(1.2).timeout
+	check(not wv.meow.visible, "the puff goes away")
+	check_eq(wv.player.anim, "idle", "Fern idles after meowing")
+	_close(app)
+
+
+## Fern walks, trots (run sheet) and, left standing, fidgets; Sorrel sleeps
+## until Fern comes close.
+func test_cat_animations_follow_movement() -> void:
+	var app: Control = await _start(DESKTOP)
+	var g: Control = app.game
+	var wv: Node2D = g.world_view
+	var w = g.world
+	Input.action_press("move_right")
+	await tree.create_timer(0.3).timeout
+	check_eq(wv.player.anim, "walk", "walking shows the walk sheet")
+	var f0: int = wv.player.current_frame()
+	await tree.create_timer(0.15).timeout
+	check(wv.player.current_frame() != f0, "walk frames advance")
+	Input.action_press("run")
+	await tree.create_timer(0.3).timeout
+	check_eq(wv.player.anim, "run", "trotting shows the run sheet")
+	Input.action_release("run")
+	Input.action_release("move_right")
+	await tree.create_timer(0.3).timeout
+	check_eq(wv.player.anim, "idle", "standing still idles")
+	await tree.create_timer(float(JsonData.load_dict("res://data/cats.json")["cats"]["fern"]["fidget_after_s"])).timeout
+	check(wv.player.anim in ["lick", "itch", "stretch"], "Fern fidgets after a while (%s)" % wv.player.anim)
+	var sorrel: Node2D = wv.npc_nodes["sorrel"]
+	check_eq(sorrel.cat.anim, "sleep", "Sorrel sleeps while Fern is away")
+	var r: Rect2 = w.npc_by_id("sorrel")["rect"]
+	w.player_pos = Vector2(r.position.x - w.player_footprint.x / 2.0 - 4.0, r.end.y)
+	await tree.process_frame
+	await tree.process_frame
+	check_eq([sorrel.cat.anim, sorrel.cat.current_frame()], ["lie_down", sorrel.cat.anims["lie_down"]["frames"] - 1], "Sorrel looks up when Fern is near")
+	_close(app)
+
+
 ## Every NPC, at phone and desktop sizes (including the tallest view,
 ## view.max): when talking, both cats are on screen above the box.
 func test_every_conversation_is_framed_above_the_box() -> void:
