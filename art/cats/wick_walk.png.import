@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dvh083pmml1ah"
-path="res://.godot/imported/wick.png-1e5789111c8dc89627e5c79f5dd10504.ctex"
+uid="uid://dmvb8lla03dfn"
+path="res://.godot/imported/wick_walk.png-ce1ec837c7965f625a4135ce316d53e0.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/wick.png"
-dest_files=["res://.godot/imported/wick.png-1e5789111c8dc89627e5c79f5dd10504.ctex"]
+source_file="res://art/cats/wick_walk.png"
+dest_files=["res://.godot/imported/wick_walk.png-ce1ec837c7965f625a4135ce316d53e0.ctex"]
 
 [params]
 
