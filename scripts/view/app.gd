@@ -42,6 +42,8 @@ var fps_low := 0
 var logic_ms := 0.0
 
 var _laying_out := false
+## Corner buttons hidden while the Name Editor is open.
+var _hidden_for_naming := false
 ## Times of the last corner taps (debug overlay toggle).
 var _corner_taps: Array[float] = []
 var _frames := 0
@@ -210,8 +212,12 @@ func _place_buttons() -> void:
 		x -= volume_button.min_target
 	volume_button.place(Vector2(x, fullscreen_button.position.y))
 	# The Name Editor fills the screen: no corner buttons over its panel.
+	# Only on open / close, so anything else that hides the volume button
+	# (tests) keeps it hidden.
 	var naming: bool = game != null and game.naming()
-	volume_button.visible = not naming
+	if naming != _hidden_for_naming:
+		_hidden_for_naming = naming
+		volume_button.visible = not naming
 	if naming:
 		fullscreen_button.visible = false
 
