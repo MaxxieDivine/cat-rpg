@@ -76,6 +76,11 @@ var _still := 0.0
 var _next_fidget := 0
 ## The interact prompt over whatever has focus (NPC, pile, pond edge).
 var paw: Sprite2D
+## Each cat's rank symbol over its head (data/names/naming.json "ranks";
+## the rank comes from GameState), on the Overlay: cat id -> Sprite2D.
+var rank_marks: Dictionary = {}
+## Gap between a head and its rank symbol (world px; tuning.json prompt.rank_gap).
+var rank_gap := 2.0
 ## The fresh-catch pile (fresh_catch_pile.gd), or null.
 var pile: Sprite2D
 ## Rings on the water where Fern drinks.
@@ -158,6 +163,7 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 	bob_px = float(pr_t.get("bob_px", bob_px))
 	bob_hz = float(pr_t.get("bob_hz", bob_hz))
 	prompt_gap = float(pr_t.get("gap", prompt_gap))
+	rank_gap = float(pr_t.get("rank_gap", rank_gap))
 	_wind = tuning.get("wind", {})
 	_amb = tuning.get("ambience", {})
 	palette = JsonData.load_dict(PALETTE_PATH)
@@ -332,6 +338,15 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 	meow.centered = false
 	meow.visible = false
 	overlay.add_child(meow)
+	for id in [PLAYER_ID] + npc_nodes.keys():
+		var mark := Sprite2D.new()
+		mark.name = "Rank_" + str(id)
+		mark.centered = false
+		mark.visible = false
+		overlay.add_child(mark)
+		rank_marks[id] = mark
+	refresh_ranks()
+	GameState.rank_changed.connect(_on_rank_changed)
 	sync()
 
 
@@ -491,8 +506,13 @@ func sync(dt: float = 0.0) -> void:
 	if paw.visible:
 		var head := focus_head()
 		var bob := roundf((0.5 + 0.5 * sin(_t * TAU * bob_hz)) * bob_px)
+		# Over the cat's rank symbol, if it has one.
+		var mark: Sprite2D = rank_marks.get(focus)
+		if mark != null and mark.texture != null:
+			head.y -= mark.texture.get_height() + rank_gap
 		paw.position = (head - Vector2(floorf(paw.texture.get_width() / 2.0), paw.texture.get_height() + prompt_gap + bob)).round()
 	_sync_meow(dt)
+	_sync_ranks()
 	_sync_rustle(dt)
 	_sync_canopies()
 	_sync_time()
@@ -813,6 +833,31 @@ func _draw_alert_bars() -> void:
 		var w := roundf(10.0 * float(m["alert"]))
 		if w > 0.0:
 			alert_bars.draw_rect(Rect2(at + Vector2(1, 1), Vector2(w, 1)), calm.lerp(scared, float(m["alert"])))
+
+
+## Picks each cat's rank symbol texture (none: hidden).
+func refresh_ranks() -> void:
+	var names = GameState.state.names
+	for id: String in rank_marks:
+		var key: String = names.rank_icon(GameState.get_cat_rank(id))
+		var mark: Sprite2D = rank_marks[id]
+		mark.texture = AssetCatalog.texture(key) if key != "" else null
+	_sync_ranks()
+
+
+func _on_rank_changed(_id: String, _rank: String) -> void:
+	refresh_ranks()
+
+
+## Rank symbols sit just over each cat's head.
+func _sync_ranks() -> void:
+	for id: String in rank_marks:
+		var mark: Sprite2D = rank_marks[id]
+		mark.visible = mark.texture != null
+		if not mark.visible:
+			continue
+		var head: Vector2 = player.position + Vector2(0, player.top_y()) if id == PLAYER_ID else npc_head(id)
+		mark.position = (head - Vector2(floorf(mark.texture.get_width() / 2.0), mark.texture.get_height() + rank_gap)).round()
 
 
 ## A cat starts speaking: it meows (if it can in its pose) and a "meow"

@@ -1,9 +1,22 @@
 {
-	"_note": "Player naming. giver = the NPC id (world.json / speakers.json) whose conversation is followed by the naming offer (dialogue: that conversation, whose speaker lines must use the same id). start = the name a new game begins with (an empty suffix = just the prefix). ranks: every rank in order; endings: a placeholder per rank for later rank-based names (not used yet: get_player_name() shows the chosen name). player_speaker = the speakers.json id of the player: its name plate shows the player name; every other speaker name is blocked.",
+	"_note": "Naming. giver = the NPC id whose conversation is followed by the naming offer (dialogue: that conversation; its speaker lines must use the same id). player_speaker = the speakers.json id of the player. cats = every cat the Name Editor can rename, in its order (the player first): prefix + suffix ids from prefixes.json / suffixes.json, or a fixed starting name until renamed, and a rank. In text, {player_name} is the player's name and {name_<cat id>} any cat's. ranks = every rank in the editor's order, each with its label and its symbol (an art key; none = no symbol). endings = a placeholder per rank for later rank-based names (not used yet).",
 	"giver": "sorrel",
 	"player_speaker": "fern",
 	"dialogue": "res://data/dialogue/naming.json",
-	"start": {"prefix": "fern", "suffix": "", "rank": "apprentice"},
-	"ranks": ["kit", "apprentice", "warrior", "leader"],
-	"endings": {"kit": "", "apprentice": "", "warrior": "", "leader": ""}
+	"cats": {
+		"fern": {"prefix": "fern", "suffix": "", "rank": "apprentice"},
+		"bram": {"name": "Bram", "rank": "warrior"},
+		"sorrel": {"name": "Sorrel", "rank": "none"},
+		"wick": {"name": "Wick", "rank": "apprentice"}
+	},
+	"ranks": [
+		{"id": "none", "label": "No rank", "icon": ""},
+		{"id": "kit", "label": "Kit", "icon": "ui.rank_kit"},
+		{"id": "apprentice", "label": "Apprentice", "icon": "ui.rank_apprentice"},
+		{"id": "warrior", "label": "Warrior", "icon": "ui.rank_warrior"},
+		{"id": "medicine", "label": "Medicine cat", "icon": "ui.rank_medicine"},
+		{"id": "deputy", "label": "Deputy", "icon": "ui.rank_deputy"},
+		{"id": "leader", "label": "Leader", "icon": "ui.rank_leader"}
+	],
+	"endings": {"none": "", "kit": "", "apprentice": "", "warrior": "", "medicine": "", "deputy": "", "leader": ""}
 }

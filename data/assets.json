@@ -58,6 +58,12 @@
 	"life.mouse_carried": "res://art/mouse_carried.png",
 	"ui.alert_mark": "res://art/alert_mark.png",
 	"ui.pounce_ring": "res://art/pounce_ring.png",
+	"ui.rank_kit": "res://art/rank_kit.png",
+	"ui.rank_apprentice": "res://art/rank_apprentice.png",
+	"ui.rank_warrior": "res://art/rank_warrior.png",
+	"ui.rank_medicine": "res://art/rank_medicine.png",
+	"ui.rank_deputy": "res://art/rank_deputy.png",
+	"ui.rank_leader": "res://art/rank_leader.png",
 	"font.dialogue": "res://fonts/PixelifySans.ttf",
 	"shader.sway": "res://shaders/sway.gdshader",
 	"shader.pond": "res://shaders/pond.gdshader"

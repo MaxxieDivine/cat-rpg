@@ -21,7 +21,7 @@
 	"debug.hunger": "Hunger 5",
 	"debug.thirst": "Thirst 5",
 	"hunt.pile_full": "The pile is full.",
-	"hunt.sorrel_thanks": "Sorrel: \"For me? Thank you, young one.\"",
+	"hunt.sorrel_thanks": "{name_sorrel}: \"For me? Thank you, young one.\"",
 	"hunt.delivered": "Fresh-kill for the Clan.",
 	"hunt.ate": "You ate the mouse.",
 	"ui.crouch": "Crouch",
@@ -36,5 +36,7 @@
 	"names.cancel": "Cancel",
 	"names.confirm": "Confirm",
 	"names.taken": "That name is taken",
-	"names.triple": "Too many of one letter"
+	"names.triple": "Too many of one letter",
+	"names.other_blocked": "Another cat's name can't be used",
+	"names.cat_count": "Cat {i} of {n}"
 }

@@ -87,18 +87,22 @@ func test_triple_letters_are_skipped() -> void:
 	check(not Names.has_triple("Fernwhisker"), "no triple")
 
 
-func test_npc_names_and_the_blocklist_are_taken() -> void:
+func test_other_cats_names_and_the_blocklist_are_taken() -> void:
 	var c = _custom(["Oaktail"])
-	check_eq(c.check("sor", "rel"), Names.TAKEN, "Sorrel is an NPC's name")
+	check_eq(c.check("sor", "rel", ["Sorrel", "Bram"]), Names.TAKEN, "Sorrel is another cat's name")
+	check_eq(c.check("sor", "rel"), Names.OK, "free when no cat has it")
 	check_eq(c.check("oak", "tail"), Names.TAKEN, "Oaktail is on the blocklist")
 	check_eq(c.check_name("OAKTAIL"), Names.TAKEN, "any letter case")
+	check_eq(c.check_name("sorrel", ["Sorrel"]), Names.TAKEN, "taken names in any case")
 	check_eq(c.check("oak", "step"), Names.OK, "Oakstep is free")
 	check_eq(c.check("oak", "nope"), Names.UNKNOWN, "unknown word")
-	# The player's own speaker name is never blocked.
-	check(not names.blocked.has(str(names.player_speaker())), "the player's speaker isn't blocked")
-	for id: String in JsonData.load_dict("res://data/speakers.json"):
-		if id != names.player_speaker():
-			check(names.blocked.has(str(JsonData.load_dict("res://data/speakers.json")[id]["name"]).to_lower()), "%s's name is blocked" % id)
+	# In GameState: no two cats share a name.
+	var s = GameState.new()
+	check(s.names_taken_by_others("fern").has("Bram"), "Bram's name is taken for Fern")
+	check(not s.names_taken_by_others("fern").has(s.get_player_name()), "but not her own")
+	check(s.set_cat_name("bram", "birch", "song"), "Bram can become Birchsong")
+	check(not s.set_cat_name("fern", "birch", "song"), "then Fern can't")
+	check(not s.set_cat_name("cow", "birch", "pelt"), "unknown cats can't be renamed")
 
 
 func test_roll_only_gives_allowed_names_and_respects_locks() -> void:
@@ -145,7 +149,9 @@ func test_game_state_name_parts() -> void:
 	check_eq(s.get_player_name(), "Birchsong", "refusing keeps the old name")
 	check_eq(s.format_text("Hi, {player_name}!"), "Hi, Birchsong!", "{player_name}")
 	var saved: Dictionary = s.save_data()
-	check_eq(saved, {"prefix_id": "birch", "suffix_id": "song", "rank": s.rank}, "save data holds the two parts and the rank")
+	var fern_saved: Dictionary = saved["cats"]["fern"]
+	check_eq([fern_saved["prefix_id"], fern_saved["suffix_id"], fern_saved["rank"]], ["birch", "song", s.rank], "save data holds the two parts and the rank")
+	check(saved["cats"].has("bram"), "and every other cat")
 	s.reset()
 	check_eq(s.get_player_name(), names.build(str(start["prefix"]), str(start["suffix"])), "a new game: the start name")
 	s.load_save_data(saved)
@@ -154,9 +160,33 @@ func test_game_state_name_parts() -> void:
 
 func test_ranks_and_endings_live_in_data() -> void:
 	var cfg := JsonData.load_dict(Names.NAMING_PATH)
-	for r in ["kit", "apprentice", "warrior", "leader"]:
-		check((cfg["ranks"] as Array).has(r), "rank %s" % r)
+	var ids: Array[String] = names.ranks()
+	for r in ["kit", "apprentice", "warrior", "medicine", "deputy", "leader"]:
+		check(ids.has(r), "rank %s" % r)
+		var key: String = names.rank_icon(r)
+		check(key != "" and ResourceLoader.exists(JsonData.load_dict("res://data/assets.json").get(key, "")), "%s has a symbol (%s)" % [r, key])
 		check((cfg["endings"] as Dictionary).has(r), "an ending slot for %s" % r)
+		check(names.rank_label(r) != "", "%s has a label" % r)
+	check_eq(names.rank_icon("none"), "", "no rank: no symbol")
+
+
+func test_every_cat_has_a_name_and_a_rank() -> void:
+	var s = GameState.new()
+	var world := JsonData.load_dict("res://data/world.json")
+	check_eq(names.cat_ids()[0], names.player_speaker(), "the player comes first")
+	for npc: Dictionary in world["npcs"]:
+		check(s.has_cat(npc["id"]), "%s can be renamed" % npc["id"])
+	for id in names.cat_ids():
+		check(s.get_cat_name(id) != "", "%s has a name" % id)
+		check(names.ranks().has(s.get_cat_rank(id)), "%s has a known rank" % id)
+	check_eq(s.get_cat_name("bram"), "Bram", "Bram keeps his name until renamed")
+	check(s.set_cat_rank("bram", "leader"), "Bram can lead")
+	check_eq(s.get_cat_rank("bram"), "leader", "rank set")
+	check(not s.set_cat_rank("bram", "king"), "unknown ranks refused")
+	check(s.set_cat_name("sorrel", "ash", "pelt"), "Sorrel renamed")
+	check_eq(s.format_text("Ask {name_sorrel}, {player_name}."), "Ask Ashpelt, Fern.", "{name_<cat>} placeholders")
+	for id in names.cat_ids():
+		check(s.placeholders().has("name_" + id), "{name_%s} is known" % id)
 
 
 func test_the_name_giver_is_a_camp_npc() -> void:
@@ -252,7 +282,9 @@ func test_validator_knows_await_and_placeholders() -> void:
 	check(Validator.validate(bad_screen).any(func(e: String) -> bool: return e.contains("unknown screen")), "unknown screen")
 	var bad_ph := {"start": "e", "nodes": {"e": {"speaker": "sorrel", "text": "Hi {player}", "end": true}}}
 	check(Validator.validate(bad_ph).any(func(e: String) -> bool: return e.contains("placeholder")), "unknown placeholder")
-	var good := {"start": "w", "nodes": {"w": {"await": "name_editor", "next": "e", "cancel": "e"}, "e": {"speaker": "sorrel", "text": "Hi {player_name}", "end": true}}}
+	var bad_cat := {"start": "e", "nodes": {"e": {"speaker": "sorrel", "text": "Hi {name_cow}", "end": true}}}
+	check(Validator.validate(bad_cat).any(func(e: String) -> bool: return e.contains("placeholder")), "{name_cow} is no cat")
+	var good := {"start": "w", "nodes": {"w": {"await": "name_editor", "next": "e", "cancel": "e"}, "e": {"speaker": "sorrel", "text": "Hi {player_name}, ask {name_wick}", "end": true}}}
 	check_eq(Validator.validate(good), [] as Array[String], "a good await node")
 
 
@@ -299,3 +331,45 @@ func test_picker_wheels_tabs_and_locks() -> void:
 	check_eq(p.status(), Names.TRIPLE, "Mossstep shown as blocked")
 	check(not p.can_confirm(), "can't confirm it")
 	check_eq(p.start_prefix, "moss", "remembers where it opened")
+
+
+func test_picker_keeps_a_draft_per_cat() -> void:
+	var s = GameState.new()
+	var p = NamePicker.new()
+	p.open_cats(s)
+	check_eq(p.cat_id(), names.player_speaker(), "opens on the player")
+	check_eq(p.cats, names.cat_ids(), "every cat")
+	check_eq(p.full_name(), "Fern", "Fern's name until a wheel moves")
+	check(p.changes().is_empty(), "nothing changed yet")
+	p.set_words("birch", "song")
+	p.next_cat(1)
+	check_eq(p.cat_id(), "bram", "next cat")
+	check_eq(p.full_name(), "Bram", "Bram keeps his name until a wheel moves")
+	check_eq(p.rank, "warrior", "Bram's rank")
+	p.cycle_rank(1)
+	check_eq(p.rank, names.ranks()[names.ranks().find("warrior") + 1], "the next rank")
+	p.set_words("birch", "song")
+	check_eq(p.status(), Names.TAKEN, "Fern's draft name is taken for Bram")
+	check(not p.can_confirm(), "can't confirm two Birchsongs")
+	p.set_words("frost", "ear")
+	check(p.can_confirm(), "Frostear is fine")
+	p.next_cat(-1)
+	check_eq(p.full_name(), "Birchsong", "Fern's draft is kept")
+	var ch: Array[Dictionary] = p.changes()
+	check_eq(ch.size(), 2, "two cats changed (%s)" % [ch])
+	var by_id := {}
+	for c in ch:
+		by_id[c["id"]] = c
+	check_eq([by_id["fern"].get("prefix_id"), by_id["fern"].get("suffix_id")], ["birch", "song"], "Fern renamed")
+	check_eq([by_id["bram"].get("prefix_id"), by_id["bram"].get("suffix_id"), by_id["bram"]["rank"]], ["frost", "ear", p.names.ranks()[p.names.ranks().find("warrior") + 1]], "Bram renamed and re-ranked")
+	# A rank-only change.
+	p.open_cats(s, "wick")
+	p.cycle_rank(1)
+	ch = p.changes()
+	check(ch.size() == 1 and ch[0]["id"] == "wick" and not ch[0].has("prefix_id"), "only Wick's rank (%s)" % [ch])
+	# Rolls avoid other cats' names.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	for i in 40:
+		p.roll(rng)
+		check(p.status() == Names.OK, "rolled names are free")

@@ -9,17 +9,17 @@ extends RefCounted
 ##   data/names/suffixes.json   second parts ("whisker"), shown lowercase
 ##     each word: id, text, category, rarity ("common" / "rare"; unused yet)
 ##   data/names/blocklist.json  full names that can never be picked or rolled
-##   data/names/naming.json     the name-giver NPC, the start name, ranks
-## A name is allowed when it is not on the blocklist, is not an NPC's name
-## (data/speakers.json, every speaker but the player) and has no letter three
-## times in a row ("Mossstep"). Comparisons ignore letter case.
+##   data/names/naming.json     the name-giver, every cat's starting name
+##                              and rank, the ranks and their symbols
+## A name is allowed when it is not on the blocklist, is not another cat's
+## current name (`taken`, from GameState) and has no letter three times in a
+## row ("Mossstep"). Comparisons ignore letter case.
 
 const JsonData := preload("res://scripts/core/json_data.gd")
 const PREFIXES_PATH := "res://data/names/prefixes.json"
 const SUFFIXES_PATH := "res://data/names/suffixes.json"
 const BLOCKLIST_PATH := "res://data/names/blocklist.json"
 const NAMING_PATH := "res://data/names/naming.json"
-const SPEAKERS_PATH := "res://data/speakers.json"
 const SELF_PATH := "res://scripts/core/names.gd"
 
 ## Why a name can't be used ("" = allowed).
@@ -32,7 +32,7 @@ var prefixes: Array[Dictionary] = []
 var suffixes: Array[Dictionary] = []
 var prefix_categories: Array[String] = []
 var suffix_categories: Array[String] = []
-## Lowercase full names that are not allowed (blocklist + NPC names).
+## Lowercase full names that are never allowed (the blocklist).
 var blocked: Dictionary = {}
 var config: Dictionary = {}
 var _prefix_by_id: Dictionary = {}
@@ -53,7 +53,6 @@ func _init(data: Dictionary = {}) -> void:
 	var s: Dictionary = data.get("suffixes", JsonData.load_dict(SUFFIXES_PATH))
 	var b: Dictionary = data.get("blocklist", JsonData.load_dict(BLOCKLIST_PATH))
 	config = data.get("naming", JsonData.load_dict(NAMING_PATH))
-	var speakers: Dictionary = data.get("speakers", JsonData.load_dict(SPEAKERS_PATH))
 	for c in p.get("categories", []):
 		prefix_categories.append(str(c))
 	for c in s.get("categories", []):
@@ -66,10 +65,6 @@ func _init(data: Dictionary = {}) -> void:
 		_suffix_by_id[str(w.get("id", ""))] = w
 	for n in b.get("names", []):
 		blocked[str(n).to_lower()] = true
-	var player := player_speaker()
-	for id: String in speakers:
-		if id != player:
-			blocked[str(speakers[id].get("name", id)).to_lower()] = true
 
 
 ## The speakers.json id whose name plate shows the player's name.
@@ -86,17 +81,57 @@ func giver_dialogue() -> String:
 	return str(config.get("dialogue", ""))
 
 
+## Every cat the Name Editor can rename, in order (the player first).
+func cat_ids() -> Array[String]:
+	var out: Array[String] = []
+	var cats: Dictionary = config.get("cats", {})
+	var player := player_speaker()
+	if cats.has(player):
+		out.append(player)
+	for id: String in cats:
+		if id != player:
+			out.append(id)
+	return out
+
+
+## A cat's starting name and rank: {"prefix", "suffix"} word ids or a fixed
+## {"name"}, and "rank".
+func cat_start(id: String) -> Dictionary:
+	return config.get("cats", {}).get(id, {})
+
+
+## The player's start entry.
 func start_name() -> Dictionary:
-	return config.get("start", {"prefix": "fern", "suffix": "", "rank": "apprentice"})
+	return cat_start(player_speaker())
 
 
-func ranks() -> Array:
-	return config.get("ranks", [])
+## Rank ids in the editor's order.
+func ranks() -> Array[String]:
+	var out: Array[String] = []
+	for r: Dictionary in config.get("ranks", []):
+		out.append(str(r.get("id", "")))
+	return out
+
+
+func rank(id: String) -> Dictionary:
+	for r: Dictionary in config.get("ranks", []):
+		if str(r.get("id", "")) == id:
+			return r
+	return {}
+
+
+func rank_label(id: String) -> String:
+	return str(rank(id).get("label", id))
+
+
+## The rank's symbol (an AssetCatalog key), "" for none.
+func rank_icon(id: String) -> String:
+	return str(rank(id).get("icon", ""))
 
 
 ## Placeholder ending for `rank` (data/names/naming.json "endings"; unused yet).
-func rank_ending(rank: String) -> String:
-	return str(config.get("endings", {}).get(rank, ""))
+func rank_ending(rank_id: String) -> String:
+	return str(config.get("endings", {}).get(rank_id, ""))
 
 
 func prefix(id: String) -> Dictionary:
@@ -137,27 +172,31 @@ func build(prefix_id: String, suffix_id: String) -> String:
 
 
 ## OK, or why this combination can't be used: UNKNOWN (no such word),
-## TAKEN (blocklist or an NPC's name) or TRIPLE (a letter three times in a
-## row).
-func check(prefix_id: String, suffix_id: String) -> String:
+## TAKEN (blocklist, or one of `taken`: the other cats' names) or TRIPLE (a
+## letter three times in a row).
+func check(prefix_id: String, suffix_id: String, taken: Array = []) -> String:
 	if prefix(prefix_id).is_empty() or suffix(suffix_id).is_empty():
 		return UNKNOWN
-	return check_name(build(prefix_id, suffix_id))
+	return check_name(build(prefix_id, suffix_id), taken)
 
 
 ## The same rules for a whole name.
-func check_name(full: String) -> String:
+func check_name(full: String, taken: Array = []) -> String:
 	if full == "":
 		return UNKNOWN
-	if blocked.has(full.to_lower()):
+	var low := full.to_lower()
+	if blocked.has(low):
 		return TAKEN
+	for t in taken:
+		if str(t).to_lower() == low:
+			return TAKEN
 	if has_triple(full):
 		return TRIPLE
 	return OK
 
 
-func is_allowed(prefix_id: String, suffix_id: String) -> bool:
-	return check(prefix_id, suffix_id) == OK
+func is_allowed(prefix_id: String, suffix_id: String, taken: Array = []) -> bool:
+	return check(prefix_id, suffix_id, taken) == OK
 
 
 ## True when some letter appears three times in a row (any case).
@@ -173,9 +212,9 @@ static func has_triple(s: String) -> bool:
 ## is; the unlocked parts are drawn from `prefix_pool` / `suffix_pool` (word
 ## lists; default all) and, when possible, the result differs from the
 ## current name. Returns the current ids when nothing allowed is left (e.g.
-## both locked). `rng` is a RandomNumberGenerator.
+## both locked). `rng` is a RandomNumberGenerator; `taken` = names in use.
 func roll(rng: RandomNumberGenerator, prefix_id: String, suffix_id: String, lock_prefix: bool, lock_suffix: bool,
-		prefix_pool: Array[Dictionary] = [], suffix_pool: Array[Dictionary] = []) -> Array[String]:
+		prefix_pool: Array[Dictionary] = [], suffix_pool: Array[Dictionary] = [], taken: Array = []) -> Array[String]:
 	var ps: Array[String] = _ids(prefix_pool if not prefix_pool.is_empty() else prefixes)
 	var ss: Array[String] = _ids(suffix_pool if not suffix_pool.is_empty() else suffixes)
 	if lock_prefix:
@@ -186,7 +225,7 @@ func roll(rng: RandomNumberGenerator, prefix_id: String, suffix_id: String, lock
 	var same: Array = []
 	for p in ps:
 		for s in ss:
-			if not is_allowed(p, s):
+			if not is_allowed(p, s, taken):
 				continue
 			if p == prefix_id and s == suffix_id:
 				same.append([p, s])

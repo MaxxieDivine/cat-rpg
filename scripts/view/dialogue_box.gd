@@ -89,6 +89,8 @@ var _bp_choices: Array[Rect2i] = []
 ## Gap between choice rows and above the box (box px).
 var choice_gap_px := 2
 var _bp_safe := Rect2i()
+## The speaker's rank symbol on the name plate (null: none).
+var _plate_icon: Texture2D
 var _view_rect := Rect2()
 var _blink := 0.0
 var _opened_frame := -1
@@ -284,7 +286,14 @@ func speaker_name() -> String:
 	return GameState.format_text(str(speaker().get("name", line.get("speaker", ""))))
 
 
-## The player's name changed: re-letter the plate if it is showing.
+## The speaker's rank symbol for the name plate (null: none).
+func rank_icon() -> Texture2D:
+	var id := str(line.get("speaker", ""))
+	var key: String = GameState.state.names.rank_icon(GameState.get_cat_rank(id))
+	return AssetCatalog.texture(key) if key != "" else null
+
+
+## A name or rank changed: re-letter the plate if it is showing.
 func refresh_name() -> void:
 	if line.is_empty():
 		return
@@ -479,12 +488,15 @@ func _relayout() -> void:
 	var fh := _font_height()
 	var name_w := int(font.get_string_size(name_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
 	var plate_h := int(t.get("plate_px", 13))
-	var plate_w := name_w + pad * 2 + BORDER * 2
+	# The speaker's rank symbol leads the name.
+	_plate_icon = rank_icon() if not line.is_empty() else null
+	var icon_w := _plate_icon.get_width() + 2 if _plate_icon != null else 0
+	var plate_w := name_w + pad * 2 + BORDER * 2 + icon_w
 	var plate_x := b.end.x - pad - plate_w if right else b.position.x + pad
 	_bp_plate = Rect2i(plate_x, b.position.y - plate_h + BORDER, plate_w, plate_h)
 	# Capitals start ~3 px below the label's top (Pixelify's ascent).
-	name_label.position = Vector2(_bp_plate.position.x + BORDER, _bp_plate.position.y + BORDER + 1 - (fh - int(t.get("text_trim_px", 4)) - 9) / 2 - 3)
-	name_label.size = Vector2(_bp_plate.size.x - BORDER * 2, fh)
+	name_label.position = Vector2(_bp_plate.position.x + BORDER + icon_w, _bp_plate.position.y + BORDER + 1 - (fh - int(t.get("text_trim_px", 4)) - 9) / 2 - 3)
+	name_label.size = Vector2(_bp_plate.size.x - BORDER * 2 - icon_w, fh)
 
 	# Choices: rows only as wide as their text, stacked up from the box's
 	# top right, above the name plate when that is on the right too.
@@ -538,6 +550,9 @@ func _draw_box() -> void:
 	_panel(_bp_box, PAPER)
 	# Square plate corners into the box: the plate sits on its top border.
 	canvas.draw_rect(Rect2(_bp_plate.position.x + BORDER, _bp_box.position.y, _bp_plate.size.x - BORDER * 2, BORDER), col)
+	if _plate_icon != null:
+		var pad := int(t.get("padding_px", 3))
+		canvas.draw_texture(_plate_icon, Vector2(_bp_plate.position.x + BORDER + pad - 1, _bp_plate.position.y + (_bp_plate.size.y - _plate_icon.get_height()) / 2))
 	canvas.draw_rect(Rect2(_bp_portrait), col)
 	canvas.draw_rect(Rect2(_bp_portrait).grow(-0.5), INK, false, 1.0)
 	_draw_face(_bp_portrait, str(line.get("expression", "neutral")), _ink_on(col))

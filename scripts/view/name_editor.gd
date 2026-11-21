@@ -7,10 +7,12 @@ extends Control
 ## is one editor pixel; the name and the current words are Pixelify Sans at
 ## 12 px drawn twice as big, so they stay crisp.
 ##
-## Panel (top to bottom): the player's portrait (Fern's idle sprite) and the
-## full name, large; the prefix category tabs (icons: Plants, Weather,
-## Animals, Colors, Earth and Water, All) with a red "That name is taken"
-## note beside them when the name can't be used; the two wheels (each shows
+## Panel (top to bottom): the cat being named (its portrait between ◀ ▶
+## arrows that switch cats: every cat in data/names/naming.json "cats") with
+## its full name, large, and a red "That name is taken" note under it when
+## the name can't be used; the prefix category tabs (icons: Plants, Weather,
+## Animals, Colors, Earth and Water, All) and the rank button (the rank's
+## symbol and name; tap for the next rank); the two wheels (each shows
 ## the selected word large with its neighbours small and faded above and
 ## below, slot-machine style, and big up / down arrows); then a lock under
 ## each wheel (Random leaves a locked wheel alone), Random (dice), Cancel
@@ -20,16 +22,18 @@ extends Control
 ## Input (the editor takes everything while open; the world is paused):
 ##   touch / mouse: tap arrows, tabs, locks and buttons; swipe a wheel up or
 ##     down (`swipe_px` per word); the mouse wheel scrolls the wheel under it.
-##   keyboard: Left / Right pick the wheel, Up / Down scroll it, Tab /
-##     PageUp / PageDown change the tab, L locks, R randomizes, Enter
-##     confirms, Esc cancels.
-##   gamepad: d-pad or left stick like the arrows, South confirms, East
-##     cancels, West randomizes, North locks, the shoulders change the tab.
+##   keyboard: Left / Right pick the wheel, Up / Down scroll it, Q / E switch
+##     cats, K changes the rank (Shift+K back), Tab / PageUp / PageDown change
+##     the tab, L locks, R randomizes, Enter confirms, Esc cancels.
+##   gamepad: d-pad or left stick like the arrows, the shoulders switch cats,
+##     the triggers change the tab, Back changes the rank, South confirms,
+##     East cancels, West randomizes, North locks.
 ## The focused wheel has a yellow outline and a cursor, so keyboard and
 ## gamepad players always know where they are.
 ##
-## The choices live in scripts/core/name_picker.gd (headless); Confirm
-## calls GameState.set_player_name(), Cancel changes nothing. `closed`
+## The choices live in scripts/core/name_picker.gd (headless), a draft per
+## cat; Confirm applies every cat's changes (GameState.set_cat_name() /
+## set_cat_rank()), Cancel changes nothing. `closed`
 ## fires once the editor has finished closing (after the Confirm sparkle).
 
 signal closed(confirmed: bool)
@@ -51,6 +55,8 @@ const PANEL_PAD := 7
 const COL_GAP := 8
 const HEADER_H := 34
 const PORTRAIT_W := 48
+## The ◀ ▶ cat switch arrows either side of the portrait.
+const CAT_ARROW_W := 20
 const TAB := 20
 const TAB_GAP := 2
 const WHEEL_H := 62
@@ -193,11 +199,17 @@ var random_rect := Rect2()
 var cancel_rect := Rect2()
 var confirm_rect := Rect2()
 var name_rect := Rect2()
+var prev_cat_rect := Rect2()
+var next_cat_rect := Rect2()
+var rank_rect := Rect2()
 
 ## Layout, editor pixels.
 var _bp_panel := Rect2i()
 var _bp_portrait := Rect2i()
 var _bp_name := Rect2i()
+var _bp_prev_cat := Rect2i()
+var _bp_next_cat := Rect2i()
+var _bp_rank := Rect2i()
 var _bp_note := Rect2i()
 var _bp_tabs: Array[Rect2i] = []
 var _bp_wheels: Array[Rect2i] = []
@@ -222,12 +234,13 @@ var _opened_frame := -1
 ## Touch / mouse press: {"id", "target", "start", "wheel", "acc", "moved"}.
 var _press: Dictionary = {}
 var _stick_held := Vector2i.ZERO
-var _portrait_tex: Texture2D
-var _portrait_frames := 1
+var _triggers_held := 0
+## cat id -> {"tex", "frames", "fps", "used" (the cat's opaque rect in
+## frame 0), "color"}: its resting animation, cropped to the cat.
+var _portraits: Dictionary = {}
 var _portrait_frame := 0.0
-var _portrait_fps := 7.0
-var _portrait_used := Rect2i(0, 0, 50, 50)
-var _player_color := Color("#e8964a")
+## Rank symbol textures by art key.
+var _rank_tex: Dictionary = {}
 
 
 func _init() -> void:
@@ -260,20 +273,25 @@ func configure(tuning: Dictionary) -> void:
 	fv.base_font = base
 	fv.opentype_features = {TextServerManager.get_primary_interface().name_to_tag("liga"): 0}
 	font = fv
-	# The player's portrait: the idle sheet, cropped to the cat.
-	var names = picker.names
+	# Each cat's portrait: its resting animation (cats.json's first), cropped
+	# to the cat once here (get_image() copies).
 	var speakers := JsonData.load_dict(SPEAKERS_PATH)
-	var pid: String = names.player_speaker()
-	_player_color = Color(str(speakers.get(pid, {}).get("color", "#e8964a")))
-	_portrait_tex = AssetCatalog.texture("cat.%s.idle" % pid)
-	var cat: Dictionary = JsonData.load_dict(CATS_PATH)
-	var fpx := int(cat.get("frame_px", 50))
-	if _portrait_tex != null and _portrait_tex.get_width() >= fpx:
-		_portrait_frames = maxi(1, _portrait_tex.get_width() / fpx)
-		var img := _portrait_tex.get_image()  # once, here: get_image() copies
-		if img != null:
-			_portrait_used = img.get_region(Rect2i(0, 0, fpx, mini(fpx, img.get_height()))).get_used_rect()
-	_portrait_fps = float(t.get("portrait_fps", 7))
+	var cats_data: Dictionary = JsonData.load_dict(CATS_PATH)
+	var fpx := int(cats_data.get("frame_px", 50))
+	for id: String in picker.names.cat_ids():
+		var anims: Dictionary = cats_data.get("cats", {}).get(id, {}).get("anims", {})
+		var anim: String = anims.keys()[0] if not anims.is_empty() else "idle"
+		var tex := AssetCatalog.texture("cat.%s.%s" % [id, anim])
+		var e := {"tex": tex, "frames": 1, "fps": float(anims.get(anim, {}).get("fps", 1)),
+			"used": Rect2i(0, 0, fpx, fpx), "color": Color(str(speakers.get(id, {}).get("color", "#808080")))}
+		if tex != null and tex.get_width() >= fpx:
+			e["frames"] = maxi(1, tex.get_width() / fpx)
+			var img := tex.get_image()
+			if img != null:
+				var used := img.get_region(Rect2i(0, 0, fpx, mini(fpx, img.get_height()))).get_used_rect()
+				if used.size != Vector2i.ZERO:
+					e["used"] = used
+		_portraits[id] = e
 
 	viewport = SubViewport.new()
 	viewport.name = "EditorViewport"
@@ -335,13 +353,17 @@ func _relayout() -> void:
 	var x0 := _bp_panel.position.x + PANEL_PAD
 	var y := _bp_panel.position.y + PANEL_PAD
 	var rx := x0 + COL_W + COL_GAP
-	_bp_portrait = Rect2i(x0, y, PORTRAIT_W, HEADER_H)
-	_bp_name = Rect2i(x0 + PORTRAIT_W + 8, y, COL_W * 2 + COL_GAP - PORTRAIT_W - 8, HEADER_H)
+	_bp_prev_cat = Rect2i(x0, y, CAT_ARROW_W, HEADER_H)
+	_bp_portrait = Rect2i(_bp_prev_cat.end.x + 2, y, PORTRAIT_W, HEADER_H)
+	_bp_next_cat = Rect2i(_bp_portrait.end.x + 2, y, CAT_ARROW_W, HEADER_H)
+	var nx := _bp_next_cat.end.x + 7
+	_bp_name = Rect2i(nx, y, x0 + COL_W * 2 + COL_GAP - nx, 23)
+	_bp_note = Rect2i(nx, y + 24, _bp_name.size.x, HEADER_H - 24)
 	y += HEADER_H + ROW_GAP
 	_bp_tabs = []
 	for i in picker.tabs().size():
 		_bp_tabs.append(Rect2i(x0 + i * (TAB + TAB_GAP), y, TAB, TAB))
-	_bp_note = Rect2i(rx, y, COL_W, TAB)
+	_bp_rank = Rect2i(rx, y, COL_W, TAB)
 	y += TAB + 3
 	_bp_wheels = [Rect2i(x0, y, COL_W, WHEEL_H), Rect2i(rx, y, COL_W, WHEEL_H)]
 	_bp_up = []
@@ -359,6 +381,9 @@ func _relayout() -> void:
 
 	panel_rect = _ui(_bp_panel)
 	name_rect = _ui(_bp_name)
+	prev_cat_rect = _ui(_bp_prev_cat)
+	next_cat_rect = _ui(_bp_next_cat)
+	rank_rect = _ui(_bp_rank)
 	wheel_rects = []
 	up_rects = []
 	down_rects = []
@@ -393,7 +418,7 @@ func _text_w(s: String) -> int:
 ## Opens on the player's current name.
 func open(dialogue: bool = false) -> void:
 	from_dialogue = dialogue
-	picker.open(GameState.state.prefix_id, GameState.state.suffix_id)
+	picker.open_cats(GameState.state)
 	is_open = true
 	_closing = false
 	_confirmed = false
@@ -412,10 +437,15 @@ func confirm() -> bool:
 	if not is_open or _closing:
 		return false
 	if not picker.can_confirm():
+		# Show the cat whose name can't be used.
+		var bad: int = picker.first_blocked()
+		if bad >= 0 and bad != picker.cat:
+			picker.set_cat(bad)
 		ui_event.emit("nope")
 		_bounce = 1.0
+		canvas.queue_redraw()
 		return false
-	GameState.set_player_name(picker.prefix_id(), picker.suffix_id())
+	_apply(picker.changes())
 	ui_event.emit("confirm")
 	_confirmed = true
 	_closing = true
@@ -423,7 +453,24 @@ func confirm() -> bool:
 	return true
 
 
-## Closes without changing the name.
+## Saves every cat's changes: ranks, then names (twice, so two cats can
+## swap names: the first pass may refuse one while the other still has it).
+func _apply(changes: Array[Dictionary]) -> void:
+	for c in changes:
+		if GameState.get_cat_rank(c["id"]) != c["rank"]:
+			GameState.set_cat_rank(c["id"], c["rank"])
+	var left: Array[Dictionary] = changes.filter(func(c: Dictionary) -> bool: return c.has("prefix_id"))
+	for attempt in 2:
+		var still: Array[Dictionary] = []
+		for c in left:
+			if not GameState.state.names.is_allowed(c["prefix_id"], c["suffix_id"], GameState.state.names_taken_by_others(c["id"])):
+				still.append(c)
+				continue
+			GameState.set_cat_name(c["id"], c["prefix_id"], c["suffix_id"])
+		left = still
+
+
+## Closes without changing any name.
 func cancel() -> void:
 	if not is_open or _closing:
 		return
@@ -458,6 +505,27 @@ func scroll(wheel: int, delta: int) -> void:
 	canvas.queue_redraw()
 
 
+## Shows the next / previous cat (its own draft).
+func switch_cat(delta: int) -> void:
+	if not is_open or _closing or picker.cats.size() < 2:
+		return
+	picker.next_cat(delta)
+	_slide = [0.0, 0.0]
+	_bounce = 1.0
+	_portrait_frame = 0.0
+	ui_event.emit("move")
+	canvas.queue_redraw()
+
+
+func cycle_rank(delta: int) -> void:
+	if not is_open or _closing:
+		return
+	picker.cycle_rank(delta)
+	_bounce = 1.0
+	ui_event.emit("move")
+	canvas.queue_redraw()
+
+
 func set_focus(wheel: int) -> void:
 	if picker.focus != wheel:
 		picker.focus = wheel
@@ -489,7 +557,8 @@ func randomize_name() -> void:
 	if not is_open or _closing:
 		return
 	var before := [picker.prefix_id(), picker.suffix_id()]
-	if picker.roll(rng):
+	var was_touched: bool = picker.touched
+	if picker.roll(rng) or not was_touched:
 		for w in 2:
 			if [picker.prefix_id(), picker.suffix_id()][w] != before[w]:
 				_slide[w] = 1.0
@@ -530,7 +599,9 @@ func _process(dt: float) -> void:
 	for w in 2:
 		_slide[w] = move_toward(_slide[w], 0.0, ease_rate * maxf(1.0, absf(_slide[w])))
 	_bounce = move_toward(_bounce, 0.0, dt / maxf(0.001, float(t.get("bounce_s", 0.18))))
-	_portrait_frame = fmod(_portrait_frame + dt * _portrait_fps, float(_portrait_frames))
+	var por: Dictionary = _portraits.get(picker.cat_id(), {})
+	if not por.is_empty():
+		_portrait_frame = fmod(_portrait_frame + dt * float(por["fps"]), float(por["frames"]))
 	if not _sparkles.is_empty():
 		for s in _sparkles:
 			s["age"] = float(s["age"]) + dt
@@ -624,6 +695,12 @@ func _key(ev: InputEventKey) -> bool:
 			scroll(picker.focus, -1)
 		KEY_DOWN, KEY_S:
 			scroll(picker.focus, 1)
+		KEY_Q:
+			switch_cat(-1)
+		KEY_E:
+			switch_cat(1)
+		KEY_K:
+			cycle_rank(-1 if ev.shift_pressed else 1)
 		KEY_TAB:
 			set_category(picker.category + (-1 if ev.shift_pressed else 1))
 		KEY_PAGEUP:
@@ -671,9 +748,11 @@ func _pad(ev: InputEvent) -> void:
 			JOY_BUTTON_Y:
 				toggle_lock(picker.focus)
 			JOY_BUTTON_LEFT_SHOULDER:
-				set_category(picker.category - 1)
+				switch_cat(-1)
 			JOY_BUTTON_RIGHT_SHOULDER:
-				set_category(picker.category + 1)
+				switch_cat(1)
+			JOY_BUTTON_BACK:
+				cycle_rank(1)
 		return
 	var jm := ev as InputEventJoypadMotion
 	if jm == null:
@@ -685,6 +764,14 @@ func _pad(ev: InputEvent) -> void:
 			set_focus(NamePicker.SUFFIX if jm.axis_value > 0.0 else NamePicker.PREFIX)
 		elif absf(jm.axis_value) < 0.3:
 			_stick_held.x = 0
+	elif jm.axis == JOY_AXIS_TRIGGER_LEFT or jm.axis == JOY_AXIS_TRIGGER_RIGHT:
+		# The triggers change the tab, once per pull.
+		var bit := 1 if jm.axis == JOY_AXIS_TRIGGER_LEFT else 2
+		if jm.axis_value > 0.6 and (_triggers_held & bit) == 0:
+			_triggers_held |= bit
+			set_category(picker.category + (-1 if bit == 1 else 1))
+		elif jm.axis_value < 0.3:
+			_triggers_held &= ~bit
 	elif jm.axis == JOY_AXIS_LEFT_Y:
 		if absf(jm.axis_value) > 0.6 and _stick_held.y == 0:
 			_stick_held.y = 1
@@ -698,8 +785,15 @@ func _local(p: Vector2) -> Vector2:
 
 
 ## What a press at `p` (UI units) hits: "up0", "down1", "lock0", "tab3",
-## "wheel1", "random", "cancel", "confirm", "panel" or "".
+## "wheel1", "prev_cat", "next_cat", "rank", "random", "cancel", "confirm",
+## "panel" or "".
 func target_at(p: Vector2) -> String:
+	if prev_cat_rect.has_point(p):
+		return "prev_cat"
+	if next_cat_rect.has_point(p):
+		return "next_cat"
+	if rank_rect.has_point(p):
+		return "rank"
 	for i in 2:
 		if up_rects[i].has_point(p):
 			return "up%d" % i
@@ -752,7 +846,13 @@ func _pointer(id: int, pressed: bool, pos: Vector2) -> void:
 	canvas.queue_redraw()
 	if target_at(p) != target:
 		return
-	if target.begins_with("lock"):
+	if target == "prev_cat":
+		switch_cat(-1)
+	elif target == "next_cat":
+		switch_cat(1)
+	elif target == "rank":
+		cycle_rank(1)
+	elif target.begins_with("lock"):
 		toggle_lock(int(target.right(1)))
 	elif target.begins_with("tab"):
 		set_category(int(target.substr(3)))
@@ -817,22 +917,50 @@ func _draw_editor() -> void:
 
 func _draw_header() -> void:
 	var r := _bp_portrait
-	_panel(r, _player_color)
-	if _portrait_tex != null:
+	var por: Dictionary = _portraits.get(picker.cat_id(), {})
+	_panel(r, por.get("color", Color("#808080")))
+	var tex: Texture2D = por.get("tex")
+	if tex != null:
 		var fpx := 50
-		var used := _portrait_used
+		var used: Rect2i = por["used"]
 		var src := Rect2(int(_portrait_frame) * fpx + used.position.x, used.position.y, used.size.x, used.size.y)
 		var sc := 2 if used.size.x * 2 <= r.size.x - 4 and used.size.y * 2 <= r.size.y - 4 else 1
 		var sz := Vector2(used.size) * sc
 		var at := Vector2(r.position) + ((Vector2(r.size) - sz) / 2.0).floor()
-		canvas.draw_texture_rect_region(_portrait_tex, Rect2(at, sz), src)
+		canvas.draw_texture_rect_region(tex, Rect2(at, sz), src)
+	var many := picker.cats.size() > 1
+	for i in 2:
+		var ar := _bp_prev_cat if i == 0 else _bp_next_cat
+		var pressed := _is_pressed("prev_cat" if i == 0 else "next_cat")
+		_panel(ar, PAPER_DARK if pressed else PAPER)
+		_side_arrow(ar, i == 0, INK if many else Color(INK, 0.3))
 	var full := shown_name()
-	var blocked := not picker.can_confirm()
-	var col := BLOCKED if blocked else INK
+	var col := BLOCKED if picker.status() != Names.OK else INK
 	var big := _name_width() <= _bp_name.size.x
 	var lift := -2 if _bounce > 0.55 else (-1 if _bounce > 0.2 else 0)
 	var cy := _bp_name.get_center().y + lift
 	_text(full, Vector2(_bp_name.position.x, cy), col, big)
+	# Under the name: why it can't be used, else which cat this is.
+	var n := note()
+	var ncol := BLOCKED
+	if n == "":
+		if picker.first_blocked() >= 0:
+			n = GameStrings.text("names.other_blocked")
+		else:
+			n = GameStrings.text("names.cat_count", {"i": picker.cat + 1, "n": picker.cats.size()}) if many else ""
+			ncol = Color(INK, 0.45)
+	if n != "":
+		_text(n, Vector2(_bp_note.position.x, _bp_note.get_center().y), ncol, false)
+
+
+## A rank's symbol texture ("" rank or none: null).
+func rank_texture(rank_id: String) -> Texture2D:
+	var key: String = picker.names.rank_icon(rank_id)
+	if key == "":
+		return null
+	if not _rank_tex.has(key):
+		_rank_tex[key] = AssetCatalog.texture(key)
+	return _rank_tex[key]
 
 
 func _name_width() -> int:
@@ -861,13 +989,17 @@ func _draw_tabs() -> void:
 		var pressed := _is_pressed("tab%d" % i)
 		_panel(r, SELECT if on else (PAPER_DARK if pressed else PAPER))
 		_icon(ICONS.get(tabs[i], ICONS["All"]), r, INK)
-	var n := note()
-	if n != "":
-		_text(n, Vector2(_bp_note.end.x - _text_w(n), _bp_note.get_center().y), BLOCKED, false)
-	else:
-		# The tab's name while the name is fine.
-		var label := picker.category_name()
-		_text(label, Vector2(_bp_note.end.x - _text_w(label), _bp_note.get_center().y), Color(INK, 0.45), false)
+	# The rank button: symbol + name; a tap picks the next rank.
+	var r := _bp_rank
+	_panel(r, PAPER_DARK if _is_pressed("rank") else PAPER)
+	var label: String = picker.names.rank_label(picker.rank)
+	var tex := rank_texture(picker.rank)
+	var x := r.position.x + 5
+	if tex != null:
+		canvas.draw_texture(tex, Vector2(x, r.position.y + (r.size.y - tex.get_height()) / 2))
+		x += tex.get_width() + 4
+	_text(label, Vector2(x, r.get_center().y), INK, false)
+	_side_arrow(Rect2i(r.end.x - 10, r.position.y, 8, r.size.y), false, Color(INK, 0.5))
 
 
 func _draw_wheel(w: int) -> void:
@@ -881,6 +1013,8 @@ func _draw_wheel(w: int) -> void:
 	var text_w := _bp_up[w].position.x - text_x - 2
 	# Caption, top left.
 	var cap := GameStrings.text("names.prefix" if w == 0 else "names.suffix")
+	if w == 0 and picker.category_name() != NamePicker.ALL:
+		cap = picker.category_name()
 	_text(cap, Vector2(r.position.x + 4, r.position.y + 5), Color(INK, 0.4), false)
 	var mid := float(r.position.y) + 35.0
 	for o in range(-2, 3):
@@ -950,6 +1084,15 @@ func _icon(grid: Array, r: Rect2i, col: Color) -> void:
 		for x in w:
 			if row[x] == "#":
 				canvas.draw_rect(Rect2(o.x + x, o.y + y, 1, 1), col)
+
+
+## A filled triangle pointing left or right, 7 px tall, centred in `r`.
+func _side_arrow(r: Rect2i, left: bool, col: Color) -> void:
+	var c := r.get_center()
+	for i in 4:
+		var h := 1 + i * 2
+		var x := c.x - 2 + (i if left else 3 - i)
+		canvas.draw_rect(Rect2(x, c.y - i, 1, h), col)
 
 
 ## A filled triangle, 7 px wide, pointing up or down.

@@ -228,7 +228,8 @@ func _ready() -> void:
 	dialogue.choice_made.connect(_on_choice)
 	dialogue.ui_event.connect(func(kind: String) -> void: sound.play(kind))
 	add_child(dialogue)
-	GameState.name_changed.connect(func(_n: String) -> void: dialogue.refresh_name())
+	GameState.name_changed.connect(_on_name_changed)
+	GameState.rank_changed.connect(_on_name_changed)
 	DialogueManager.awaiting.connect(_on_awaiting)
 	# Over the box: while open it takes every key, button and tap first.
 	name_editor = NameEditor.new()
@@ -716,7 +717,7 @@ func _handle(events: Array[Dictionary]) -> void:
 				if sound != null:
 					sound.play("drink")
 			"message":
-				say(GameStrings.text(ev["key"]))
+				say(GameState.format_text(GameStrings.text(ev["key"])))
 			"exit":
 				_on_exit(ev)
 
@@ -788,6 +789,11 @@ func open_name_editor(from_dialogue: bool = false) -> bool:
 	_update_touch_visibility()
 	naming_changed.emit(true)
 	return true
+
+
+## A cat was renamed or re-ranked: its name plate follows.
+func _on_name_changed(_id: String, _value: String) -> void:
+	dialogue.refresh_name()
 
 
 func _on_awaiting(screen: String) -> void:
