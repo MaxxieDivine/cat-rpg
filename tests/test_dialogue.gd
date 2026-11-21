@@ -146,7 +146,7 @@ func test_bram_eager_and_repeat() -> void:
 	check_eq(state.bond("bram"), 1, "bond bram +1")
 	check_eq(state.get_flag("talked_bram"), true, "talked_bram")
 	check_eq(_play("bram"), ["repeat"] as Array[String], "repeat line after the full conversation")
-	check_eq(d.start(convs["bram"])["text"], _text("bram", "repeat"), "repeat text from the file")
+	check_eq(d.start(convs["bram"])["text"], _text("bram", "repeat").replace("{player_name}", state.get_player_name()), "repeat text from the file, with the player's name")
 	check_eq(state.bond("bram"), 1, "repeat changes nothing")
 
 

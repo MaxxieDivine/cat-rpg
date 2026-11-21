@@ -498,7 +498,7 @@ func _check_bram_talk(app: Control, name: String, by_touch: bool) -> void:
 	while box.is_typing() and waited < 4.0:
 		await tree.create_timer(0.1).timeout
 		waited += 0.1
-	check_eq(box.visible_text(), bram_line, "%s: Bram's repeat line from bram.json" % name)
+	check_eq(box.visible_text(), GameState.format_text(bram_line), "%s: Bram's repeat line from bram.json" % name)
 	if by_touch:
 		_touch(app, 4, app.metrics.safe_rect.get_center(), true)
 		_touch(app, 4, app.metrics.safe_rect.get_center(), false)

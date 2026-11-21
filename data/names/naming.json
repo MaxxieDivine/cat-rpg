@@ -1,0 +1,9 @@
+{
+	"_note": "Player naming. giver = the NPC id (world.json / speakers.json) whose conversation is followed by the naming offer (dialogue: that conversation, whose speaker lines must use the same id). start = the name a new game begins with (an empty suffix = just the prefix). ranks: every rank in order; endings: a placeholder per rank for later rank-based names (not used yet: get_player_name() shows the chosen name). player_speaker = the speakers.json id of the player: its name plate shows the player name; every other speaker name is blocked.",
+	"giver": "sorrel",
+	"player_speaker": "fern",
+	"dialogue": "res://data/dialogue/naming.json",
+	"start": {"prefix": "fern", "suffix": "", "rank": "apprentice"},
+	"ranks": ["kit", "apprentice", "warrior", "leader"],
+	"endings": {"kit": "", "apprentice": "", "warrior": "", "leader": ""}
+}

@@ -26,6 +26,9 @@
 		"open": {"files": ["res://audio/ui/open.wav"], "volume_db": -18},
 		"move": {"files": ["res://audio/ui/move.wav"], "volume_db": -20},
 		"confirm": {"files": ["res://audio/ui/confirm.wav"], "volume_db": -17},
-		"advance": {"files": ["res://audio/ui/advance.wav"], "volume_db": -21}
+		"advance": {"files": ["res://audio/ui/advance.wav"], "volume_db": -21},
+		"tick": {"files": ["res://audio/ui/move.wav"], "volume_db": -27, "pitch_jitter": 0.06},
+		"cancel": {"files": ["res://audio/ui/advance.wav"], "volume_db": -20},
+		"nope": {"files": ["res://audio/ui/move.wav"], "volume_db": -22, "pitch_jitter": 0.0}
 	}
 }

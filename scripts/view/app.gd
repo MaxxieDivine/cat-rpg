@@ -5,8 +5,8 @@ extends Control
 ## build; in the game only while Settings.debug_overlay is on, toggled by F3
 ## or three quick taps in the top-left corner). In the game the label also
 ## names the area and the spawn Fern arrived at and lists each mouse (spot,
-## head up / down, alert %); debug buttons (keys H / T / M) set hunger /
-## thirst to 5 or put a mouse at the nearest prey spot.
+## head up / down, alert %); debug buttons (keys H / T / M / N) set hunger /
+## thirst to 5, put a mouse at the nearest prey spot or open the Name Editor.
 
 const ScreenMetrics := preload("res://scripts/view/screen_metrics.gd")
 const GameStrings := preload("res://scripts/core/game_strings.gd")
@@ -42,6 +42,8 @@ var fps_low := 0
 var logic_ms := 0.0
 
 var _laying_out := false
+## Corner buttons hidden while the Name Editor is open.
+var _hidden_for_naming := false
 ## Times of the last corner taps (debug overlay toggle).
 var _corner_taps: Array[float] = []
 var _frames := 0
@@ -91,7 +93,7 @@ func _ready() -> void:
 	volume_button = VolumeButton.new()
 	add_child(volume_button)
 	volume_button.configure(JsonData.load_dict("res://data/tuning.json").get("audio", {}).get("volume_steps", []))
-	for which in ["hunger", "thirst", "mouse"]:
+	for which in ["hunger", "thirst", "mouse", "name"]:
 		var b := Button.new()
 		b.name = "Debug_" + which
 		b.text = GameStrings.text("debug." + which)
@@ -102,6 +104,10 @@ func _ready() -> void:
 			b.pressed.connect(func() -> void:
 				if game != null:
 					game.debug_spawn_mouse())
+		elif which == "name":
+			b.pressed.connect(func() -> void:
+				if game != null:
+					game.open_name_editor())
 		else:
 			b.pressed.connect(func() -> void: debug_set_need(which))
 		add_child(b)
@@ -131,6 +137,9 @@ func start_game() -> void:
 	game = GameScreen.new()
 	game.name = "Game"
 	add_child(game)
+	game.naming_changed.connect(func(_open: bool) -> void:
+		_place_buttons()
+		_place_hud())
 	move_child(game, title.get_index())  # below the overlays, hud and button
 	title.queue_free()
 	title = null
@@ -163,14 +172,17 @@ func _input(event: InputEvent) -> void:
 		Settings.debug_overlay = not Settings.debug_overlay
 		return
 	if key != null and key.pressed and not key.echo and Settings.debug_overlay and game != null:
-		if key.keycode == KEY_H:
+		if key.keycode == KEY_H and not game.naming():
 			debug_set_need("hunger")
 			return
-		if key.keycode == KEY_T:
+		if key.keycode == KEY_T and not game.naming():
 			debug_set_need("thirst")
 			return
-		if key.keycode == KEY_M:
+		if key.keycode == KEY_M and not game.naming():
 			game.debug_spawn_mouse()
+			return
+		if key.keycode == KEY_N and not game.naming():
+			game.open_name_editor()
 			return
 	var tap := event as InputEventScreenTouch
 	if tap == null or not tap.pressed:
@@ -199,6 +211,15 @@ func _place_buttons() -> void:
 	if fullscreen_button.visible:
 		x -= volume_button.min_target
 	volume_button.place(Vector2(x, fullscreen_button.position.y))
+	# The Name Editor fills the screen: no corner buttons over its panel.
+	# Only on open / close, so anything else that hides the volume button
+	# (tests) keeps it hidden.
+	var naming: bool = game != null and game.naming()
+	if naming != _hidden_for_naming:
+		_hidden_for_naming = naming
+		volume_button.visible = not naming
+	if naming:
+		fullscreen_button.visible = false
 
 
 ## Debug: hunger or thirst to 5 (passing out follows soon after).
@@ -271,6 +292,9 @@ func _update_hud() -> void:
 			"volume": volume_button.volume(),
 			"view_size": [game.view_size.x, game.view_size.y] if game != null else [],
 			"bonds": GameState.state.bonds,
+			"player_name": GameState.get_player_name(),
+			"name_editor": game.name_editor.is_open if game != null else false,
+			"name_shown": game.name_editor.shown_name() if game != null and game.name_editor.is_open else "",
 			"area": Player.area(),
 			"spawn": Player.spawn(),
 			"hunger": Needs.hunger(),
@@ -297,8 +321,13 @@ func _place_hud() -> void:
 	var show_debug := game != null and Settings.debug_overlay
 	var tall := float(JsonData.load_dict("res://data/tuning.json").get("touch", {}).get("min_target", 48))
 	var x := metrics.safe_rect.get_center().x + 8.0
+	var w := tall * 2.0
+	# Narrower buttons when four don't fit before the corner buttons.
+	var room := metrics.safe_rect.end.x - 2.0 * tall - 24.0 - x
+	if room < debug_buttons.size() * (w + 8.0):
+		w = maxf(tall, room / debug_buttons.size() - 8.0)
 	for b in debug_buttons:
-		b.visible = show_debug
-		b.size = Vector2(tall * 2.0, tall)
+		b.visible = show_debug and not (game.naming() if game != null else false)
+		b.size = Vector2(w, tall)
 		b.position = metrics.snap(Vector2(x, metrics.safe_rect.position.y + 12.0))
-		x += tall * 2.0 + 8.0
+		x += w + 8.0

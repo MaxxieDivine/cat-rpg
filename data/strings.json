@@ -28,5 +28,13 @@
 	"ui.pounce": "Pounce",
 	"ui.eat": "Eat",
 	"debug.mouse": "Mouse",
-	"hud.mouse": "{spot} {state} {alert}%"
+	"hud.mouse": "{spot} {state} {alert}%",
+	"debug.name": "Name",
+	"names.prefix": "Prefix",
+	"names.suffix": "Suffix",
+	"names.random": "Random",
+	"names.cancel": "Cancel",
+	"names.confirm": "Confirm",
+	"names.taken": "That name is taken",
+	"names.triple": "Too many of one letter"
 }

@@ -297,7 +297,8 @@ func test_every_line_fits_the_narrowest_box() -> void:
 			if not nodes[id].has("text"):
 				continue
 			var para := TextParagraph.new()
-			para.add_string(str(nodes[id]["text"]), box.font, box.font_size)
+			# {player_name} at its longest (the widest prefix + suffix).
+			para.add_string(str(nodes[id]["text"]).replace("{player_name}", _widest_name(box)), box.font, box.font_size)
 			para.width = float(d["text_min_px"])
 			para.break_flags = TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE
 			check(para.get_line_count() <= int(d["lines"]), "%s/%s: %d lines at %s px (max %s)" % [f, id, para.get_line_count(), d["text_min_px"], d["lines"]])
@@ -671,10 +672,16 @@ func _start(cfg: Array) -> Control:
 
 ## Plays a whole conversation with `id`, picking choices by index from
 ## `picks`. Returns the node ids of every line shown, in order.
-func _converse(app: Control, id: String, picks: Array, by_touch: bool) -> Array[String]:
+## Lines of the naming offer that follows the name-giver's conversation
+## (data/dialogue/naming.json) are checked but not returned, and its offer
+## is declined ("Never mind.") unless `naming_picks` says otherwise.
+func _converse(app: Control, id: String, picks: Array, by_touch: bool, naming_picks: Array = [1]) -> Array[String]:
 	var g: Control = app.game
 	var box: Control = g.dialogue
 	var seen: Array[String] = []
+	var naming_seen: Array[String] = []
+	var own := "res://data/dialogue/%s.json" % id
+	naming_picks = naming_picks.duplicate()
 	await _open_talk(app, id, by_touch)
 	if not check(box.is_open, "%s: conversation with %s started" % [app.metrics.ui_size, id]):
 		return seen
@@ -682,14 +689,17 @@ func _converse(app: Control, id: String, picks: Array, by_touch: bool) -> Array[
 	while box.is_open and guard < 80:
 		guard += 1
 		var node := str(box.line["node"])
-		if seen.is_empty() or seen[-1] != node:
-			seen.append(node)
+		var mine := str(box.line.get("conversation", own)) == own
+		var list: Array[String] = seen if mine else naming_seen
+		if list.is_empty() or list[-1] != node:
+			list.append(node)
 			_check_line(app, id)
 		if box.is_typing():
 			await _press(app, by_touch)
 			check(not box.is_typing(), "%s: one press finishes the line" % node)
 		elif box.choices_shown():
-			var pick: int = picks.pop_front() if not picks.is_empty() else 0
+			var plan: Array = picks if mine else naming_picks
+			var pick: int = plan.pop_front() if not plan.is_empty() else (0 if mine else 1)
 			if by_touch:
 				await _tap_at(app, box.choice_rects[pick].get_center())
 			else:
@@ -705,12 +715,29 @@ func _converse(app: Control, id: String, picks: Array, by_touch: bool) -> Array[
 	return seen
 
 
+## The widest name the editor can build (for line-fit checks).
+func _widest_name(box: Control) -> String:
+	var names = GameState.state.names
+	var best := ""
+	var best_w := -1.0
+	for p: Dictionary in names.prefixes:
+		for s: Dictionary in names.suffixes:
+			var n: String = names.build(str(p["id"]), str(s["id"]))
+			var w: float = box.font.get_string_size(n, HORIZONTAL_ALIGNMENT_LEFT, -1, box.font_size).x
+			if w > best_w:
+				best_w = w
+				best = n
+	return best
+
+
 ## Checks the line on screen against its node in the dialogue file.
 func _check_line(app: Control, conv: String) -> void:
 	var box: Control = app.game.dialogue
-	var node: Dictionary = convs[conv]["nodes"][str(box.line["node"])]
+	var file := str(box.line.get("conversation", "res://data/dialogue/%s.json" % conv))
+	var node: Dictionary = JsonData.load_dict(file)["nodes"][str(box.line["node"])]
 	var sp: Dictionary = speakers[node["speaker"]]
-	check_eq(box.name_label.text, str(sp["name"]), "%s: name plate" % box.line["node"])
+	check_eq(box.name_label.text, GameState.format_text(str(sp["name"])), "%s: name plate" % box.line["node"])
+	check_eq(str(box.line["text"]), GameState.format_text(str(node["text"])), "%s: text, {player_name} filled in" % box.line["node"])
 	check_eq(box.speaker_color(), Color(str(sp["color"])), "%s: portrait colour" % box.line["node"])
 	check_eq(str(box.line["expression"]), str(node.get("expression", "neutral")), "%s: expression" % box.line["node"])
 	check_eq(box.on_right(), node["speaker"] == "fern", "%s: Fern on the right, others on the left" % box.line["node"])

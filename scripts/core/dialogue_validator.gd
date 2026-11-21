@@ -7,14 +7,18 @@ extends RefCounted
 ## speakers, bond cats or expressions, bad flag values, more than
 ## MAX_CHOICES choices, nodes that are neither a line nor a branch, lines
 ## without exactly one of next / choices / end, branches without a single
-## final fallback, and nodes from which no end can be reached.
+## final fallback, and nodes from which no end can be reached, unknown
+## {placeholders} in text, and await nodes (`"await": <screen>`, e.g. the
+## Name Editor) without both a "next" (confirmed) and a "cancel" target.
 
 const JsonData := preload("res://scripts/core/json_data.gd")
 const GameState := preload("res://scripts/core/game_state.gd")
 const DIALOGUE_DIR := "res://data/dialogue"
 const SPEAKERS_PATH := "res://data/speakers.json"
 const MAX_CHOICES := 3
-const NODE_KEYS := ["speaker", "expression", "text", "next", "choices", "branch", "set", "bond", "end"]
+const NODE_KEYS := ["speaker", "expression", "text", "next", "choices", "branch", "set", "bond", "end", "await", "cancel"]
+## Screens a conversation can wait on (game.gd opens them).
+const AWAITS := ["name_editor"]
 const CHOICE_KEYS := ["text", "next", "set", "bond"]
 const BRANCH_KEYS := ["if", "next"]
 
@@ -73,6 +77,17 @@ static func validate(conv: Dictionary, speakers: Dictionary = {}, state = null) 
 				errors.append("%s has unknown field '%s'" % [where, k])
 		_check_set(n.get("set", {}), where, state, errors)
 		_check_bond(n.get("bond", {}), where, state, errors)
+		if n.has("await"):
+			for k in ["speaker", "text", "expression", "choices", "end", "branch"]:
+				if n.has(k):
+					errors.append("%s waits on a screen and cannot have '%s'" % [where, k])
+			if not AWAITS.has(str(n["await"])):
+				errors.append("%s awaits unknown screen '%s' (known: %s)" % [where, n["await"], ", ".join(AWAITS)])
+			_check_target(n.get("next"), where + " next", nodes, errors, edges[id])
+			_check_target(n.get("cancel"), where + " cancel", nodes, errors, edges[id])
+			continue
+		if n.has("cancel"):
+			errors.append("%s: only await nodes have \"cancel\"" % where)
 		if n.has("branch"):
 			for k in ["speaker", "text", "expression", "next", "choices", "end"]:
 				if n.has(k):
@@ -84,6 +99,7 @@ static func validate(conv: Dictionary, speakers: Dictionary = {}, state = null) 
 			continue
 		if str(n["text"]).strip_edges() == "":
 			errors.append("%s has empty text" % where)
+		_check_placeholders(str(n["text"]), where, state, errors)
 		var speaker := str(n.get("speaker", ""))
 		if not speakers.has(speaker):
 			errors.append("%s has unknown speaker '%s'" % [where, speaker])
@@ -153,6 +169,7 @@ static func _check_choices(choices: Variant, where: String, nodes: Dictionary, s
 				errors.append("%s has unknown field '%s'" % [cw, k])
 		if str(c.get("text", "")).strip_edges() == "":
 			errors.append("%s has no text" % cw)
+		_check_placeholders(str(c.get("text", "")), cw, state, errors)
 		_check_target(c.get("next"), cw, nodes, errors, out)
 		_check_set(c.get("set", {}), cw, state, errors)
 		_check_bond(c.get("bond", {}), cw, state, errors)
@@ -189,6 +206,14 @@ static func _check_branch(entries: Variant, where: String, nodes: Dictionary, st
 		_check_target(e.get("next"), ew, nodes, errors, out)
 	if fallback < 0:
 		errors.append("%s: branch has no fallback (an entry without \"if\")" % where)
+
+
+## Text may only use the placeholders GameState fills in ({player_name}).
+static func _check_placeholders(text: String, where: String, state, errors: Array[String]) -> void:
+	var re := RegEx.create_from_string("\\{([a-z_]*)\\}")
+	for m in re.search_all(text):
+		if not state.PLACEHOLDERS.has(m.get_string(1)):
+			errors.append("%s uses unknown placeholder {%s} (known: %s)" % [where, m.get_string(1), ", ".join(state.PLACEHOLDERS)])
 
 
 static func _check_set(d: Variant, where: String, state, errors: Array[String]) -> void:

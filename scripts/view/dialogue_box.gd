@@ -256,7 +256,7 @@ func show_line(ev: Dictionary) -> void:
 	text_label.text = typewriter.text
 	text_label.visible_characters = 0
 	var sp := speaker()
-	name_label.text = str(sp.get("name", ev.get("speaker", "")))
+	name_label.text = speaker_name()
 	name_label.add_theme_color_override("font_color", _ink_on(speaker_color()))
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	if not was_open:
@@ -276,6 +276,20 @@ func animating() -> bool:
 
 func speaker() -> Dictionary:
 	return speakers.get(str(line.get("speaker", "")), {})
+
+
+## The name plate: the speaker's name, with {player_name} filled in (the
+## player's plate shows GameState.get_player_name()).
+func speaker_name() -> String:
+	return GameState.format_text(str(speaker().get("name", line.get("speaker", ""))))
+
+
+## The player's name changed: re-letter the plate if it is showing.
+func refresh_name() -> void:
+	if line.is_empty():
+		return
+	name_label.text = speaker_name()
+	_relayout()
 
 
 func speaker_color() -> Color:

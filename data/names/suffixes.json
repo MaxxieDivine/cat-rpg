@@ -1,0 +1,21 @@
+{
+	"_note": "Name suffixes (the second part, shown lowercase). Same fields as prefixes.json. Suffix categories are only used for grouping; the Name Editor has no suffix tabs.",
+	"categories": ["Body", "Nature", "Motion"],
+	"words": [
+		{"id": "whisker", "text": "whisker", "category": "Body", "rarity": "common"},
+		{"id": "tail", "text": "tail", "category": "Body", "rarity": "common"},
+		{"id": "fur", "text": "fur", "category": "Body", "rarity": "common"},
+		{"id": "pelt", "text": "pelt", "category": "Body", "rarity": "common"},
+		{"id": "ear", "text": "ear", "category": "Body", "rarity": "common"},
+		{"id": "eye", "text": "eye", "category": "Body", "rarity": "common"},
+		{"id": "foot", "text": "foot", "category": "Body", "rarity": "common"},
+		{"id": "stripe", "text": "stripe", "category": "Body", "rarity": "common"},
+		{"id": "song", "text": "song", "category": "Nature", "rarity": "common"},
+		{"id": "shade", "text": "shade", "category": "Nature", "rarity": "common"},
+		{"id": "leaf", "text": "leaf", "category": "Nature", "rarity": "common"},
+		{"id": "drift", "text": "drift", "category": "Nature", "rarity": "common"},
+		{"id": "wing", "text": "wing", "category": "Nature", "rarity": "common"},
+		{"id": "spark", "text": "spark", "category": "Nature", "rarity": "common"},
+		{"id": "step", "text": "step", "category": "Motion", "rarity": "common"}
+	]
+}

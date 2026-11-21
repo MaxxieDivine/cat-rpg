@@ -40,6 +40,9 @@
 		"bar_back": "#3a3444",
 		"hunger": "#e39a4a",
 		"thirst": "#5c97c4",
-		"bar_pulse": "#fff4d0"
+		"bar_pulse": "#fff4d0",
+		"blocked": "#b83a3a",
+		"paper_dark": "#e2d6bb",
+		"dim": "#1c1824b0"
 	}
 }

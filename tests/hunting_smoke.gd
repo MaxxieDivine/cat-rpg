@@ -236,7 +236,7 @@ func test_debug_mouse_spawner_and_label() -> void:
 	app._update_hud()
 	check(app.hud.text.contains(spot["id"]), "the label lists the mouse (%s)" % app.hud.text)
 	check(app.hud.text.contains("down") or app.hud.text.contains("UP"), "with head up / down")
-	check(app.debug_buttons.size() == 3 and app.debug_buttons[2].visible, "a Mouse button too")
+	check(app.debug_buttons.any(func(b: Button) -> bool: return b.name == "Debug_mouse" and b.visible), "a Mouse button too")
 	_close(app)
 
 
