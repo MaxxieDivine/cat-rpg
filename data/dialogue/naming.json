@@ -1,0 +1,15 @@
+{
+	"start": "offer",
+	"nodes": {
+		"offer": {"speaker": "sorrel", "expression": "neutral", "text": "Was there something else, {player_name}?", "choices": [
+			{"text": "Can I have a new name?", "next": "ask"},
+			{"text": "Never mind.", "next": "never_mind"}
+		]},
+		"ask": {"speaker": "fern", "expression": "neutral", "text": "Can I have a new name?", "next": "think"},
+		"think": {"speaker": "sorrel", "expression": "happy", "text": "A new name? Hm. Tell me what you would be called, and I will think on it.", "next": "editor"},
+		"editor": {"await": "name_editor", "next": "named", "cancel": "kept"},
+		"named": {"speaker": "sorrel", "expression": "happy", "text": "Then from now on, the Clan will know you as {player_name}.", "end": true},
+		"kept": {"speaker": "sorrel", "expression": "neutral", "text": "No? Then you stay {player_name} a while longer.", "end": true},
+		"never_mind": {"speaker": "fern", "expression": "neutral", "text": "Never mind.", "end": true}
+	}
+}

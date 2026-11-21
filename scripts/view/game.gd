@@ -48,6 +48,14 @@ extends Control
 ## quieter with distance (hunt.hear_px). The World gets the Hunting
 ## autoload's tuning and the Player autoload's state on every area load.
 ##
+## Naming: after the name-giver's own lines (data/names/naming.json
+## "giver", Sorrel) the naming conversation follows; "Can I have a new
+## name?" reaches an await node, the box closes and the Name Editor
+## (name_editor.gd) opens over the paused world (no movement, no needs
+## drain, no time of day). Confirm or Cancel resumes the conversation, whose
+## reply uses the (new) {player_name}. The debug overlay opens the editor
+## anywhere (open_name_editor()).
+##
 ## Time of day (scripts/core/day_cycle.gd): after the last of the three
 ## conversations, afternoon turns to dusk and night; the world view, the
 ## music and the ambience follow it. Sound (sound.gd) is created here, after
@@ -68,6 +76,10 @@ const GameStrings := preload("res://scripts/core/game_strings.gd")
 const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
 const Areas := preload("res://scripts/core/areas.gd")
 const Travel := preload("res://scripts/core/travel.gd")
+const NameEditor := preload("res://scripts/view/name_editor.gd")
+
+## The Name Editor opened or closed (app.gd hides the corner buttons under it).
+signal naming_changed(open: bool)
 
 var world
 var areas
@@ -101,6 +113,7 @@ var camera: Camera2D
 var view: Sprite2D
 var touch: Control
 var dialogue: Control
+var name_editor: Control
 var voice: Node
 var sound: Node
 var day
@@ -215,6 +228,15 @@ func _ready() -> void:
 	dialogue.choice_made.connect(_on_choice)
 	dialogue.ui_event.connect(func(kind: String) -> void: sound.play(kind))
 	add_child(dialogue)
+	GameState.name_changed.connect(func(_n: String) -> void: dialogue.refresh_name())
+	DialogueManager.awaiting.connect(_on_awaiting)
+	# Over the box: while open it takes every key, button and tap first.
+	name_editor = NameEditor.new()
+	name_editor.name = "NameEditor"
+	name_editor.configure(tuning.get("name_editor", {}))
+	name_editor.closed.connect(_on_name_editor_closed)
+	name_editor.ui_event.connect(func(kind: String) -> void: sound.play(kind))
+	add_child(name_editor)
 
 	# Over everything on the game screen: the fade to black.
 	fade = ColorRect.new()
@@ -312,6 +334,7 @@ func layout(m) -> void:
 	var fit := ScreenMetrics.integer_fit(base, screen_px)
 	var safe_px: Rect2i = m.safe_rect_px()
 	dialogue.layout(m, dialogue.pick_scale(screen_px, float(safe_px.size.x), screen_px.y - float(safe_px.end.y), fit, Settings.text_scale))
+	name_editor.layout(m)
 	# The needs bars: top-left, in from the corner like the buttons, below
 	# the build / fps label while that is on.
 	var inset := float(tuning.get("ui", {}).get("button_inset", 12))
@@ -410,6 +433,8 @@ static func _vec(a: Variant) -> Vector2:
 func _process(dt: float) -> void:
 	if paused or metrics == null:
 		return
+	if naming():
+		return  # the world waits behind the Name Editor
 	var inp := GameInput.read(touch)
 	if touch.stick_vector != Vector2.ZERO:
 		_set_last_input("touch")
@@ -600,7 +625,7 @@ func _is_continue(event: InputEvent) -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if paused or travel.busy():
+	if paused or travel.busy() or naming():
 		return
 	if is_talking():
 		_dialogue_input(event)
@@ -661,7 +686,7 @@ func _handle(events: Array[Dictionary]) -> void:
 	for ev in events:
 		match ev["type"]:
 			"talk":
-				_show(DialogueManager.start(ev["dialogue"]))
+				_show(DialogueManager.start(ev["dialogue"], DialogueManager.follow_up_for(str(ev.get("id", "")))))
 			"eat":
 				if sound != null:
 					sound.play("eat")
@@ -721,7 +746,12 @@ func _on_choice(index: int) -> void:
 
 
 func _show(ev: Dictionary) -> void:
-	if ev["type"] == "line":
+	if ev["type"] == "await":
+		# The conversation waits on a screen (_on_awaiting opens it); the
+		# box steps aside, the talk lock stays.
+		_speaker = ""
+		dialogue.close()
+	elif ev["type"] == "line":
 		if ev["speaker"] != _speaker:
 			_speaker = ev["speaker"]
 			world_view.speak(_speaker)
@@ -738,6 +768,41 @@ func _show(ev: Dictionary) -> void:
 	_place_overlays()
 
 
+## True while the Name Editor is up (the world is paused behind it).
+func naming() -> bool:
+	return name_editor != null and name_editor.is_open
+
+
+## Opens the Name Editor. `from_dialogue`: a conversation waits on it and
+## resumes when it closes. Not during a fade or while it is already open.
+func open_name_editor(from_dialogue: bool = false) -> bool:
+	if naming() or travel.busy():
+		return false
+	if not from_dialogue and (is_talking() or world.is_talking()):
+		return false
+	world.player_vel = Vector2.ZERO
+	world.running = false
+	touch.reset()
+	name_editor.touch_mode = last_input == "touch" or (last_input == "" and ScreenMetrics.is_touch())
+	name_editor.open(from_dialogue)
+	_update_touch_visibility()
+	naming_changed.emit(true)
+	return true
+
+
+func _on_awaiting(screen: String) -> void:
+	if screen == "name_editor":
+		open_name_editor(true)
+
+
+func _on_name_editor_closed(confirmed: bool) -> void:
+	naming_changed.emit(false)
+	if name_editor.from_dialogue and DialogueManager.is_waiting():
+		_show(DialogueManager.resume(confirmed))
+	_update_touch_visibility()
+	_place_overlays()
+
+
 func _set_last_input(kind: String) -> void:
 	if kind == last_input:
 		return
@@ -750,7 +815,7 @@ func _set_last_input(kind: String) -> void:
 ## keyboard is used and while a conversation is open (a tap advances then).
 func _update_touch_visibility() -> void:
 	var show := last_input == "touch" or (last_input == "" and ScreenMetrics.is_touch())
-	if is_talking() or (travel != null and travel.busy()):
+	if is_talking() or naming() or (travel != null and travel.busy()):
 		show = false
 	if touch.visible != show:
 		touch.visible = show

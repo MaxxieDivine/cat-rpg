@@ -15,6 +15,6 @@
 		"fern_nervous": {"speaker": "fern", "expression": "sad", "text": "What if I mess it up?", "next": "bram_nervous"},
 		"bram_nervous": {"speaker": "bram", "expression": "neutral", "text": "Then you mess it up with me beside you. That's what a mentor is for.", "next": "sharp"},
 		"sharp": {"speaker": "bram", "expression": "neutral", "text": "Eat. Sleep. I want you sharp.", "set": {"talked_bram": true}, "end": true},
-		"repeat": {"speaker": "bram", "expression": "neutral", "text": "Sleep, Fern. Dawn comes early.", "end": true}
+		"repeat": {"speaker": "bram", "expression": "neutral", "text": "Sleep, {player_name}. Dawn comes early.", "end": true}
 	}
 }

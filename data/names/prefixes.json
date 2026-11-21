@@ -1,0 +1,30 @@
+{
+	"_note": "Name prefixes (the first part, shown capitalised). Add a word: copy a line, give it a unique lowercase id, its text, a category from \"categories\" and a rarity (common / rare; rare is not used yet). The Name Editor's tabs follow \"categories\" in order, then All.",
+	"categories": ["Plants", "Weather", "Animals", "Colors", "Earth and Water"],
+	"words": [
+		{"id": "fern", "text": "Fern", "category": "Plants", "rarity": "common"},
+		{"id": "moss", "text": "Moss", "category": "Plants", "rarity": "common"},
+		{"id": "birch", "text": "Birch", "category": "Plants", "rarity": "common"},
+		{"id": "thistle", "text": "Thistle", "category": "Plants", "rarity": "common"},
+		{"id": "clover", "text": "Clover", "category": "Plants", "rarity": "common"},
+		{"id": "briar", "text": "Briar", "category": "Plants", "rarity": "common"},
+		{"id": "rain", "text": "Rain", "category": "Weather", "rarity": "common"},
+		{"id": "frost", "text": "Frost", "category": "Weather", "rarity": "common"},
+		{"id": "mist", "text": "Mist", "category": "Weather", "rarity": "common"},
+		{"id": "dusk", "text": "Dusk", "category": "Weather", "rarity": "common"},
+		{"id": "ember", "text": "Ember", "category": "Weather", "rarity": "common"},
+		{"id": "cloud", "text": "Cloud", "category": "Weather", "rarity": "common"},
+		{"id": "sparrow", "text": "Sparrow", "category": "Animals", "rarity": "common"},
+		{"id": "wren", "text": "Wren", "category": "Animals", "rarity": "common"},
+		{"id": "beetle", "text": "Beetle", "category": "Animals", "rarity": "common"},
+		{"id": "hare", "text": "Hare", "category": "Animals", "rarity": "common"},
+		{"id": "russet", "text": "Russet", "category": "Colors", "rarity": "common"},
+		{"id": "ash", "text": "Ash", "category": "Colors", "rarity": "common"},
+		{"id": "amber", "text": "Amber", "category": "Colors", "rarity": "common"},
+		{"id": "slate", "text": "Slate", "category": "Colors", "rarity": "common"},
+		{"id": "pebble", "text": "Pebble", "category": "Earth and Water", "rarity": "common"},
+		{"id": "brook", "text": "Brook", "category": "Earth and Water", "rarity": "common"},
+		{"id": "reed", "text": "Reed", "category": "Earth and Water", "rarity": "common"},
+		{"id": "hollow", "text": "Hollow", "category": "Earth and Water", "rarity": "common"}
+	]
+}

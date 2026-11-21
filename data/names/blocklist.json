@@ -1,0 +1,4 @@
+{
+	"_note": "Full names that can never be picked or rolled, in any letter case (e.g. \"Mossfoot\"). NPC names from speakers.json are always blocked as well; names with three of the same letter in a row are skipped too.",
+	"names": []
+}

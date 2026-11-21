@@ -72,6 +72,19 @@
 		"text_trim_px": 4,
 		"bottom_margin_px": 1
 	},
+	"name_editor": {
+		"_note": "Name Editor (name_editor.gd), in editor pixels: drawn in its own SubViewport at the largest whole scale at which the panel fits max_fill of the safe area. Buttons and arrows are at least min_target_css tall on touch screens (about 1 cm).",
+		"max_fill": 0.96,
+		"min_target_css": 38,
+		"anim_s": 0.15,
+		"anim_slide_px": 6,
+		"scroll_s": 0.12,
+		"swipe_px": 14,
+		"bounce_s": 0.18,
+		"sparkle_s": 0.55,
+		"sparkles": 14,
+		"portrait_fps": 7
+	},
 	"needs": {
 		"max": 100,
 		"start": 80,
