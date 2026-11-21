@@ -208,12 +208,13 @@ static func _check_branch(entries: Variant, where: String, nodes: Dictionary, st
 		errors.append("%s: branch has no fallback (an entry without \"if\")" % where)
 
 
-## Text may only use the placeholders GameState fills in ({player_name}).
+## Text may only use the placeholders GameState fills in ({player_name},
+## {name_<cat id>}).
 static func _check_placeholders(text: String, where: String, state, errors: Array[String]) -> void:
 	var re := RegEx.create_from_string("\\{([a-z_]*)\\}")
 	for m in re.search_all(text):
-		if not state.PLACEHOLDERS.has(m.get_string(1)):
-			errors.append("%s uses unknown placeholder {%s} (known: %s)" % [where, m.get_string(1), ", ".join(state.PLACEHOLDERS)])
+		if not state.placeholders().has(m.get_string(1)):
+			errors.append("%s uses unknown placeholder {%s} (known: %s)" % [where, m.get_string(1), ", ".join(state.placeholders())])
 
 
 static func _check_set(d: Variant, where: String, state, errors: Array[String]) -> void:

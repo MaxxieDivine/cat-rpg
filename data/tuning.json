@@ -115,7 +115,8 @@
 	"prompt": {
 		"bob_px": 2,
 		"bob_hz": 1.6,
-		"gap": 3
+		"gap": 3,
+		"rank_gap": 2
 	},
 	"wind": {
 		"speed": 1.4,

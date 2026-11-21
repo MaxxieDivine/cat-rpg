@@ -791,3 +791,107 @@ func pounce_ring(w: int, h: int) -> Image:
 				else:
 					img.set_pixel(x, y, c("ui.paper"))
 	return img
+
+
+## Rank symbols (11x11): a 9x9 shape inside a 1 px ink outline (4-way, so
+## corners round off), so they read over grass, sand and the dialogue paper
+## alike. "c" = claws (paper spikes), "y" gold, "g" / "d" leaf; the deputy
+## adds a tiny gold star in the corner.
+const RANK_SHAPES := {
+	"kit": [
+		"w.w......",
+		".........",
+		"www......",
+		"www......",
+		".....w.w.",
+		".........",
+		".....www.",
+		".....www.",
+		"........."],
+	"apprentice": [
+		"..ww.ww..",
+		"..ww.ww..",
+		".........",
+		"ww.....ww",
+		"ww.www.ww",
+		"..wwwww..",
+		".wwwwwww.",
+		".wwwwwww.",
+		"..wwwww.."],
+	"warrior": [
+		".c.c.c.c.",
+		"..c...c..",
+		"..ww.ww..",
+		"c.ww.ww.c",
+		"c.......c",
+		"ww.www.ww",
+		"..wwwww..",
+		".wwwwwww.",
+		"..wwwww.."],
+	"deputy": [
+		".c.c.c.c.",
+		"..c...c..",
+		"..ww.ww..",
+		"c.ww.ww.c",
+		"c.......c",
+		"ww.www.ww",
+		"..wwwww..",
+		".wwwwwww.",
+		"..wwwww.."],
+	"medicine": [
+		".......gg",
+		".....gggg",
+		"....ggggg",
+		"...gggdgg",
+		"..gggdgg.",
+		".gggdgg..",
+		".ggdgg...",
+		".gdg.....",
+		"d........"],
+	"leader": [
+		"....y....",
+		"....y....",
+		"...yyy...",
+		"yyyyyyyyy",
+		".yyyyyyy.",
+		"..yyyyy..",
+		"..yyyyy..",
+		".yyy.yyy.",
+		".yy...yy."],
+}
+const RANK_COLOURS := {"w": "ui.paper", "c": "ui.paper", "y": "ui.select", "g": "leaf.4", "d": "leaf.2"}
+const _N4 := [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]
+
+
+func rank_icon(kind: String) -> Image:
+	var rows: Array = RANK_SHAPES[kind]
+	var img := Image.create(11, 11, false, Image.FORMAT_RGBA8)
+	var fill := {}
+	for y in rows.size():
+		var row: String = rows[y]
+		for x in row.length():
+			if row[x] != ".":
+				fill[Vector2i(x + 1, y + 1)] = row[x]
+	if kind == "deputy":
+		# A tiny gold star (a plus) in the top-right corner.
+		for p in [Vector2i(9, 0), Vector2i(8, 1), Vector2i(9, 1), Vector2i(10, 1), Vector2i(9, 2)]:
+			fill[p] = "y"
+		fill.erase(Vector2i(7, 1))
+		fill.erase(Vector2i(7, 2))
+	_outline_fill(img, fill)
+	return img
+
+
+## Paints `fill` (pixel -> RANK_COLOURS key) with an ink outline round it.
+func _outline_fill(img: Image, fill: Dictionary) -> void:
+	for y in img.get_height():
+		for x in img.get_width():
+			var p := Vector2i(x, y)
+			if fill.has(p):
+				continue
+			for d in _N4:
+				if fill.has(p + d):
+					img.set_pixel(x, y, c("ink"))
+					break
+	for p: Vector2i in fill:
+		img.set_pixel(p.x, p.y, c(RANK_COLOURS[fill[p]]))

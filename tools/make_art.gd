@@ -50,6 +50,12 @@ const PAINTED := {
 	"mouse_carried": ["mouse_carried"],
 	"alert_mark": ["alert_mark"],
 	"pounce_ring": ["pounce_ring", 18, 7],
+	"rank_kit": ["rank_icon", "kit"],
+	"rank_apprentice": ["rank_icon", "apprentice"],
+	"rank_warrior": ["rank_icon", "warrior"],
+	"rank_medicine": ["rank_icon", "medicine"],
+	"rank_deputy": ["rank_icon", "deputy"],
+	"rank_leader": ["rank_icon", "leader"],
 }
 
 ## Each area's baked floor: art/<name>.png -> the area file it is painted

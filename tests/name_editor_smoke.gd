@@ -83,7 +83,10 @@ func _rename_by_touch(cfg: Array) -> void:
 		var css := _css(m, r.size.y)
 		check(css >= min_css, "%s: target %s is %.1f CSS px tall (>= %s, about 1 cm)" % [name, r, css, min_css])
 		check(_css(m, r.size.x) >= min_css * 0.9, "%s: target %s wide enough" % [name, r])
-	check_eq(ed.shown_name(), names.build(GameState.state.prefix_id, ed.picker.suffix_id()), "%s: opens on the current prefix" % name)
+	check_eq(ed.shown_name(), GameState.get_player_name(), "%s: opens on the player's current name" % name)
+	check_eq(ed.picker.cat_id(), names.player_speaker(), "%s: on the player" % name)
+	for r in [ed.prev_cat_rect, ed.next_cat_rect, ed.rank_rect]:
+		check(_css(m, r.size.y) >= min_css, "%s: cat / rank button %s is %.1f CSS px tall" % [name, r, _css(m, r.size.y)])
 	check(not app.volume_button.visible and not app.fullscreen_button.visible, "%s: no corner buttons over the panel" % name)
 	if not is_headless():
 		_save(await _screen(), "name_editor_" + name)
@@ -129,7 +132,7 @@ func _rename_by_touch(cfg: Array) -> void:
 	check(not ed.picker.locked[0], "%s: unlocked" % name)
 
 	# A blocked name can't be confirmed.
-	ed.picker.open("moss", "step")
+	ed.picker.set_words("moss", "step")
 	await _frames(2)
 	check(not ed.picker.can_confirm(), "%s: Mossstep is blocked" % name)
 	check(ed.note() != "", "%s: with a note (%s)" % [name, ed.note()])
@@ -141,7 +144,7 @@ func _rename_by_touch(cfg: Array) -> void:
 	check_eq(GameState.get_player_name(), start_name, "%s: name unchanged" % name)
 
 	# Pick Birchsong with the wheels and confirm.
-	ed.picker.open("birch", "song")
+	ed.picker.set_words("birch", "song")
 	await _frames(1)
 	await _tap_at(app, ed.down_rects[1].get_center())
 	await _tap_at(app, ed.up_rects[1].get_center())
@@ -180,7 +183,7 @@ func _rename_by_touch(cfg: Array) -> void:
 	_close(app)
 
 
-func _on_renamed(n: String) -> void:
+func _on_renamed(_id: String, n: String) -> void:
 	_renamed.append(n)
 
 
@@ -214,6 +217,19 @@ func test_rename_by_keyboard_and_mouse_on_desktop() -> void:
 	# The mouse wheel over the suffix wheel.
 	await _wheel(app, ed.wheel_rects[1].get_center(), false)
 	check_eq(ed.picker.index[1], posmod(si + 3, ed.picker.suffix_list.size()), "mouse wheel down: one more suffix")
+	# Q / E switch cats, K changes the rank.
+	_key(KEY_E)
+	await _frames(1)
+	check_eq(ed.picker.cat_id(), names.cat_ids()[1], "E: next cat")
+	var rk: String = ed.picker.rank
+	_key(KEY_K)
+	await _frames(1)
+	check(ed.picker.rank != rk, "K: next rank")
+	_key(KEY_K)
+	await _frames(1)
+	_key(KEY_Q)
+	await _frames(1)
+	check_eq(ed.picker.cat_id(), names.cat_ids()[0], "Q: back to the player")
 	# Tab cycles the categories.
 	_key(KEY_TAB)
 	await _frames(1)
@@ -240,7 +256,7 @@ func test_rename_by_keyboard_and_mouse_on_desktop() -> void:
 	# Again, Enter confirms.
 	await _to_editor(app, false)
 	await _frames(2)
-	ed.picker.open("clover", "tail")
+	ed.picker.set_words("clover", "tail")
 	_key(KEY_RIGHT)
 	_key(KEY_DOWN)
 	await _frames(1)
@@ -258,6 +274,72 @@ func test_rename_by_keyboard_and_mouse_on_desktop() -> void:
 	await _frames(2)
 	check_eq(str(g.dialogue.line.get("speaker", "")), names.player_speaker(), "Fern echoes the choice")
 	check_eq(g.dialogue.name_label.text, want, "Fern's name plate shows the new name")
+	_close(app)
+
+
+func test_rename_and_rank_every_cat_by_touch() -> void:
+	var app: Control = await _start(TARGET_PHONE)
+	var g: Control = app.game
+	var ed: Control = g.name_editor
+	var wv: Node2D = g.world_view
+	check(wv.rank_marks.has("fern") and wv.rank_marks["fern"].visible, "Fern wears her rank symbol")
+	check(wv.rank_marks.has("bram") and wv.rank_marks["bram"].visible, "Bram wears his")
+	check(not wv.rank_marks["sorrel"].visible, "Sorrel has no rank yet: no symbol")
+	check(g.open_name_editor(), "editor opens")
+	await _frames(3)
+	# To Sorrel with the ▶ arrow.
+	var guard := 0
+	while ed.picker.cat_id() != "sorrel" and guard < 8:
+		guard += 1
+		await _tap_at(app, ed.next_cat_rect.get_center())
+	check_eq(ed.picker.cat_id(), "sorrel", "the arrows reach Sorrel")
+	check_eq(ed.shown_name(), "Sorrel", "her current name")
+	# Medicine cat, by tapping the rank button.
+	guard = 0
+	while ed.picker.rank != "medicine" and guard < 10:
+		guard += 1
+		await _tap_at(app, ed.rank_rect.get_center())
+	check_eq(ed.picker.rank, "medicine", "the rank button cycles to Medicine cat")
+	await _tap_at(app, ed.down_rects[0].get_center())
+	var sorrel_new: String = ed.shown_name()
+	check(sorrel_new != "Sorrel", "a wheel gives her a new name (%s)" % sorrel_new)
+	if not is_headless():
+		_save(await _screen(), "name_editor_sorrel")
+	# Back to Fern with ◀: her draft is untouched.
+	await _tap_at(app, ed.prev_cat_rect.get_center())
+	check_eq(ed.picker.cat_id(), "bram", "◀ goes back one")
+	ed.picker.set_cat(0)
+	check_eq(ed.shown_name(), GameState.get_player_name(), "Fern unchanged")
+	await _tap_at(app, ed.confirm_rect.get_center())
+	await _until(func() -> bool: return not ed.is_open, 2.0)
+	check_eq(GameState.get_cat_name("sorrel"), sorrel_new, "Sorrel renamed")
+	check_eq(GameState.get_cat_rank("sorrel"), "medicine", "Sorrel is the medicine cat")
+	check(wv.rank_marks["sorrel"].visible, "her leaf shows over her head")
+	check_eq(wv.rank_marks["sorrel"].texture, load(JsonData.load_dict("res://data/assets.json")["ui.rank_medicine"]), "the leaf")
+	var head: Vector2 = wv.npc_head("sorrel")
+	check(wv.rank_marks["sorrel"].position.y + wv.rank_marks["sorrel"].texture.get_height() <= head.y, "above her head")
+	# Her name plate shows the new name and the leaf.
+	await _open_talk(app, "sorrel", true)
+	await _frames(2)
+	check_eq(g.dialogue.name_label.text, sorrel_new, "her plate has the new name")
+	check(g.dialogue.rank_icon() != null, "and her symbol")
+	# Wick's line about her uses the new name: talk to Wick.
+	await _finish_conversation(app, true)
+	await _open_talk(app, "wick", true)
+	var saw := false
+	for i in 40:
+		if not g.dialogue.is_open:
+			break
+		if g.dialogue.choices_shown():
+			if (g.dialogue.line["choices"] as Array).any(func(c: String) -> bool: return c.contains(sorrel_new)):
+				saw = true
+				break
+			await _tap_at(app, g.dialogue.choice_rects[0].get_center())
+		else:
+			await _press(app, true)
+	check(saw, "Wick's choice names %s" % sorrel_new)
+	if not is_headless():
+		_save(await _screen(), "name_editor_world_ranks")
 	_close(app)
 
 
@@ -290,9 +372,20 @@ func test_gamepad_drives_the_editor() -> void:
 		_pad(JOY_BUTTON_X)
 		await _frames(1)
 		check_eq(ed.picker.prefix_id(), p, "West randomizes, prefix kept")
+	_stick(JOY_AXIS_TRIGGER_RIGHT, 1.0)
+	_stick(JOY_AXIS_TRIGGER_RIGHT, 0.0)
+	await _frames(1)
+	check_eq(ed.picker.category_name(), ed.picker.tabs()[0], "a trigger changes the tab")
 	_pad(JOY_BUTTON_RIGHT_SHOULDER)
 	await _frames(1)
-	check_eq(ed.picker.category_name(), ed.picker.tabs()[0], "a shoulder changes the tab")
+	check_eq(ed.picker.cat_id(), names.cat_ids()[1], "a shoulder switches cats")
+	var r0: String = ed.picker.rank
+	_pad(JOY_BUTTON_BACK)
+	await _frames(1)
+	check(ed.picker.rank != r0, "Back changes the rank")
+	_pad(JOY_BUTTON_LEFT_SHOULDER)
+	await _frames(1)
+	check_eq(ed.picker.cat_id(), names.cat_ids()[0], "and back")
 	_pad(JOY_BUTTON_B)
 	await _frames(2)
 	check(not ed.is_open, "East cancels")
