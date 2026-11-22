@@ -351,6 +351,156 @@ func worn_patch(w: int, h: int) -> Image:
 	return img
 
 
+## The apprentices' den from outside: a fern clump (a flat-bottomed foliage
+## dome) with a dark arched entrance `gap` px wide and `gap_h` high in the
+## middle of its base, facing the clearing.
+func den_fern(w: int, h: int, seed: int, gap: int = 34, gap_h: int = 22) -> Image:
+	var img := foliage(w, h, seed, 9, 0, true)
+	var leaf := ramp("leaf")
+	var cx := w / 2.0
+	var half := gap / 2.0
+	for y in range(h - gap_h - 2, h):
+		for x in range(int(cx - half) - 2, int(cx + half) + 2):
+			if x < 0 or x >= w:
+				continue
+			var q := Vector2((x + 0.5 - cx) / half, (y + 0.5 - h) / float(gap_h)).length()
+			if q < 0.86:
+				img.set_pixel(x, y, c("ink"))
+			elif q < 1.0:
+				img.set_pixel(x, y, leaf[0])
+			elif q < 1.12 and img.get_pixel(x, y).a > 0.0:
+				# Fronds curling over the entrance.
+				img.set_pixel(x, y, leaf[3] if dither(x, y) < 0.5 else leaf[2])
+	return img
+
+
+## Periodic soft noise 0..1 (tiles every `w` x `h` px).
+static func _wrap_noise(x: float, y: float, w: float, h: float, a: float, b: float) -> float:
+	var u := TAU * x / w
+	var v := TAU * y / h
+	return clampf(0.5 + 0.22 * sin(u + a) * cos(v * 2.0 + b) + 0.18 * sin(u * 2.0 + v + b) + 0.1 * cos(u * 3.0 - v * 2.0 + a), 0.0, 1.0)
+
+
+## Den floor tile (tileable): packed warm earth with moss specks and a few
+## pebbles. The den's floor_color tints it.
+func den_floor(size: int, seed: int) -> Image:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var shades: Array[Color] = [c("dirt_edge"), c("dirt_edge"), c("dirt.0")]
+	var a := rng.randf() * TAU
+	var b := rng.randf() * TAU
+	for y in size:
+		for x in size:
+			img.set_pixel(x, y, shades[level(_wrap_noise(x, y, size, size, a, b), 3, x, y, 0.35)])
+	for i in 9:
+		var p := Vector2i(rng.randi_range(0, size - 1), rng.randi_range(0, size - 1))
+		for o in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1)]:
+			if rng.randf() < 0.8:
+				img.set_pixelv((p + o) % size, c("leaf.1") if rng.randf() < 0.6 else c("leaf.2"))
+	for i in 3:
+		var p := Vector2i(rng.randi_range(0, size - 1), rng.randi_range(0, size - 1))
+		img.set_pixelv(p, c("stone.1"))
+		img.set_pixelv((p + Vector2i(1, 0)) % size, c("stone.2"))
+	return img
+
+
+## What lies beyond a den's walls (tileable): dense dark undergrowth.
+func den_outer(size: int, seed: int) -> Image:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var a := rng.randf() * TAU
+	var b := rng.randf() * TAU
+	for y in size:
+		for x in size:
+			var v := _wrap_noise(x, y, size, size, a, b)
+			img.set_pixel(x, y, c("ink") if level(v, 2, x, y) == 0 else c("leaf.0"))
+	return img
+
+
+## One wall band of a den, fern and moss (tileable along x): dark depth at
+## the top, fronds hanging towards the room, a mossy lip at the bottom edge.
+## Side walls are this rotated, the bottom wall this flipped.
+func den_wall_fern_moss(w: int, h: int, seed: int) -> Image:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var leaf := ramp("leaf")
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	for y in h:
+		for x in w:
+			var d := float(y) / float(maxi(1, h - 1))
+			img.set_pixel(x, y, c("ink") if d < 0.25 and dither(x, y) > d * 3.0 else leaf[0] if d < 0.6 or dither(x, y) > (d - 0.6) * 2.5 else leaf[1])
+	# Fronds: a stem with leaflets every other row, wrapping round the tile.
+	var fronds := maxi(2, w / 7)
+	for f in fronds:
+		var x0 := float(f) * float(w) / float(fronds) + rng.randf_range(-2.0, 2.0)
+		var reach := rng.randf_range(0.55, 0.95) * h
+		var bend := rng.randf_range(-3.0, 3.0)
+		for y in int(reach):
+			var t := float(y) / reach
+			var x := int(roundf(x0 + bend * t * t))
+			var shade := leaf[2] if t < 0.5 else leaf[3]
+			img.set_pixel(posmod(x, w), y, shade)
+			if y % 2 == 1 and y > 1:
+				var span := 1 + int((1.0 - absf(t - 0.5)) * 1.5)
+				for k in range(1, span + 1):
+					img.set_pixel(posmod(x - k, w), y, leaf[2])
+					img.set_pixel(posmod(x + k, w), y, leaf[3] if k == 1 else leaf[2])
+	# Mossy lip along the bottom edge.
+	var a := rng.randf() * TAU
+	for x in w:
+		var lip := 2 + int(roundf(1.5 + 1.5 * sin(TAU * x / w * 2.0 + a)))
+		for y in range(h - lip, h):
+			img.set_pixel(x, y, leaf[4] if y == h - lip and dither(x, y) < 0.6 else leaf[3])
+	return img
+
+
+func den_wall_side(w: int, h: int, seed: int) -> Image:
+	# A band h long and w deep: painted as a top band, turned so the moss
+	# faces the room (the left wall; the right wall is drawn mirrored).
+	var img := den_wall_fern_moss(h, w, seed)
+	img.rotate_90(COUNTERCLOCKWISE)
+	return img
+
+
+func den_wall_bottom(w: int, h: int, seed: int) -> Image:
+	var img := den_wall_fern_moss(w, h, seed)
+	img.flip_y()
+	return img
+
+
+## A nest: a ring of moss round a soft hollow. `mine` adds a white feather,
+## so Fern's nest is easy to find.
+func den_nest(w: int, h: int, mine: bool = false) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var leaf := ramp("leaf")
+	var ctr := Vector2(w, h) / 2.0
+	for y in h:
+		for x in w:
+			var d := ((Vector2(x, y) + Vector2(0.5, 0.5) - ctr) / ctr).length()
+			if d > 1.0:
+				continue
+			var col: Color
+			if d > 0.6:
+				var lit := y < h / 2 and x < w * 0.6
+				col = leaf[4] if lit and dither(x, y) < 0.5 else leaf[3]
+				if d > 0.9:
+					col = leaf[2]
+			else:
+				col = leaf[1] if dither(x, y) < 0.6 else c("dirt_edge")
+			img.set_pixel(x, y, col)
+	if mine:
+		# A feather lying across the hollow.
+		var pts := [Vector2i(w / 2 - 4, h / 2 + 1), Vector2i(w / 2 - 3, h / 2 + 1), Vector2i(w / 2 - 2, h / 2), Vector2i(w / 2 - 1, h / 2),
+			Vector2i(w / 2, h / 2), Vector2i(w / 2 + 1, h / 2 - 1), Vector2i(w / 2 + 2, h / 2 - 1), Vector2i(w / 2 + 3, h / 2 - 2)]
+		for i in pts.size():
+			img.set_pixelv(pts[i], c("ink") if i < 2 else c("flower.white"))
+		for p in [Vector2i(w / 2 - 1, h / 2 - 1), Vector2i(w / 2 + 1, h / 2), Vector2i(w / 2 + 2, h / 2)]:
+			img.set_pixelv(p, c("stone.3"))
+	return img
+
+
 ## A fallen log lying left-right, with a cut end showing rings on the right.
 func log_art(w: int, h: int) -> Image:
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)

@@ -59,6 +59,14 @@ const PAINTED := {
 	"leaders_rock": ["leaders_rock", 48, 40, 81],
 	"lichen": ["lichen", 14, 7, 82],
 	"worn_patch": ["worn_patch", 26, 9],
+	"den_fern": ["den_fern", 72, 44, 91],
+	"den_floor": ["den_floor", 64, 92],
+	"den_outer": ["den_outer", 32, 93],
+	"den_wall_fern_moss_top": ["den_wall_fern_moss", 32, 26, 94],
+	"den_wall_fern_moss_side": ["den_wall_side", 14, 32, 95],
+	"den_wall_fern_moss_bottom": ["den_wall_bottom", 32, 12, 96],
+	"den_nest": ["den_nest", 28, 12],
+	"den_nest_mine": ["den_nest", 28, 12, true],
 }
 
 ## Each area's baked floor: art/<name>.png -> the area file it is painted

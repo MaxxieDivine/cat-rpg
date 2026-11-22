@@ -45,6 +45,8 @@ func test_every_area_has_its_ground_painted() -> void:
 	for f: String in MakeArt.GROUNDS.values():
 		listed[f] = true
 	for a: Dictionary in JsonData.load_dict("res://data/areas.json")["areas"].values():
+		if JsonData.load_dict(a["file"]).has("interior"):
+			continue  # A den: its floor is a tile (den_interior.gd), not a painted ground.
 		check(listed.has(a["file"]), "%s is in make_art.gd GROUNDS" % a["file"])
 
 
@@ -94,10 +96,16 @@ func test_every_world_art_key_loads() -> void:
 	AssetCatalog.reset()
 	for a: Dictionary in JsonData.load_dict("res://data/areas.json")["areas"].values():
 		var w := JsonData.load_dict(a["file"])
-		var keys := [w["ground_art"], w["forest_art"], w["tall_grass"]["art"]]
+		var keys := [w["ground_art"], w["forest_art"]]
+		if w.has("tall_grass"):
+			keys.append(w["tall_grass"]["art"])
 		if w.has("pond"):
 			keys.append(w["pond"]["art"])
-		for t in w["prop_types"].values():
+		if w.has("interior"):
+			var mat: String = w["interior"].get("walls", "fern_moss")
+			keys.append_array(["den.floor", "den.outer", "den.nest", "den.nest_mine",
+				"den.wall_%s_top" % mat, "den.wall_%s_side" % mat, "den.wall_%s_bottom" % mat])
+		for t in w.get("prop_types", {}).values():
 			for k in ["art", "canopy", "shadow"]:
 				if t.has(k):
 					keys.append(t[k])

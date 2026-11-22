@@ -188,15 +188,18 @@ func test_scatter_is_deterministic_and_keeps_clear() -> void:
 		check(not a.on_path(d["pos"], 1.0), "decor %s off the path" % d["pos"])
 
 
-func test_camp_has_a_den() -> void:
-	var w = _world("camp")
+func test_fern_recovers_in_her_nest() -> void:
+	var ra: String = str(tuning["collapse"]["recovery_area"])
 	var rs: String = str(tuning["collapse"]["recovery_spawn"])
-	check(w.spawns.has(rs), "camp has the recovery spawn '%s'" % rs)
-	check_eq(str(tuning["collapse"]["recovery_area"]), "camp", "Fern recovers in camp")
-	var has_den := false
-	for g: Dictionary in w.ground:
-		has_den = has_den or g["art"] == "decor.den"
-	check(has_den, "the den is drawn")
+	check_eq(ra, "apprentices_den", "Fern recovers in the apprentices' den")
+	check_eq(rs, "nest", "in her nest")
+	var w = _world(ra)
+	if not check(w != null and w.spawns.has(rs), "%s has the recovery spawn '%s'" % [ra, rs]):
+		return
+	var mine: Array = w.interior["nests"].filter(func(n): return n["mine"])
+	check_eq(mine.size(), 1, "one nest is Fern's")
+	if mine.size() == 1:
+		check_eq(w.spawns[rs]["pos"], mine[0]["pos"], "the recovery spawn is her nest")
 
 
 # --- travel.gd

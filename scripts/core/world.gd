@@ -35,11 +35,22 @@ extends RefCounted
 ## solid. NPCs without a dialogue file can't be talked to (no focus).
 ## `markers` (name -> point) and `zones` (name -> rect) are named places for
 ## later systems (Clan meetings): MeetingSpot, DeputySpot, GatherArea.
+## A prop may list `solids` ([x, y, w, h] relative to its pos) instead of
+## its footprint (the den clump: walls either side of its entrance). A spot
+## may have a `label` (strings.json key shown with its prompt) and `enter`
+## (an exit id: interact goes through that exit, like walking into it).
+##
+## Dens (C.2): an area file with "interior" (den settings) and "door" is a
+## room built by scripts/core/den_layout.gd: walls, the doorway exit, the
+## "inside" and "nest" spawns, nests, the "Your nest." spot, decor slots
+## (`interior` keeps the whole layout for the view). apply_interior()
+## rebuilds it from new settings (the den_interior.gd Inspector exports).
 
 const JsonData := preload("res://scripts/core/json_data.gd")
 const Hunt := preload("res://scripts/core/hunt.gd")
 const HuntTuning := preload("res://scripts/core/hunt_tuning.gd")
 const PlayerState := preload("res://scripts/core/player_state.gd")
+const DenLayout := preload("res://scripts/core/den_layout.gd")
 ## What Fern carries after a catch (player_state.carried_item).
 const MOUSE := "mouse"
 const WORLD_PATH := "res://data/world.json"
@@ -115,6 +126,10 @@ var spots: Array[Dictionary] = []
 ## "markers" (name -> [x, y]) and "zones" (name -> [x, y, w, h]).
 var markers: Dictionary = {}
 var zones: Dictionary = {}
+## A den's room (den_layout.gd build()), or empty outdoors.
+var interior: Dictionary = {}
+var _den_tuning: Dictionary = {}
+var _door: Dictionary = {}
 ## The fresh-catch pile: {"id", "art", "pos", "footprint", "rect",
 ## "talk_radius", "prey", "max", "shadow"} or empty. It never refills by
 ## itself: hunting is the only way (deliver()).
@@ -278,7 +293,8 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 		spots.append({"id": str(sp_d.get("id", "")), "rect": rect,
 			"talk_radius": float(sp_d.get("talk_radius", 10)),
 			"prompt": _vec(sp_d.get("prompt", [rect.get_center().x, rect.position.y])),
-			"message": str(sp_d.get("message", ""))})
+			"message": str(sp_d.get("message", "")),
+			"label": str(sp_d.get("label", "")), "enter": str(sp_d.get("enter", ""))})
 	var mk: Dictionary = w.get("markers", {})
 	for n: String in mk:
 		markers[n] = _vec(mk[n])
@@ -328,7 +344,51 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 	_scatter(w.get("scatter", {}), types)
 	if not prey_spots.is_empty():
 		hunt = Hunt.new(prey_spots, tall_grass_patches, int(w.get("hunt_seed", 1)), hunt_tuning)
+	if w.has("interior"):
+		_den_tuning = t.get("den", {})
+		_door = w.get("door", {})
+		border = float(_den_tuning.get("border", 40))
+		apply_interior(w["interior"])
+		place_at_spawn("start")
 	exits_armed = not _on_exit()
+	_update_focus()
+
+
+## True inside a den (no sky, no wind, earth underfoot).
+func is_indoors() -> bool:
+	return not interior.is_empty()
+
+
+## (Re)builds this den's room from `settings` (den_layout.gd): size, walls,
+## the doorway exit, spawns, nests, spots, markers, the trail. Fern stays
+## where she is if she still fits, else goes to the "inside" spawn.
+func apply_interior(settings: Dictionary) -> void:
+	interior = DenLayout.build(settings, _den_tuning, _door)
+	size = interior["size"]
+	bounds = Rect2(Vector2.ZERO, size)
+	_prop_solids = []
+	for r: Rect2 in interior["walls"]:
+		_prop_solids.append(r)
+	exits = [interior["exit"]]
+	spawns = interior["spawns"].duplicate(true)
+	spots = []
+	for sp: Dictionary in interior["spots"]:
+		var d: Dictionary = sp.duplicate()
+		d["label"] = ""
+		d["enter"] = ""
+		spots.append(d)
+	for n: String in interior["markers"]:
+		markers[n] = interior["markers"][n]
+	path_lines = []
+	var pts := PackedVector2Array()
+	for pt in interior["trail"]:
+		pts.append(_vec(pt))
+	path_lines.append(pts)
+	path_width = interior["trail_width"]
+	_rebuild_solids()
+	var pr := player_rect()
+	if not bounds.encloses(pr) or solids.any(func(r: Rect2) -> bool: return r.intersects(pr)):
+		place_at_spawn("inside")
 	_update_focus()
 
 
@@ -451,7 +511,10 @@ func _add_prop(pr: Dictionary, types: Dictionary) -> void:
 		prop["canopy_offset"] = _vec(spec.get("canopy_offset", [0, 0]))
 	prop["rect"] = footprint_rect(prop["pos"], _vec(spec.get("footprint", [16, 6])))
 	props.append(prop)
-	if prop["solid"]:
+	if spec.has("solids"):
+		for r: Array in spec["solids"]:
+			_prop_solids.append(Rect2(prop["pos"] + Vector2(float(r[0]), float(r[1])), Vector2(float(r[2]), float(r[3]))))
+	elif prop["solid"]:
 		_prop_solids.append(prop["rect"])
 
 
@@ -519,7 +582,7 @@ func on_path(p: Vector2, grow: float = 0.0) -> bool:
 
 ## What Fern is standing on: "path" or "grass" (footstep sounds).
 func surface() -> String:
-	return "path" if on_path(player_pos) else "grass"
+	return "path" if is_indoors() or on_path(player_pos) else "grass"
 
 
 ## Whether Fern's feet are in a tall-grass patch.
@@ -814,6 +877,13 @@ func interact(needs = null) -> Array[Dictionary]:
 		_begin_action("eat", eat_s, pile["pos"])
 		return [{"type": "eat", "prey": pile["prey"]}, {"type": "pile", "prey": pile["prey"]}]
 	var spot := spot_by_id(focus_id)
+	if not spot.is_empty() and spot["enter"] != "":
+		# A doorway: go in, as if walking into its exit.
+		for e: Dictionary in exits:
+			if e["id"] == spot["enter"]:
+				exits_armed = false
+				player_vel = Vector2.ZERO
+				return [{"type": "exit", "id": e["id"], "to": e["to"], "spawn": e["spawn"]}]
 	if not spot.is_empty():
 		if absf(spot["prompt"].x - player_pos.x) >= 2.0:
 			facing = 1 if spot["prompt"].x > player_pos.x else -1
