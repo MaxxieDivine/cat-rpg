@@ -36,6 +36,9 @@ var _streams: Dictionary = {}
 var _warned: Array[String] = []
 var _rng := RandomNumberGenerator.new()
 var _bird_wait := 3.0
+## Inside a den (set_indoors()).
+var indoors := false
+var _indoors_db := -14.0
 var _lap_wait := 1.0
 var _bird_every: Array = [2.5, 6.0]
 var _lap_every: Array = [1.6, 3.2]
@@ -85,6 +88,7 @@ func configure(tuning: Dictionary) -> void:
 	crossfade = float(tuning.get("crossfade_s", crossfade))
 	_bird_every = tuning.get("bird_every", _bird_every)
 	_lap_every = tuning.get("lap_every", _lap_every)
+	_indoors_db = float(tuning.get("indoors_db", _indoors_db))
 
 
 ## The five buses normally come from default_bus_layout.tres; add any
@@ -138,6 +142,15 @@ func set_time(day: float, night: float) -> void:
 		play_music("day")
 
 
+## Inside a den: the outdoor ambience is muffled (audio.indoors_db) and no
+## birds sing.
+func set_indoors(on: bool) -> void:
+	if on == indoors:
+		return
+	indoors = on
+	_update_ambience_targets()
+
+
 ## How close Fern is to the water: 0 (far) .. 1 (at the bank).
 func set_pond_near(amount: float) -> void:
 	_pond_near = clampf(amount, 0.0, 1.0)
@@ -152,6 +165,8 @@ func _update_ambience_targets() -> void:
 			db = lerpf(float(spec.get("day", db)), float(spec.get("night", db)), _night)
 		if spec.get("near", false):
 			db = lerpf(SILENT_DB, db, _pond_near)
+		if indoors:
+			db += _indoors_db
 		_amb_target[layer] = db
 
 
@@ -160,7 +175,7 @@ func _process(dt: float) -> void:
 		var p: AudioStreamPlayer = _ambience[layer]
 		p.volume_db = move_toward(p.volume_db, _amb_target[layer], dt * 30.0)
 	# Birds by day, laps near the water.
-	if _day > 0.2:
+	if _day > 0.2 and not indoors:
 		_bird_wait -= dt
 		if _bird_wait <= 0.0:
 			play("bird", lerpf(-12.0, 0.0, _day))

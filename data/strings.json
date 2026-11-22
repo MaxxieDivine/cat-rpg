@@ -40,5 +40,7 @@
 	"names.other_blocked": "Another cat's name can't be used",
 	"names.cat_count": "Cat {i} of {n}",
 	"camp.leaders_rock": "The leader's rock. Only the leader speaks from up there.",
-	"camp.leaders_den": "You should wait to be invited."
+	"camp.leaders_den": "You should wait to be invited.",
+	"den.apprentices.name": "Apprentices' den",
+	"den.your_nest": "Your nest."
 }

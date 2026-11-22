@@ -17,8 +17,8 @@ const GameStrings := preload("res://scripts/core/game_strings.gd")
 var state := PlayerState.new()
 
 ## Where Fern wakes after passing out: an area id and a spawn in it.
-@export var recovery_area := "camp"
-@export var recovery_spawn := "den"
+@export var recovery_area := "apprentices_den"
+@export var recovery_spawn := "nest"
 ## Shown on black while she is carried home.
 @export_multiline var collapse_message := ""
 

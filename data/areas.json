@@ -3,6 +3,7 @@
 	"start": "camp",
 	"areas": {
 		"camp": {"file": "res://data/world.json"},
-		"hunting_grounds": {"file": "res://data/hunting_grounds.json"}
+		"hunting_grounds": {"file": "res://data/hunting_grounds.json"},
+		"apprentices_den": {"file": "res://data/dens/apprentices_den.json"}
 	}
 }

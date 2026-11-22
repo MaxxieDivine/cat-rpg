@@ -43,6 +43,7 @@ signal rustled(kind: String)
 const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
 const JsonData := preload("res://scripts/core/json_data.gd")
 const NpcScene := preload("res://scenes/npc.tscn")
+const DenScene := preload("res://scenes/den_interior.tscn")
 const PileScene := preload("res://scenes/fresh_catch_pile.tscn")
 const ExitScene := preload("res://scenes/area_exit.tscn")
 const CatAnim := preload("res://scripts/view/cat_anim.gd")
@@ -93,6 +94,8 @@ var bob_hz := 1.6
 var prompt_gap := 3.0
 ## NPC nodes (npc.gd) by id.
 var npc_nodes: Dictionary = {}
+## The den room (den_interior.gd) inside a den, else null.
+var den: Node2D
 var palette: Dictionary = {}
 var grade: CanvasModulate
 var overlay: CanvasLayer
@@ -182,7 +185,12 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 	_sky = _layer("Sky")
 
 	# Ground: the baked floor, the pond, decals, shadows.
-	if world.ground_art != "":
+	if world.is_indoors():
+		# A den: the template draws floor, walls and nests.
+		den = DenScene.instantiate()
+		den.setup(world)
+		_ground.add_child(den)
+	elif world.ground_art != "":
 		var floor_s := Sprite2D.new()
 		floor_s.name = "Floor"
 		floor_s.texture = AssetCatalog.texture(world.ground_art)
@@ -305,6 +313,9 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 	_make_markers()
 	_make_life()
 	_make_sky()
+	# Indoors: no sky, no butterflies.
+	_life.visible = not world.is_indoors()
+	_sky.visible = not world.is_indoors()
 
 	grade = CanvasModulate.new()
 	grade.name = "Grade"
@@ -588,8 +599,8 @@ func _sync_time() -> void:
 	grade.color = g
 	if pond != null and pond.material != null:
 		(pond.material as ShaderMaterial).set_shader_parameter("night", night)
-	fireflies.emitting = night > 0.25
-	pollen.emitting = dayness > 0.3
+	fireflies.emitting = night > 0.25 and not world.is_indoors()
+	pollen.emitting = dayness > 0.3 and not world.is_indoors()
 	var view := camera_rect
 	pollen.position = view.get_center()
 	pollen.emission_rect_extents = view.size / 2.0

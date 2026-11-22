@@ -74,8 +74,10 @@ func test_frame_cost_stays_in_budget() -> void:
 		for phase in ["day", "night"]:
 			if phase == "night":
 				g.day.set_t(1.0)
-			# Trot back and forth through the area's first tall-grass patch.
-			var patch: Array = JsonData.load_dict(areas_data[area]["file"])["tall_grass"]["patches"][0]["rect"]
+			# Trot back and forth through the area's first tall-grass patch
+			# (a den has none: across the middle of the room).
+			var ad := JsonData.load_dict(areas_data[area]["file"])
+			var patch: Array = ad["tall_grass"]["patches"][0]["rect"] if ad.has("tall_grass") else [w.size.x * 0.3, w.size.y * 0.4, w.size.x * 0.4, w.size.y * 0.2]
 			w.player_pos = Vector2(patch[0] - 10, patch[1] + patch[3] / 2.0)
 			w.player_vel = Vector2.ZERO
 			Input.action_press("run")

@@ -1,0 +1,11 @@
+{
+	"_note": "The apprentices' den (Fern's). A den area: 'interior' = the den template's settings (scripts/core/den_layout.gd; drawn by scenes/den_interior.tscn, whose Inspector exports are the same settings), 'door' = where its doorway leads (camp, outside the entrance). Copy this file for another den.",
+	"id": "apprentices_den",
+	"name": "Apprentices' den",
+	"background": "#2a2420",
+	"ground_art": "den.floor",
+	"forest_art": "den.outer",
+	"grade": {"afternoon": "#f2d6b4", "dusk": "#d8aa8e", "night": "#6a6488"},
+	"interior": {"size": "medium", "floor_color": "#c8ac94", "walls": "fern_moss", "nests": 4, "player_nest": 1},
+	"door": {"to": "camp", "spawn": "from_apprentices_den"}
+}

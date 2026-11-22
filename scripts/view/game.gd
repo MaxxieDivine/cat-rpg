@@ -120,6 +120,8 @@ var day
 var needs_hud: Control
 ## A short line over Fern ("The pile is empty."), and seconds left.
 var message: Label
+## A place's name over its paw prompt (a den's doorway: "Apprentices' den").
+var prompt_label: Label
 var _message_t := 0.0
 ## Distance walked when the last footstep played (world px).
 var _step_at := 0.0
@@ -198,6 +200,10 @@ func _ready() -> void:
 	message.add_theme_font_size_override("font_size", int(tuning.get("needs_hud", {}).get("message_font", 18)))
 	message.visible = false
 	add_child(message)
+	prompt_label = message.duplicate()
+	prompt_label.name = "PromptLabel"
+	prompt_label.add_theme_font_size_override("font_size", int(tuning.get("needs_hud", {}).get("label_font", 16)))
+	add_child(prompt_label)
 
 	touch = TouchControls.new()
 	touch.name = "TouchControls"
@@ -591,6 +597,7 @@ func _update_sound() -> void:
 		if world.speed() >= world_view.idle_speed:
 			# Stalking is quieter.
 			sound.footstep(world.surface(), -12.0 if world.crouching else 0.0)
+	sound.set_indoors(world.is_indoors())
 	sound.set_time(day.day_amount(), day.night_amount())
 	var r := float(world.pond.get("lap_radius", 40)) if not world.pond.is_empty() else 1.0
 	sound.set_pond_near(1.0 - clampf(world.pond_distance() / r, 0.0, 1.0))
@@ -837,6 +844,7 @@ func _place_overlays() -> void:
 	touch.hunt_buttons = world.hunt != null
 	touch.can_pounce = world.can_pounce()
 	touch.carrying = world.carrying() != ""
+	_place_prompt_label()
 	message.visible = _message_t > 0.0 and not is_talking()
 	if message.visible:
 		# Over Fern's head, kept inside the safe area.
@@ -848,3 +856,22 @@ func _place_overlays() -> void:
 		pos.x = clampf(pos.x, safe.position.x, maxf(safe.position.x, safe.end.x - message.size.x))
 		pos.y = clampf(pos.y, safe.position.y, maxf(safe.position.y, safe.end.y - message.size.y))
 		message.position = metrics.snap(pos)
+
+
+## The focused place's name (a spot's `label`) just over its paw prompt,
+## while the prompt shows and no line is being said.
+func _place_prompt_label() -> void:
+	var sp: Dictionary = world.spot_by_id(world.focus_id)
+	var key: String = str(sp.get("label", ""))
+	var paw: Sprite2D = world_view.paw
+	prompt_label.visible = key != "" and paw.visible and _message_t <= 0.0 and not (travel != null and travel.busy())
+	if not prompt_label.visible:
+		return
+	prompt_label.text = GameState.format_text(GameStrings.text(key))
+	prompt_label.reset_size()
+	var top := world_to_ui(paw.position + Vector2(paw.texture.get_width() / 2.0, -1.0))
+	var pos := top - Vector2(prompt_label.size.x / 2.0, prompt_label.size.y)
+	var safe: Rect2 = metrics.safe_rect
+	pos.x = clampf(pos.x, safe.position.x, maxf(safe.position.x, safe.end.x - prompt_label.size.x))
+	pos.y = clampf(pos.y, safe.position.y, maxf(safe.position.y, safe.end.y - prompt_label.size.y))
+	prompt_label.position = metrics.snap(pos)

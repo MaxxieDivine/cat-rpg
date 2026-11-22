@@ -152,7 +152,7 @@ func test_pass_out_in_the_hunting_grounds() -> void:
 	check(g.fade_message.visible, "message shown")
 	check_eq(g.fade_message.text, str(strings["collapse.message"]), "the collapse message")
 	check(app.metrics.safe_rect.encloses(Rect2(g.fade_message.position, g.fade_message.size)), "message inside the safe area")
-	check_eq(g.world.id, "camp", "carried home to camp")
+	check_eq(g.world.id, str(tuning["collapse"]["recovery_area"]), "carried home to her den")
 	check_eq(Player.spawn(), str(tuning["collapse"]["recovery_spawn"]), "at the den")
 	check_eq([Needs.hunger(), Needs.thirst()], [int(tuning["needs"]["restore_hunger"]), int(tuning["needs"]["restore_thirst"])], "needs restored")
 	check_eq(Player.carried_item(), "", "dropped what she carried")
@@ -184,22 +184,33 @@ func test_pass_out_in_camp_continues_on_its_own() -> void:
 	var g: Control = app.game
 	_fast_collapse(g)
 	g.travel.message_s = 0.5
-	var pile_before: int = g.world.pile["prey"] - 1
-	g.world.pile["prey"] = pile_before
 	Needs.hunger_every_s = 0.0
 	Needs.thirst_every_s = 0.0
 	Needs.set_value("hunger", 0)
 	await _frames(2)
 	check_eq(g.travel.kind, "collapse", "hunger at 0: Fern passes out")
 	await _wait_travel(g, 6000)
-	check_eq(g.world.id, "camp", "still camp")
-	check_eq(g.world.player_pos, g.world.spawns["den"]["pos"], "wakes at her den")
-	check_eq(g.world.pile["prey"], pile_before, "same camp (not reloaded), the pile as it was")
+	var ra := str(tuning["collapse"]["recovery_area"])
+	check_eq(g.world.id, ra, "carried to her den")
+	check_eq(g.world.player_pos, g.world.spawns["nest"]["pos"], "wakes in her nest")
+	var nest: Sprite2D = g.world_view.den.get_node_or_null("Nests/Nest_player") if g.world_view.den != null else null
+	if check(nest != null, "her nest is drawn"):
+		check(Rect2(nest.position, nest.texture.get_size()).grow(2.0).has_point(g.world.player_pos), "she lies in it")
 	check_eq(Needs.hunger(), int(tuning["needs"]["restore_hunger"]), "hunger restored")
 	check_eq(Player.state.collapses, 1, "once")
 	if not is_headless():
 		await _settle()
 		_save(await _screen(), "collapse_woke_desktop")
+	# Passing out in the den itself: the same den, not reloaded.
+	var before = g.world
+	g.world.place_at_spawn("inside")
+	Needs.set_value("thirst", 0)
+	await _frames(2)
+	check_eq(g.travel.kind, "collapse", "thirst at 0 in the den")
+	await _wait_travel(g, 6000)
+	check(g.world == before, "same den (not reloaded)")
+	check_eq(g.world.player_pos, g.world.spawns["nest"]["pos"], "back in her nest")
+	check_eq(Player.state.collapses, 2, "twice now")
 	_close(app)
 
 
