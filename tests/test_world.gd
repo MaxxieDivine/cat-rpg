@@ -163,6 +163,8 @@ func test_focus_and_interact() -> void:
 func test_talk_radius_from_data() -> void:
 	for spec: Dictionary in wdata["npcs"]:
 		var npc: Dictionary = w.npc_by_id(spec["id"])
+		if not World.talkable(npc):
+			continue
 		var radius := float(spec["talk_radius"])
 		check_near(radius, 22.0, 4.0, "%s talk radius is about 22 px" % spec["id"])
 		_beside(npc, radius - 1.0)

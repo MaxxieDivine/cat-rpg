@@ -235,6 +235,122 @@ func rock(w: int, h: int, seed: int) -> Image:
 	return img
 
 
+## The Leader's Rock: a tall boulder w wide and h high, narrower at the top
+## with a pale flat ledge (the top `ledge` rows) the leader stands on, lit
+## from the upper left, a few cracks, moss on the ledge's rim, and the dark
+## mouth of the leader's den at the base (centre x = cave_x, cave_w wide,
+## cave_h high). The bottom row is flat: the base sits on the ground.
+func leaders_rock(w: int, h: int, seed: int, ledge: int = 5, cave_x: int = 14, cave_w: int = 14, cave_h: int = 13) -> Image:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var stone := ramp("stone")
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var mask := PackedByteArray()
+	mask.resize(w * h)
+	var cx := w / 2.0
+	var wobble: Array[float] = []
+	for y in h:
+		wobble.append(rng.randf_range(-0.6, 0.6))
+	for y in h:
+		var t := float(y) / float(h - 1)
+		# Narrow ledge on top, full width by two thirds down, a slight
+		# tuck at the very bottom; the top corners rounded off.
+		var hw := cx * (0.62 + 0.38 * smoothstep(0.0, 0.6, t)) + wobble[y]
+		if t > 0.9:
+			hw -= (t - 0.9) * w * 0.12
+		if y < 3:
+			hw -= 3 - y
+		for x in w:
+			var dx := x + 0.5 - cx
+			if absf(dx) > hw:
+				continue
+			mask[y * w + x] = 1
+			var col: Color
+			if y < ledge:
+				# The flat top catches the sun.
+				col = stone[3] if dither(x, y) < 0.75 - 0.1 * y else stone[2]
+			else:
+				var nx := dx / maxf(1.0, hw)
+				var b := 0.62 - 0.42 * nx - 0.35 * (t - 0.15)
+				if y == ledge:
+					b -= 0.35
+				col = stone[level(clampf(b, 0.0, 1.0), stone.size(), x, y)]
+			img.set_pixel(x, y, col)
+	# Cracks: short dark runs down the face.
+	for i in 4:
+		var x := rng.randi_range(int(w * 0.2), int(w * 0.85))
+		var y := rng.randi_range(ledge + 3, int(h * 0.55))
+		for k in rng.randi_range(4, 8):
+			if x >= 0 and x < w and y < h and mask[y * w + x] == 1:
+				img.set_pixel(x, y, stone[0])
+			y += 1
+			if rng.randf() < 0.35:
+				x += 1 if rng.randf() < 0.5 else -1
+	# The leader's den: a dark arch at the base.
+	var half := cave_w / 2.0
+	for y in range(h - cave_h, h):
+		for x in range(cave_x - int(half) - 1, cave_x + int(half) + 2):
+			if x < 0 or x >= w or mask[y * w + x] == 0:
+				continue
+			var q := Vector2((x + 0.5 - cave_x) / half, (y + 0.5 - h) / float(cave_h)).length()
+			if q < 0.82:
+				img.set_pixel(x, y, c("ink"))
+			elif q < 1.0:
+				img.set_pixel(x, y, stone[0])
+	_outline(img, mask, c("ink"))
+	# Moss along the ledge's rim.
+	for x in w:
+		for y in h:
+			if mask[y * w + x] == 1:
+				if img.get_pixel(x, y) != c("ink") and rng.randf() < 0.3:
+					img.set_pixel(x, y, c("leaf.3") if rng.randf() < 0.6 else c("leaf.2"))
+				break
+	return img
+
+
+## A curtain of lichen hanging over the leader's den: a full top row and
+## strands of uneven length, light at the top, darker towards the tips.
+func lichen(w: int, h: int, seed: int) -> Image:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var leaf := ramp("leaf")
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	for x in w:
+		var edge := mini(x, w - 1 - x)
+		var n := h if edge >= 2 and rng.randf() < 0.55 else rng.randi_range(2, h - 1)
+		if edge == 0:
+			n = mini(n, 2)
+		if x % 2 == 1 and rng.randf() < 0.4:
+			n = rng.randi_range(1, 3)
+		for y in n:
+			var b := 1.0 - float(y) / float(h)
+			var col := leaf[clampi(1 + level(b, 4, x, y), 1, 4)]
+			img.set_pixel(x, y, col)
+		if n >= 3:
+			img.set_pixel(x, n - 1, leaf[0])
+	return img
+
+
+## A worn patch of bare earth (the deputy's spot): a flat dirt ellipse with
+## a dithered, trampled rim fading into the grass.
+func worn_patch(w: int, h: int) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var dirt := ramp("dirt")
+	var ctr := Vector2(w, h) / 2.0
+	for y in h:
+		for x in w:
+			var d := ((Vector2(x, y) + Vector2(0.5, 0.5) - ctr) / ctr).length()
+			if d > 1.0:
+				continue
+			if d > 0.75 and dither(x, y) < (d - 0.75) * 4.0:
+				continue
+			var col: Color = dirt[1] if d < 0.5 and dither(x, y) < 0.5 else dirt[0]
+			if d > 0.75:
+				col = c("dirt_edge")
+			img.set_pixel(x, y, col)
+	return img
+
+
 ## A fallen log lying left-right, with a cut end showing rings on the right.
 func log_art(w: int, h: int) -> Image:
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)

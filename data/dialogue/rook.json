@@ -1,0 +1,6 @@
+{
+	"start": "start",
+	"nodes": {
+		"start": {"speaker": "rook", "expression": "neutral", "text": "Dawn patrol leaves soon. Stay out of trouble, apprentice.", "end": true}
+	}
+}

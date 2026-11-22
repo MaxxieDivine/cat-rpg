@@ -2,5 +2,7 @@
 	"fern": {"name": "{player_name}", "color": "#e8964a", "side": "right", "voice": {"pitch": 1.0, "volume_db": -12, "blip_ms": 45}},
 	"bram": {"name": "{name_bram}", "color": "#34383a", "side": "left", "voice": {"pitch": 0.6, "volume_db": -10, "blip_ms": 55}},
 	"sorrel": {"name": "{name_sorrel}", "color": "#9698a0", "side": "left", "voice": {"pitch": 0.85, "volume_db": -19, "blip_ms": 95}},
-	"wick": {"name": "{name_wick}", "color": "#d6c496", "side": "left", "voice": {"pitch": 1.45, "volume_db": -12, "blip_ms": 35}}
+	"wick": {"name": "{name_wick}", "color": "#d6c496", "side": "left", "voice": {"pitch": 1.45, "volume_db": -12, "blip_ms": 35}},
+	"larch": {"name": "{name_larch}", "color": "#6e4a36", "side": "left", "voice": {"pitch": 0.75, "volume_db": -12, "blip_ms": 60}},
+	"rook": {"name": "{name_rook}", "color": "#c4c0cc", "side": "left", "voice": {"pitch": 0.9, "volume_db": -11, "blip_ms": 45}}
 }

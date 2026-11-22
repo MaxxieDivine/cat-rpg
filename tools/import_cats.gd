@@ -3,7 +3,8 @@ extends SceneTree
 ## (CC0) into art/cats/<cat>_<anim>.png, plus the meow puff (art/meow_vfx.png).
 ## Run: godot --headless --path . --script res://tools/import_cats.gd -- <pack dir>
 ## (<pack dir> holds Cat-1 ... Cat-6 and Meow-VFX). Then: godot --headless --path . --import
-## Prints the assets.json lines for the keys.
+## Prints the assets.json lines for the keys. Cats with a "recolor" and no
+## "pack" are skipped: run tools/recolor_cats.gd for them afterwards.
 
 const JsonData := preload("res://scripts/core/json_data.gd")
 
@@ -20,6 +21,9 @@ func _initialize() -> void:
 	var keys: Array[String] = []
 	for id: String in data["cats"]:
 		var cat: Dictionary = data["cats"][id]
+		if not cat.has("pack"):
+			# A recoloured placeholder (tools/recolor_cats.gd).
+			continue
 		for anim: String in cat["anims"]:
 			var file: String = cat["anims"][anim]["file"]
 			var src := "%s/%s/%s-%s.png" % [pack, cat["pack"], cat["pack"], file]

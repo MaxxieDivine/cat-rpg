@@ -19,12 +19,14 @@ const SUITES := [
 	"res://tests/test_dialogue_files.gd",
 	"res://tests/test_typewriter.gd",
 	"res://tests/test_names.gd",
+	"res://tests/test_camp.gd",
 	"res://tests/app_smoke.gd",
 	"res://tests/dialogue_smoke.gd",
 	"res://tests/needs_smoke.gd",
 	"res://tests/travel_smoke.gd",
 	"res://tests/hunting_smoke.gd",
 	"res://tests/name_editor_smoke.gd",
+	"res://tests/camp_smoke.gd",
 	"res://tests/perf_smoke.gd",
 ]
 

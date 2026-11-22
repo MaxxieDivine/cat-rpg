@@ -7,7 +7,9 @@
 		"fern": {"prefix": "fern", "suffix": "", "rank": "apprentice"},
 		"bram": {"name": "Bram", "rank": "warrior"},
 		"sorrel": {"name": "Sorrel", "rank": "none"},
-		"wick": {"name": "Wick", "rank": "apprentice"}
+		"wick": {"name": "Wick", "rank": "apprentice"},
+		"larch": {"name": "Larch", "rank": "leader"},
+		"rook": {"name": "Rook", "rank": "deputy"}
 	},
 	"ranks": [
 		{"id": "none", "label": "No rank", "icon": ""},
