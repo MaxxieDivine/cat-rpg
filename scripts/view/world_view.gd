@@ -238,6 +238,9 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 		if pr["trunk"]:
 			var s := _sprite(pr["art"], pr["pos"])
 			s.flip_h = pr["flip"]
+			if pr["lift"] > 0.0:
+				# Sorted at pos, drawn lift px higher (the lichen on the rock).
+				s.offset.y -= roundf(pr["lift"])
 			if pr["sway"] != "" and not pr.has("canopy") and materials.has(pr["sway"]):
 				s.material = materials[pr["sway"]]
 			_sorted.add_child(s)
@@ -366,6 +369,20 @@ func _make_markers() -> void:
 		m.set_meta("prey_spot", ps["id"])
 		markers.add_child(m)
 		prey_markers.append(m)
+	# Named places for later systems (MeetingSpot, DeputySpot; GatherArea
+	# is a Marker2D at the rect's top-left with its size in meta "size").
+	for n: String in world.markers:
+		var m := Marker2D.new()
+		m.name = n
+		m.position = world.markers[n]
+		markers.add_child(m)
+	for n: String in world.zones:
+		var r: Rect2 = world.zones[n]
+		var m := Marker2D.new()
+		m.name = n
+		m.position = r.position
+		m.set_meta("size", r.size)
+		markers.add_child(m)
 
 
 func _layer(n: String) -> Node2D:
@@ -898,6 +915,8 @@ func focus_head() -> Vector2:
 			return world.pond_point() + Vector2(0, -2)
 		"npc":
 			return npc_head(world.focus_id)
+		"spot":
+			return world.spot_by_id(world.focus_id)["prompt"]
 	return Vector2.ZERO
 
 

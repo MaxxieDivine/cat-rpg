@@ -11,7 +11,8 @@ extends Node2D
 ## fidget (licks a paw, scratches); "lie" sleeps, lies with her head up when
 ## Fern is near and grooms if Fern lingers; "pace" walks its loop and idles
 ## at the corners; "stand" just stands. A cat that starts speaking meows if
-## it has a meow animation (speak()).
+## it has a meow animation (speak()). world.json "perch" stands it on
+## something (the leader on the Leader's Rock).
 
 const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
 const CatAnim := preload("res://scripts/view/cat_anim.gd")
@@ -81,7 +82,11 @@ func setup(npc: Dictionary, speaker: Dictionary, tuning: Dictionary) -> void:
 ## Copies the NPC's state onto the sprite. `near` = Fern is in talk range.
 func sync(npc: Dictionary, dt: float, near: bool, talking: bool) -> void:
 	_t += dt
-	position = (npc["pos"] as Vector2).round()
+	# A perched cat (the leader on the rock) is y-sorted at the ground
+	# below it and drawn perch px higher.
+	var perch := roundf(float(npc.get("perch", 0.0)))
+	position = (npc["pos"] as Vector2).round() + Vector2(0, perch)
+	sprite.position = Vector2(0, -perch)
 	if behavior != "stand":
 		sprite.flip_h = int(npc.get("facing", 1)) < 0
 	if cat != null:
@@ -144,5 +149,5 @@ func speak() -> void:
 ## Top-centre of the art's opaque pixels, in world pixels.
 func head() -> Vector2:
 	if cat != null:
-		return position + Vector2(0, cat.top_y())
-	return position + Vector2(0, sprite.offset.y + _top)
+		return position + sprite.position + Vector2(0, cat.top_y())
+	return position + sprite.position + Vector2(0, sprite.offset.y + _top)

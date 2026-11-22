@@ -19,6 +19,10 @@ func test_world_npcs_point_at_real_dialogue_files() -> void:
 	var speakers := JsonData.load_dict(Validator.SPEAKERS_PATH)
 	var files := Validator.dialogue_files()
 	for n: Dictionary in world["npcs"]:
+		if not n.has("dialogue"):
+			# Only a cat up out of reach (the leader on the rock) has nothing to say.
+			check(float(n.get("perch", 0)) > 0.0, "%s has a dialogue file or is perched out of reach" % n["id"])
+			continue
 		check(files.has(str(n.get("dialogue", ""))), "%s's dialogue file %s exists" % [n["id"], n.get("dialogue")])
 		check(speakers.has(n["id"]), "%s is a known speaker (name, voice)" % n["id"])
 	check(speakers.has("fern") and speakers["fern"]["side"] == "right", "Fern speaks from the right")

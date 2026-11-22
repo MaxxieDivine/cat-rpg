@@ -1,5 +1,5 @@
 {
-	"_note": "Animated cats from the Pet Cats Pack (CC0, see CREDITS.md). One sheet per animation: frame_px square frames in a row, facing right, feet on row feet_px. Sheets live in art/cats/<cat>_<anim>.png (key cat.<cat>.<anim>), copied from the pack by tools/import_cats.gd. Each anim: file = the pack's sheet name; fps (time-driven) or stride_px (one frame per that many px walked); loops = times a one-shot plays (0 or missing = loops forever). The first anim is the cat's resting pose (its head marks where the paw prompt goes). fidgets: one-shots Fern plays after standing still fidget_after_s; npc.gd uses fidgets the same way for sitting cats. meow_vfx_s: how long the meow puff shows over a cat that starts speaking.",
+	"_note": "Animated cats from the Pet Cats Pack (CC0, see CREDITS.md). One sheet per animation: frame_px square frames in a row, facing right, feet on row feet_px. Sheets live in art/cats/<cat>_<anim>.png (key cat.<cat>.<anim>), copied from the pack by tools/import_cats.gd. Each anim: file = the pack's sheet name; fps (time-driven) or stride_px (one frame per that many px walked); loops = times a one-shot plays (0 or missing = loops forever). The first anim is the cat's resting pose (its head marks where the paw prompt goes). fidgets: one-shots Fern plays after standing still fidget_after_s; npc.gd uses fidgets the same way for sitting cats. meow_vfx_s: how long the meow puff shows over a cat that starts speaking. recolor (placeholder art until the pack's unused Cat-4 / Cat-6 are imported): {from: another cat id, map: {#rrggbb: #rrggbb}}: tools/recolor_cats.gd bakes art/cats/<cat>_<anim>.png from that cat's sheet of the same anim, colours swapped; import_cats.gd skips these cats.",
 	"frame_px": 50,
 	"feet_px": 32,
 	"body": [22, 15],
@@ -29,6 +29,15 @@
 			"idle": {"file": "Idle", "fps": 7},
 			"walk": {"file": "Walk", "stride_px": 3},
 			"meow": {"file": "Meow", "fps": 8, "loops": 1}
+		}},
+		"larch": {"recolor": {"from": "wick", "map": {"#c2c2c2": "#6e4a36", "#d5d5d5": "#86603f", "#625956": "#2e201a", "#554c48": "#261a16", "#5d5b5b": "#3a2a22", "#836d67": "#4a342a", "#716f6f": "#5a4032", "#267792": "#e0b040"}}, "anims": {
+			"idle": {"file": "Idle", "fps": 6},
+			"meow": {"file": "Meow", "fps": 8, "loops": 1}
+		}},
+		"rook": {"recolor": {"from": "bram", "map": {"#1d2020": "#c4c0cc", "#2d3131": "#e4e0e8", "#3c4141": "#f6f4f8", "#171919": "#7c7884"}}, "fidget_after_s": 5.0, "fidgets": ["lick", "itch"], "anims": {
+			"sit": {"file": "Sitting", "fps": 1},
+			"lick": {"file": "Licking 1", "fps": 6, "loops": 2},
+			"itch": {"file": "Itch", "fps": 8, "loops": 5}
 		}}
 	}
 }

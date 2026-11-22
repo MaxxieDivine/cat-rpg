@@ -66,3 +66,20 @@ func test_one_shots_finish_and_loops_wrap() -> void:
 	check_eq(c.current_frame(), c.anims["run"]["frames"] - 1, "hold(-1) shows the last frame")
 	check_eq(c.region_rect.size, Vector2(c.frame_px, c.frame_px), "shows one frame")
 	c.free()
+
+
+## Recoloured placeholder cats (cats.json "recolor") match what
+## tools/recolor_cats.gd bakes from their source sheets.
+func test_recoloured_cats_are_fresh() -> void:
+	var Recolor = load("res://tools/recolor_cats.gd")
+	var cats: Dictionary = _cats()["cats"]
+	for id: String in cats:
+		if not cats[id].has("recolor"):
+			continue
+		for a: String in cats[id]["anims"]:
+			var want: Image = Recolor.bake(cats[id]["recolor"], a)
+			var have := Image.load_from_file(ProjectSettings.globalize_path("res://art/cats/%s_%s.png" % [id, a]))
+			if not check(want != null and have != null and not have.is_empty(), "%s %s: both sheets exist" % [id, a]):
+				continue
+			have.convert(Image.FORMAT_RGBA8)
+			check_eq(have.get_data(), want.get_data(), "%s %s is fresh (run tools/recolor_cats.gd)" % [id, a])

@@ -25,6 +25,16 @@ extends RefCounted
 ## Walking into an exit gives an "exit" event once; an exit only fires after
 ## Fern has stood clear of every exit (so arriving next to one, or on one,
 ## can never bounce her straight back). place_at_spawn() moves her.
+##
+## Camp landmarks: `spots` are things Fern can look at (the Leader's Rock, the
+## leader's den): interact shows their strings.json line ("message" event).
+## They take part in focus like the pile (nearest wins). A prop may be
+## `"solid": false` (no collider) and `lift` px (drawn that far above its
+## pos, which stays its y-sort point). A `perch`ed NPC stands up on something
+## (the leader on the rock): drawn at pos, y-sorted `perch` px lower, never
+## solid. NPCs without a dialogue file can't be talked to (no focus).
+## `markers` (name -> point) and `zones` (name -> rect) are named places for
+## later systems (Clan meetings): MeetingSpot, DeputySpot, GatherArea.
 
 const JsonData := preload("res://scripts/core/json_data.gd")
 const Hunt := preload("res://scripts/core/hunt.gd")
@@ -98,6 +108,13 @@ var _prop_solids: Array[Rect2] = []
 var focus_id := ""
 const PILE_ID := "fresh_catch"
 const POND_ID := "pond"
+## Things to look at: each {"id", "rect", "talk_radius", "prompt" (where the
+## paw prompt goes), "message" (strings.json key)}. Their ids are focus ids.
+var spots: Array[Dictionary] = []
+## Named points and rects (world px) for later systems: world.json
+## "markers" (name -> [x, y]) and "zones" (name -> [x, y, w, h]).
+var markers: Dictionary = {}
+var zones: Dictionary = {}
 ## The fresh-catch pile: {"id", "art", "pos", "footprint", "rect",
 ## "talk_radius", "prey", "max", "shadow"} or empty. It never refills by
 ## itself: hunting is the only way (deliver()).
@@ -212,6 +229,7 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 			"behavior": str(n.get("behavior", "stand")),
 			"facing": int(n.get("facing", 1)),
 			"gift": str(n.get("gift", "")),
+			"perch": float(n.get("perch", 0)),
 			"moving": false,
 			"distance": 0.0,
 		}
@@ -254,6 +272,20 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 			"max": most, "prey": clampi(int(fc.get("prey", most)), 0, most),
 			"shadow": str(fc.get("shadow", ""))}
 		_prop_solids.append(pile["rect"])
+	for sp_d: Dictionary in w.get("spots", []):
+		var r: Array = sp_d.get("rect", [0, 0, 0, 0])
+		var rect := Rect2(float(r[0]), float(r[1]), float(r[2]), float(r[3]))
+		spots.append({"id": str(sp_d.get("id", "")), "rect": rect,
+			"talk_radius": float(sp_d.get("talk_radius", 10)),
+			"prompt": _vec(sp_d.get("prompt", [rect.get_center().x, rect.position.y])),
+			"message": str(sp_d.get("message", ""))})
+	var mk: Dictionary = w.get("markers", {})
+	for n: String in mk:
+		markers[n] = _vec(mk[n])
+	var zn: Dictionary = w.get("zones", {})
+	for n: String in zn:
+		var r: Array = zn[n]
+		zones[n] = Rect2(float(r[0]), float(r[1]), float(r[2]), float(r[3]))
 	_rebuild_solids()
 
 	for g: Dictionary in w.get("ground", []):
@@ -411,13 +443,16 @@ func _add_prop(pr: Dictionary, types: Dictionary) -> void:
 		"sway": str(spec.get("sway", "")),
 		"rustle": bool(spec.get("rustle", false)),
 		"trunk": bool(spec.get("trunk", true)),
+		"solid": bool(spec.get("solid", true)),
+		"lift": float(spec.get("lift", 0)),
 	}
 	if spec.has("canopy"):
 		prop["canopy"] = str(spec["canopy"])
 		prop["canopy_offset"] = _vec(spec.get("canopy_offset", [0, 0]))
 	prop["rect"] = footprint_rect(prop["pos"], _vec(spec.get("footprint", [16, 6])))
 	props.append(prop)
-	_prop_solids.append(prop["rect"])
+	if prop["solid"]:
+		_prop_solids.append(prop["rect"])
 
 
 ## Trees all round the meadow, so the edge is a wood, not a cliff: a row
@@ -778,6 +813,11 @@ func interact(needs = null) -> Array[Dictionary]:
 			needs.eat()
 		_begin_action("eat", eat_s, pile["pos"])
 		return [{"type": "eat", "prey": pile["prey"]}, {"type": "pile", "prey": pile["prey"]}]
+	var spot := spot_by_id(focus_id)
+	if not spot.is_empty():
+		if absf(spot["prompt"].x - player_pos.x) >= 2.0:
+			facing = 1 if spot["prompt"].x > player_pos.x else -1
+		return [{"type": "message", "key": spot["message"], "spot": spot["id"]}]
 	if focus_id == POND_ID:
 		if needs != null:
 			needs.drink()
@@ -799,7 +839,7 @@ func is_busy() -> bool:
 	return action != ""
 
 
-## "npc", "pile", "pond" or "" for what has focus.
+## "npc", "pile", "pond", "spot" or "" for what has focus.
 func focus_kind() -> String:
 	if focus_id == "":
 		return ""
@@ -807,7 +847,22 @@ func focus_kind() -> String:
 		return "pile"
 	if focus_id == POND_ID:
 		return "pond"
+	if not spot_by_id(focus_id).is_empty():
+		return "spot"
 	return "npc"
+
+
+func spot_by_id(sid: String) -> Dictionary:
+	for sp in spots:
+		if sp["id"] == sid and sid != "":
+			return sp
+	return {}
+
+
+## True for NPCs Fern can walk up to and talk to (a dialogue file, not
+## perched up on something).
+static func talkable(npc: Dictionary) -> bool:
+	return npc["dialogue"] != "" and npc.get("perch", 0.0) <= 0.0
 
 
 ## The point on the pond's water edge nearest Fern (world px).
@@ -893,7 +948,8 @@ func _step_npcs(dt: float) -> void:
 func _rebuild_solids() -> void:
 	solids = []
 	for npc in npcs:
-		solids.append(npc["rect"])
+		if npc.get("perch", 0.0) <= 0.0:
+			solids.append(npc["rect"])
 	solids.append_array(_prop_solids)
 
 
@@ -940,6 +996,8 @@ func _update_focus() -> void:
 	var best := ""
 	var best_d := INF
 	for npc in npcs:
+		if not talkable(npc):
+			continue
 		var d := distance_to_rect(npc["rect"])
 		if d <= npc["talk_radius"] and d < best_d:
 			best = npc["id"]
@@ -953,6 +1011,11 @@ func _update_focus() -> void:
 		var d := distance_to_rect(pond["rect"])
 		if d <= drink_radius and d < best_d:
 			best = POND_ID
+			best_d = d
+	for sp in spots:
+		var d := distance_to_rect(sp["rect"])
+		if d <= sp["talk_radius"] and d < best_d:
+			best = sp["id"]
 			best_d = d
 	focus_id = best
 

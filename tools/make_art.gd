@@ -56,6 +56,9 @@ const PAINTED := {
 	"rank_medicine": ["rank_icon", "medicine"],
 	"rank_deputy": ["rank_icon", "deputy"],
 	"rank_leader": ["rank_icon", "leader"],
+	"leaders_rock": ["leaders_rock", 48, 40, 81],
+	"lichen": ["lichen", 14, 7, 82],
+	"worn_patch": ["worn_patch", 26, 9],
 }
 
 ## Each area's baked floor: art/<name>.png -> the area file it is painted
