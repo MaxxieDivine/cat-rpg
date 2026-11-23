@@ -290,6 +290,7 @@ func _update_hud() -> void:
 			"phase": game.day.phase() if game != null else "afternoon",
 			"music": game.sound.music_name if game != null and game.sound != null else "",
 			"volume": volume_button.volume(),
+			"background_pauses": AppFocus.pauses,
 			"view_size": [game.view_size.x, game.view_size.y] if game != null else [],
 			"bonds": GameState.state.bonds,
 			"player_name": GameState.get_player_name(),

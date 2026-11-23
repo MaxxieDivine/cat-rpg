@@ -21,6 +21,7 @@ const SUITES := [
 	"res://tests/test_names.gd",
 	"res://tests/test_camp.gd",
 	"res://tests/test_den.gd",
+	"res://tests/test_app_focus.gd",
 	"res://tests/app_smoke.gd",
 	"res://tests/dialogue_smoke.gd",
 	"res://tests/needs_smoke.gd",
@@ -38,6 +39,11 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	# A window losing focus (xvfb) must not pause the tree mid-test;
+	# test_app_focus.gd turns it back on for its own tests.
+	var focus: Node = root.get_node_or_null("AppFocus")
+	if focus != null:
+		focus.enabled = false
 	var shots := ""
 	var only := ""
 	for arg in OS.get_cmdline_user_args():
