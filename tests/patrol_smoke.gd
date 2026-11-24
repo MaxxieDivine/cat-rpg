@@ -176,12 +176,16 @@ func test_border_patrol_with_mates_by_touch() -> void:
 	var tc: Control = g.touch
 	_touch(app, 0, tc.stick_rest, true)
 	_drag(app, 0, tc.stick_rest + Vector2(tc.stick_radius * 0.7, tc.stick_radius * 0.3))
-	await _frames(90)
+	var bram_walked := false
+	for f in 90:
+		await tree.process_frame
+		bram_walked = bram_walked or g.world_view.npc_nodes["bram"].cat.anim == "walk"
 	_touch(app, 0, tc.stick_rest, false)
 	await _frames(60)
 	var bram: Dictionary = w.npc_by_id("bram")
 	check(bram["pos"].distance_to(w.player_pos) < float(cfg["follow_gap"]) * 1.5, "Bram kept up (%.0f px)" % bram["pos"].distance_to(w.player_pos))
-	check(g.world_view.npc_nodes["bram"].cat.anim in ["sit", "walk"], "Bram's sheet (walks, then sits)")
+	check(bram_walked, "Bram walks (his walk sheet) while following")
+	check(g.world_view.npc_nodes["bram"].cat.anim != "walk", "and stops walking when Fern stops")
 	if not is_headless():
 		await _settle()
 		_save(await _screen(), "patrol_follow_phone")
