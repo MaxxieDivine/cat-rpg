@@ -110,7 +110,8 @@
 		"row_gap_px": 3,
 		"pulse_hz": 1.4,
 		"message_s": 1.8,
-		"message_font": 18
+		"message_font": 18,
+		"goal_font": 16
 	},
 	"prompt": {
 		"bob_px": 2,
@@ -249,5 +250,9 @@
 			9,
 			-6
 		]
+	},
+	"patrol": {
+		"_note": "Border patrols: mark_s = seconds Fern spends leaving a scent mark (movement locked).",
+		"mark_s": 1.2
 	}
 }

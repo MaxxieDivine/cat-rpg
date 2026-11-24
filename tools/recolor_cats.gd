@@ -3,7 +3,8 @@ extends SceneTree
 ## ({"from": cat id, "map": {"#rrggbb": "#rrggbb"}}): each anim's sheet is the
 ## `from` cat's sheet of the same anim (art/cats/<from>_<anim>.png, from the
 ## CC0 Pet Cats Pack) with the mapped colours swapped; every other pixel is
-## kept. Deterministic, so tests/test_cats.gd can check the PNGs are fresh.
+## kept. A single anim may have its own "recolor" (Bram's walk: Wick's walk
+## in Bram's colours, since the pack's Cat-2 walk isn't in the repo). Deterministic, so tests/test_cats.gd can check the PNGs are fresh.
 ## Run: godot --headless --path . --script res://tools/recolor_cats.gd
 ## Then: godot --headless --path . --import
 
@@ -14,10 +15,11 @@ func _initialize() -> void:
 	var ok := true
 	var cats: Dictionary = JsonData.load_dict("res://data/cats.json")["cats"]
 	for id: String in cats:
-		if not cats[id].has("recolor"):
-			continue
 		for anim: String in cats[id]["anims"]:
-			var img := bake(cats[id]["recolor"], anim)
+			var rc: Dictionary = recolor_for(cats[id], anim)
+			if rc.is_empty():
+				continue
+			var img := bake(rc, anim)
 			if img == null:
 				push_error("recolor_cats: no %s sheet for %s" % [anim, id])
 				ok = false
@@ -27,6 +29,14 @@ func _initialize() -> void:
 			print("recolor_cats: wrote %s err=%d" % [path, err])
 			ok = ok and err == OK
 	quit(0 if ok else 1)
+
+
+## The recolour for one anim of a cat (its own, or the cat's), or {}.
+static func recolor_for(cat: Dictionary, anim: String) -> Dictionary:
+	var a: Dictionary = cat["anims"].get(anim, {})
+	if a.has("recolor"):
+		return a["recolor"]
+	return cat.get("recolor", {})
 
 
 ## The recoloured sheet for one anim, or null if the source sheet is missing.

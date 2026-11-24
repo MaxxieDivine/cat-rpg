@@ -25,6 +25,11 @@
 		{"id": "to_camp", "rect": [6, 198, 14, 36], "to": "camp", "spawn": "from_hunting"},
 		{"id": "to_hunting_grounds_2", "rect": [940, 192, 14, 36], "to": "hunting_grounds_2", "spawn": "from_hunting_grounds"}
 	],
+	"scent_spots": [
+		{"id": "north_1", "pos": [160, 50]},
+		{"id": "north_2", "pos": [540, 50]},
+		{"id": "north_3", "pos": [760, 56]}
+	],
 	"prey_spots": [
 		{"id": "spot_1", "pos": [292, 104]},
 		{"id": "spot_2", "pos": [575, 282]},

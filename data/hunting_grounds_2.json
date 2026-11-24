@@ -36,6 +36,12 @@
 		"ramp": "grass_rival",
 		"plants": {"art": "decor.bracken", "seed": 6121, "every": 11, "jitter": 3, "offset": 5}
 	},
+	"scent_spots": [
+		{"id": "bank_1", "pos": [150, 132]},
+		{"id": "bank_2", "pos": [370, 134]},
+		{"id": "bank_3", "pos": [590, 132]},
+		{"id": "bank_4", "pos": [800, 127]}
+	],
 	"prey_spots": [
 		{"id": "spot_1", "pos": [214, 300]},
 		{"id": "spot_2", "pos": [488, 338]},

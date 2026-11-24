@@ -47,6 +47,20 @@ extends RefCounted
 ## another Clan's ground: the painter uses its grass ramp there, and a line
 ## of plants (bracken) grows along the far bank (decor).
 ##
+## Patrols: an NPC may be sent somewhere (send_npc(): it walks there in a
+## straight line, then waits; `home` = back to where it started, and its own
+## behaviour again) or follow Fern (follow(): `mode` "follow", follow_gap px
+## apart along the trail of points she walked, `_trail`). Cats that walk
+## like this aren't solid and can't be talked to. add_follower() adds a cat
+## that isn't in this area's file (a patrol mate in the Hunting Grounds),
+## right behind Fern.
+##
+## Scent marking (border patrols): `scent_spots` ({"id", "pos"}) are places
+## along the border. Only the ones the running patrol wants (scent_wanted:
+## id -> marked) show and take focus (focus id SCENT_PREFIX + id, kind
+## "scent", nearest wins like the rest) while unmarked; interact leaves a
+## mark: Fern is busy for mark_s, then a "scent" event names the spot.
+##
 ## Dens (C.2): an area file with "interior" (den settings) and "door" is a
 ## room built by scripts/core/den_layout.gd: walls, the doorway exit, the
 ## "inside" and "nest" spawns, nests, the "Your nest." spot, decor slots
@@ -180,6 +194,24 @@ var stream: Dictionary = {}
 ## Which side of the stream is another Clan's ("north"), or "" (no border).
 var border_side := ""
 
+## Places to scent-mark: each {"id", "pos", "rect", "talk_radius"}.
+var scent_spots: Array[Dictionary] = []
+## The running border patrol's spots here: id -> true once marked (game.gd
+## fills it from the Patrols autoload). Others don't show.
+var scent_wanted: Dictionary = {}
+const SCENT_PREFIX := "scent:"
+var mark_s := 1.2
+var _marking := ""
+## Fern's recent path (oldest first), for cats that follow her.
+var _trail: Array[Vector2] = []
+## Patrol mates' spacing along it and top speed (game.gd sets them from
+## data/patrols.json).
+var follow_gap := 20.0
+var follow_speed := 150.0
+var home_speed := 45.0
+const TRAIL_STEP := 2.0
+const TRAIL_MAX := 200
+
 var walk_speed := 70.0
 var run_speed := 125.0
 var accel := 900.0
@@ -208,6 +240,7 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 		hunt_tuning = HuntTuning.new(t["hunt"])
 	var nd: Dictionary = t.get("needs", {})
 	eat_s = float(nd.get("eat_s", eat_s))
+	mark_s = float(t.get("patrol", {}).get("mark_s", mark_s))
 	drink_s = float(nd.get("drink_s", drink_s))
 
 	id = str(w.get("id", ""))
@@ -308,6 +341,10 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 			"prompt": _vec(sp_d.get("prompt", [rect.get_center().x, rect.position.y])),
 			"message": str(sp_d.get("message", "")),
 			"label": str(sp_d.get("label", "")), "enter": str(sp_d.get("enter", ""))})
+	for ss: Dictionary in w.get("scent_spots", []):
+		var spos := _vec(ss.get("pos", [0, 0]))
+		scent_spots.append({"id": str(ss.get("id", "")), "pos": spos,
+			"rect": Rect2(spos - Vector2(8, 2), Vector2(16, 4)), "talk_radius": float(ss.get("talk_radius", 14))})
 	var mk: Dictionary = w.get("markers", {})
 	for n: String in mk:
 		markers[n] = _vec(mk[n])
@@ -537,8 +574,10 @@ func place_at_spawn(name: String) -> bool:
 	talk_id = ""
 	action = ""
 	action_t = 0.0
+	_marking = ""
 	leap = {}
 	exits_armed = not _on_exit()
+	reset_trail()
 	_update_focus()
 	return true
 
@@ -782,7 +821,12 @@ func step(dt: float, move: Vector2, run: bool, crouch: bool = false) -> Array[Di
 		action_t = maxf(0.0, action_t - dt)
 		if action_t <= 0.0:
 			events.append({"type": "action_done", "action": action})
+			if action == "mark" and _marking != "":
+				scent_wanted[_marking] = true
+				events.append({"type": "scent", "id": _marking})
+				_marking = ""
 			action = ""
+			_update_focus()
 	_step_npcs(dt)
 	if is_leaping():
 		_step_leap(dt, events)
@@ -807,6 +851,7 @@ func step(dt: float, move: Vector2, run: bool, crouch: bool = false) -> Array[Di
 		_move_axis(Vector2(travel.x / steps, 0.0))
 		_move_axis(Vector2(0.0, travel.y / steps))
 	distance += before.distance_to(player_pos)
+	_record_trail()
 
 	var old_focus := focus_id
 	_update_focus()
@@ -941,6 +986,11 @@ func interact(needs = null) -> Array[Dictionary]:
 			return [{"type": "give", "id": gift["id"]}, {"type": "message", "key": gift["gift"]}]
 		if focus_id == "":
 			return eat_carried(needs)
+	if focus_id.begins_with(SCENT_PREFIX):
+		var ss := scent_by_id(focus_id.trim_prefix(SCENT_PREFIX))
+		_marking = ss["id"]
+		_begin_action("mark", mark_s, ss["pos"])
+		return [{"type": "marking", "id": ss["id"], "pos": ss["pos"]}]
 	if focus_id == PILE_ID:
 		if needs != null and needs.is_full():
 			return [{"type": "message", "key": "needs.not_hungry"}]
@@ -992,9 +1042,25 @@ func focus_kind() -> String:
 		return "pile"
 	if focus_id == POND_ID:
 		return "pond"
+	if focus_id.begins_with(SCENT_PREFIX):
+		return "scent"
 	if not spot_by_id(focus_id).is_empty():
 		return "spot"
 	return "npc"
+
+
+func scent_by_id(sid: String) -> Dictionary:
+	for ss in scent_spots:
+		if ss["id"] == sid and sid != "":
+			return ss
+	return {}
+
+
+## Which of this area's scent spots the patrol wants: `wanted` = id ->
+## marked (true) or not (false).
+func set_scent_wanted(wanted: Dictionary) -> void:
+	scent_wanted = wanted.duplicate()
+	_update_focus()
 
 
 func spot_by_id(sid: String) -> Dictionary:
@@ -1007,7 +1073,7 @@ func spot_by_id(sid: String) -> Dictionary:
 ## True for NPCs Fern can walk up to and talk to (a dialogue file, not
 ## perched up on something).
 static func talkable(npc: Dictionary) -> bool:
-	return npc["dialogue"] != "" and npc.get("perch", 0.0) <= 0.0
+	return npc["dialogue"] != "" and npc.get("perch", 0.0) <= 0.0 and str(npc.get("mode", "")) == ""
 
 
 ## The point on the pond's water edge nearest Fern (world px).
@@ -1060,6 +1126,13 @@ func end_talk() -> void:
 func _step_npcs(dt: float) -> void:
 	var moved := false
 	for npc in npcs:
+		match str(npc.get("mode", "")):
+			"follow":
+				moved = _step_follower(npc, dt) or moved
+				continue
+			"goto", "wait":
+				moved = _step_goto(npc, dt) or moved
+				continue
 		if not npc.has("path"):
 			continue
 		npc["moving"] = false
@@ -1090,10 +1163,205 @@ func _step_npcs(dt: float) -> void:
 		_rebuild_solids()
 
 
+# --- Patrol mates
+
+
+## Sends NPC `id` walking (straight) to `to`; it waits there. `then_home`:
+## once there it is itself again (sits, paces...). False if no such NPC.
+func send_npc(id: String, to: Vector2, then_home: bool = false) -> bool:
+	var npc := npc_by_id(id)
+	if npc.is_empty():
+		return false
+	if not npc.has("home"):
+		npc["home"] = npc["pos"]
+	npc["mode"] = "goto"
+	npc["goto"] = to
+	npc["then_home"] = then_home
+	if npc["pos"].distance_to(to) < 0.5:
+		_arrive(npc)
+	_rebuild_solids()
+	return true
+
+
+## Sends NPC `id` back where it started (its own behaviour again there).
+func send_home(id: String) -> bool:
+	var npc := npc_by_id(id)
+	if npc.is_empty():
+		return false
+	var home: Vector2 = npc.get("home", npc["path"][0] if npc.has("path") else npc["pos"])
+	return send_npc(id, home, true)
+
+
+## Puts NPC `id` at `at` waiting (already arrived).
+func place_npc(id: String, at: Vector2, face: int = 0) -> bool:
+	var npc := npc_by_id(id)
+	if npc.is_empty():
+		return false
+	if not npc.has("home"):
+		npc["home"] = npc["pos"]
+	npc["pos"] = at
+	npc["rect"] = footprint_rect(at, npc["footprint"])
+	npc["mode"] = "wait"
+	npc["goto"] = at
+	npc["then_home"] = false
+	if face != 0:
+		npc["facing"] = face
+	_rebuild_solids()
+	return true
+
+
+func _step_goto(npc: Dictionary, dt: float) -> bool:
+	if npc["mode"] == "wait":
+		return false
+	var pos: Vector2 = npc["pos"]
+	var to: Vector2 = npc["goto"]
+	var spd := home_speed if npc.get("then_home", false) else follow_speed * 0.5
+	var next := pos.move_toward(to, spd * dt)
+	if absf(next.x - pos.x) > 0.001:
+		npc["facing"] = 1 if next.x > pos.x else -1
+	npc["distance"] += pos.distance_to(next)
+	npc["pos"] = next
+	npc["rect"] = footprint_rect(next, npc["footprint"])
+	npc["moving"] = true
+	if next.distance_to(to) < 0.5:
+		_arrive(npc)
+	return true
+
+
+func _arrive(npc: Dictionary) -> void:
+	npc["pos"] = npc["goto"]
+	npc["rect"] = footprint_rect(npc["pos"], npc["footprint"])
+	npc["moving"] = false
+	if npc.get("then_home", false):
+		npc["mode"] = ""
+		npc.erase("goto")
+		if npc.has("path"):
+			npc["leg"] = 1 % (npc["path"] as Array).size()
+			npc["wait"] = npc["pause"]
+	else:
+		npc["mode"] = "wait"
+
+
+## Cats in `ids` follow Fern, in that order (nearest first). Cats not in
+## this area are skipped (add_follower() them).
+func follow(ids: Array) -> void:
+	var i := 0
+	for id in ids:
+		var npc := npc_by_id(str(id))
+		if npc.is_empty():
+			continue
+		if not npc.has("home"):
+			npc["home"] = npc["pos"]
+		npc["mode"] = "follow"
+		npc["follow"] = i
+		i += 1
+	_rebuild_solids()
+
+
+## Every NPC walking a patrol (following, sent somewhere, waiting) is
+## itself again where it stands (the patrol is over and we're not in camp).
+func stop_following() -> void:
+	for npc in npcs:
+		if str(npc.get("mode", "")) != "":
+			npc["mode"] = ""
+	_rebuild_solids()
+
+
+## Adds patrol mate `id` (not part of this area's file) right behind Fern,
+## following her. `spec`: {"art", "footprint"}.
+func add_follower(id: String, spec: Dictionary = {}) -> Dictionary:
+	if not npc_by_id(id).is_empty():
+		follow(followers() + [id])
+		return npc_by_id(id)
+	var n := followers().size()
+	var at := _behind(n + 1)
+	var npc := {
+		"id": id, "art": str(spec.get("art", "")), "frames": 1, "pos": at,
+		"footprint": spec.get("footprint", Vector2(16, 5)), "talk_radius": 0.0,
+		"dialogue": "", "behavior": "sit", "facing": facing, "gift": "",
+		"perch": 0.0, "moving": false, "distance": 0.0, "mode": "follow",
+		"follow": n, "visitor": true,
+	}
+	npc["rect"] = footprint_rect(at, npc["footprint"])
+	npcs.append(npc)
+	_rebuild_solids()
+	return npc
+
+
+## Patrol mates following Fern, nearest first.
+func followers() -> Array:
+	var f: Array = npcs.filter(func(n: Dictionary) -> bool: return str(n.get("mode", "")) == "follow")
+	f.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["follow"]) < int(b["follow"]))
+	return f.map(func(n: Dictionary) -> String: return n["id"])
+
+
+## A spot `n` follow gaps behind Fern (away from where she faces), clear of
+## colliders and inside the bounds, else her own spot.
+func _behind(n: int) -> Vector2:
+	for k in [1.0, 0.6, 0.3]:
+		var p := player_pos - Vector2(facing * follow_gap * n * k, 0)
+		var r := footprint_rect(p, player_footprint)
+		if bounds.encloses(r) and not _prop_solids.any(func(s: Rect2) -> bool: return s.intersects(r)):
+			return p
+	return player_pos
+
+
+## Starts Fern's trail afresh (on arriving): a straight line behind her, so
+## followers placed there stand still.
+func reset_trail() -> void:
+	_trail = []
+	for i in range(4, 0, -1):
+		_trail.append(_behind(i))
+	_trail.append(player_pos)
+
+
+func _record_trail() -> void:
+	if _trail.is_empty() or _trail[_trail.size() - 1].distance_to(player_pos) >= TRAIL_STEP:
+		_trail.append(player_pos)
+		if _trail.size() > TRAIL_MAX:
+			_trail.remove_at(0)
+
+
+## The point `d` px back along Fern's trail (its oldest point if shorter).
+func trail_point(d: float) -> Vector2:
+	if _trail.is_empty():
+		return player_pos
+	var at: Vector2 = player_pos
+	var left := d
+	for i in range(_trail.size() - 1, -1, -1):
+		var seg := at.distance_to(_trail[i])
+		if seg >= left:
+			return at.move_toward(_trail[i], left)
+		left -= seg
+		at = _trail[i]
+	return at
+
+
+func _step_follower(npc: Dictionary, dt: float) -> bool:
+	var to := trail_point(follow_gap * (int(npc.get("follow", 0)) + 1))
+	var pos: Vector2 = npc["pos"]
+	var d := pos.distance_to(to)
+	npc["moving"] = false
+	if d < 1.0:
+		# Waiting: face Fern.
+		if absf(player_pos.x - pos.x) >= 2.0:
+			npc["facing"] = 1 if player_pos.x > pos.x else -1
+		return false
+	var spd := clampf(d * 5.0, 12.0, follow_speed)
+	var next := pos.move_toward(to, spd * dt)
+	if absf(next.x - pos.x) > 0.05:
+		npc["facing"] = 1 if next.x > pos.x else -1
+	npc["distance"] += pos.distance_to(next)
+	npc["pos"] = next
+	npc["rect"] = footprint_rect(next, npc["footprint"])
+	npc["moving"] = true
+	return true
+
+
 func _rebuild_solids() -> void:
 	solids = []
 	for npc in npcs:
-		if npc.get("perch", 0.0) <= 0.0:
+		if npc.get("perch", 0.0) <= 0.0 and str(npc.get("mode", "")) == "":
 			solids.append(npc["rect"])
 	solids.append_array(_prop_solids)
 
@@ -1161,6 +1429,13 @@ func _update_focus() -> void:
 		var d := distance_to_rect(sp["rect"])
 		if d <= sp["talk_radius"] and d < best_d:
 			best = sp["id"]
+			best_d = d
+	for ss in scent_spots:
+		if scent_wanted.get(ss["id"], true):
+			continue  # not this patrol's, or marked already
+		var d := distance_to_rect(ss["rect"])
+		if d <= ss["talk_radius"] and d < best_d:
+			best = SCENT_PREFIX + str(ss["id"])
 			best_d = d
 	focus_id = best
 

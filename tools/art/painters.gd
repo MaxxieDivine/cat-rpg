@@ -1234,6 +1234,55 @@ func rank_icon(kind: String) -> Image:
 	return img
 
 
+## The patrol icon over a cat that could go on a patrol: a small paper
+## chevron ("out we go") with an ink outline, 7x7. `picked`: inside a gold
+## ring (13x13), for the cats the deputy sends.
+const PATROL_SHAPE := ["ww...", ".ww..", "..ww.", ".ww..", "ww..."]
+
+
+func patrol_icon(picked: bool = false) -> Image:
+	var n := 13 if picked else 7
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var at := Vector2i(4, 4) if picked else Vector2i(1, 1)
+	var fill := {}
+	for y in PATROL_SHAPE.size():
+		for x in PATROL_SHAPE[y].length():
+			if PATROL_SHAPE[y][x] != ".":
+				fill[at + Vector2i(x, y)] = "w"
+	if picked:
+		var ctr := Vector2(n, n) / 2.0
+		for y in n:
+			for x in n:
+				var d := (Vector2(x, y) + Vector2(0.5, 0.5)).distance_to(ctr)
+				if d >= 4.7 and d < 5.9:
+					fill[Vector2i(x, y)] = "y"
+	_outline_fill(img, fill)
+	return img
+
+
+## A border marking spot on the ground (w x h, an ellipse seen from
+## above). Unmarked: a dashed pale ring ("mark here"). Marked: the ring
+## drawn solid in rust and filled in with a darker scent patch.
+func scent_ring(w: int, h: int, marked: bool = false) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var ctr := Vector2(w, h) / 2.0
+	for y in h:
+		for x in w:
+			var d := ((Vector2(x, y) + Vector2(0.5, 0.5) - ctr) / (ctr - Vector2(0.5, 0.5))).length()
+			if d > 1.0:
+				continue
+			var edge := d > 0.72
+			var ang := atan2((y + 0.5 - ctr.y) * w / float(h), x + 0.5 - ctr.x)
+			if edge:
+				if marked:
+					img.set_pixel(x, y, c("bracken.1"))
+				elif int(floorf((ang + PI) / TAU * 14.0)) % 2 == 0:
+					img.set_pixel(x, y, c("ui.paper", 0.9))
+			elif marked and dither(x, y) < 0.75:
+				img.set_pixel(x, y, c("bracken.0", 0.55))
+	return img
+
+
 ## Paints `fill` (pixel -> RANK_COLOURS key) with an ink outline round it.
 func _outline_fill(img: Image, fill: Dictionary) -> void:
 	for y in img.get_height():

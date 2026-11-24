@@ -113,7 +113,7 @@ func test_camp_rock_line_and_deputy_by_touch() -> void:
 	check(w.is_talking(), "talking to the deputy")
 	check(g.dialogue.is_open, "the box opens")
 	check_eq(str(g.dialogue.line.get("speaker", "")), dep_id, "the deputy speaks")
-	check(str(g.dialogue.line.get("text", "")).contains("Dawn patrol"), "the placeholder line")
+	check(str(g.dialogue.line.get("text", "")).contains("patrol"), "the deputy offers a patrol (%s)" % g.dialogue.line.get("text", ""))
 	await _frames(60)
 	if not is_headless():
 		_save(await _screen(), "camp_deputy_target_phone")

@@ -56,6 +56,16 @@ extends Control
 ## reply uses the (new) {player_name}. The debug overlay opens the editor
 ## anywhere (open_name_editor()).
 ##
+## Patrols (Patrols autoload, scripts/core/patrol.gd): talking to the
+## deputy (data/patrols.json "deputy") rolls a patrol before the
+## conversation starts (prepare_offer()); its choices set the flag `patrol`,
+## acted on when it ends (after_talk()). Accepted, the mates walk to the
+## camp entrance (world.json marker PatrolMeet) and wait; leaving through
+## the entrance sets the patrol out, and from then on the mates follow Fern
+## into every outdoor area (load_area() adds them behind her). Prey
+## delivered to the pile counts for a hunting patrol; when the patrol is
+## done the mates walk home. The goal shows under the needs bars.
+##
 ## Time of day (scripts/core/day_cycle.gd): after the last of the three
 ## conversations, afternoon turns to dusk and night; the world view, the
 ## music and the ambience follow it. Sound (sound.gd) is created here, after
@@ -122,6 +132,11 @@ var needs_hud: Control
 var message: Label
 ## A place's name over its paw prompt (a den's doorway: "Apprentices' den").
 var prompt_label: Label
+## The patrol's goal under the needs bars ("Scent marks: 1 / 4").
+var goal_label: Label
+## The NPC Fern is talking to (the deputy's conversation ends a patrol
+## offer or report).
+var _talk_npc := ""
 var _message_t := 0.0
 ## Distance walked when the last footstep played (world px).
 var _step_at := 0.0
@@ -151,6 +166,7 @@ func _ready() -> void:
 	DialogueManager.stop()
 	Needs.reset()
 	Player.reset(areas.start_area(), "start")
+	Patrols.reset()
 
 	viewport = SubViewport.new()
 	viewport.name = "WorldViewport"
@@ -204,6 +220,12 @@ func _ready() -> void:
 	prompt_label.name = "PromptLabel"
 	prompt_label.add_theme_font_size_override("font_size", int(tuning.get("needs_hud", {}).get("label_font", 16)))
 	add_child(prompt_label)
+	goal_label = message.duplicate()
+	goal_label.name = "PatrolGoal"
+	goal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	goal_label.add_theme_font_size_override("font_size", int(tuning.get("needs_hud", {}).get("goal_font", 16)))
+	goal_label.add_theme_constant_override("outline_size", 5)
+	add_child(goal_label)
 
 	touch = TouchControls.new()
 	touch.name = "TouchControls"
@@ -279,6 +301,84 @@ func _pixel_label(n: String, size: int) -> Label:
 	return l
 
 
+## The patrol in a freshly loaded area: mates waiting at the camp entrance
+## (gathering), or following Fern (out, in any outdoor area).
+func _patrol_into(w) -> void:
+	var cfg: Dictionary = Patrols.config()
+	w.follow_gap = float(cfg.get("follow_gap", w.follow_gap))
+	w.follow_speed = float(cfg.get("follow_speed", w.follow_speed))
+	w.home_speed = float(cfg.get("home_speed", w.home_speed))
+	if not Patrols.is_active():
+		return
+	_update_scent(w)
+	var mates: Array = Patrols.mates()
+	if Patrols.phase() == "gather":
+		if w.id == str(cfg.get("camp", "camp")):
+			for i in mates.size():
+				w.place_npc(mates[i], meet_point(w, i), 1)
+		return
+	if w.is_indoors():
+		return
+	for i in mates.size():
+		var id: String = mates[i]
+		if w.npc_by_id(id).is_empty():
+			w.add_follower(id, {"footprint": Vector2(16, 5)})
+		else:
+			w.follow(mates.slice(0, i + 1))
+			var npc: Dictionary = w.npc_by_id(id)
+			npc["pos"] = w._behind(i + 1)
+			npc["rect"] = w.footprint_rect(npc["pos"], npc["footprint"])
+	w.follow(mates)
+
+
+## Tells the world which of its scent spots the patrol wants (marked or not).
+func _update_scent(w) -> void:
+	var wanted := {}
+	for m: Dictionary in Patrols.patrol.active.get("marks", []):
+		if m["area"] == w.id:
+			wanted[m["id"]] = Patrols.patrol.is_marked(m["area"], m["id"])
+	w.set_scent_wanted(wanted)
+
+
+## Where patrol mate number `i` waits at the camp entrance (the PatrolMeet
+## marker, then a step back and to the side for each).
+func meet_point(w, i: int) -> Vector2:
+	var cfg: Dictionary = Patrols.config()
+	var at: Vector2 = w.markers.get(str(cfg.get("meet", "PatrolMeet")), w.player_pos)
+	var gap := float(cfg.get("meet_gap", 18))
+	return at + Vector2(-gap * i, 14.0 * (i % 2))
+
+
+## Patrol events: speech lines, mates walking to the entrance or home.
+func _handle_patrol(events: Array[Dictionary]) -> void:
+	for ev in events:
+		match ev["type"]:
+			"patrol_start":
+				say(GameStrings.text("patrol.started"))
+				for i in (ev["mates"] as Array).size():
+					world.send_npc(ev["mates"][i], meet_point(world, i))
+			"patrol_out":
+				say(GameStrings.text("patrol.out"))
+			"patrol_mark":
+				say(GameStrings.text("patrol.marked"))
+				_update_scent(world)
+			"patrol_report":
+				say(GameState.format_text(GameStrings.text("patrol.all_marked")))
+				if sound != null:
+					sound.play("confirm")
+			"patrol_done":
+				say(GameStrings.text("patrol.done"))
+				if sound != null:
+					sound.play("confirm")
+				for id in ev["mates"]:
+					if world.npc_by_id(id).get("visitor", false):
+						continue
+					world.send_home(id)
+				world.stop_following()
+				world.set_scent_wanted({})
+	_place_overlays()
+
+
 ## Builds area `id` (data/areas.json) in the world SubViewport with Fern at
 ## spawn `spawn_name` (its "start" if there is no such spawn), replacing the
 ## area shown now. Camera limits follow the area. Needs, Player, flags and
@@ -293,6 +393,7 @@ func load_area(id: String, spawn_name: String) -> bool:
 	w.hunt_tuning = Hunting.tuning
 	w.player_state = Player.state
 	w.place_at_spawn(spawn_name)
+	_patrol_into(w)
 	if world_view != null:
 		viewport.remove_child(world_view)
 		world_view.queue_free()
@@ -483,11 +584,15 @@ func collapse() -> bool:
 	return true
 
 
-## An exit was walked into: fade out, load the other area, fade in.
+## An exit was walked into: fade out, load the other area, fade in. Out of
+## camp through the entrance, a gathered patrol sets out.
 func _on_exit(ev: Dictionary) -> void:
 	if not areas.has(ev["to"]):
 		push_warning("game: exit '%s' leads to unknown area '%s'" % [ev["id"], ev["to"]])
 		return
+	var cfg: Dictionary = Patrols.config()
+	if world.id == str(cfg.get("camp", "camp")) and ev["id"] == str(cfg.get("entrance_exit", "")):
+		Patrols.left_camp()
 	if travel.go(ev["to"], ev["spawn"]):
 		touch.reset()
 		_update_touch_visibility()
@@ -694,7 +799,10 @@ func _handle(events: Array[Dictionary]) -> void:
 	for ev in events:
 		match ev["type"]:
 			"talk":
-				_show(DialogueManager.start(ev["dialogue"], DialogueManager.follow_up_for(str(ev.get("id", "")))))
+				_talk_npc = str(ev.get("id", ""))
+				if _talk_npc == Patrols.deputy():
+					Patrols.prepare_offer()
+				_show(DialogueManager.start(ev["dialogue"], DialogueManager.follow_up_for(_talk_npc)))
 			"eat":
 				if sound != null:
 					sound.play("eat")
@@ -717,6 +825,7 @@ func _handle(events: Array[Dictionary]) -> void:
 				if sound != null:
 					sound.play("drop")
 				say(GameStrings.text("hunt.delivered"))
+				_handle_patrol(Patrols.delivered())
 			"give":
 				if sound != null:
 					sound.play("drop")
@@ -727,6 +836,11 @@ func _handle(events: Array[Dictionary]) -> void:
 				say(GameState.format_text(GameStrings.text(ev["key"])))
 			"exit":
 				_on_exit(ev)
+			"marking":
+				if sound != null:
+					sound.play("rustle")
+			"scent":
+				_handle_patrol(Patrols.mark(world.id, ev["id"]))
 
 
 ## Quieter with distance from Fern; -80 dB (silent) past hunt.hear_px.
@@ -772,6 +886,10 @@ func _show(ev: Dictionary) -> void:
 		_speaker = ""
 		dialogue.close()
 		world.end_talk()
+		var who := _talk_npc
+		_talk_npc = ""
+		if who == Patrols.deputy():
+			_handle_patrol(Patrols.after_talk())
 	_update_touch_visibility()
 	_place_overlays()
 
@@ -845,6 +963,7 @@ func _place_overlays() -> void:
 	touch.can_pounce = world.can_pounce()
 	touch.carrying = world.carrying() != ""
 	_place_prompt_label()
+	_place_goal()
 	message.visible = _message_t > 0.0 and not is_talking()
 	if message.visible:
 		# Over Fern's head, kept inside the safe area.
@@ -856,6 +975,19 @@ func _place_overlays() -> void:
 		pos.x = clampf(pos.x, safe.position.x, maxf(safe.position.x, safe.end.x - message.size.x))
 		pos.y = clampf(pos.y, safe.position.y, maxf(safe.position.y, safe.end.y - message.size.y))
 		message.position = metrics.snap(pos)
+
+
+## The patrol's goal, just under the needs bars (not over the Name Editor
+## or a fade).
+func _place_goal() -> void:
+	var text: String = Patrols.goal_text()
+	goal_label.visible = text != "" and not naming() and not (travel != null and travel.busy())
+	if not goal_label.visible:
+		return
+	if goal_label.text != text:
+		goal_label.text = text
+	goal_label.reset_size()
+	goal_label.position = metrics.snap(needs_hud.hud_rect.position + Vector2(0, needs_hud.hud_rect.size.y + 2.0))
 
 
 ## The focused place's name (a spot's `label`) just over its paw prompt,

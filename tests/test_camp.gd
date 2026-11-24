@@ -146,7 +146,8 @@ func test_the_deputy_sits_beside_and_talks() -> void:
 		var d = Dialogue.new(GameStateCore.new())
 		var line: Dictionary = d.start(JsonData.load_dict(ev[0]["dialogue"]))
 		check_eq(line.get("speaker"), dep["id"], "the deputy speaks")
-		check(str(line.get("text", "")).contains("Dawn patrol"), "the placeholder line (%s)" % line.get("text"))
+		# No patrol rolled (the Patrols autoload does that in the game).
+		check(str(line.get("text", "")).contains("Nothing for you"), "no patrol offered: the idle line (%s)" % line.get("text"))
 
 
 func _spot_check(sid: String, key: String) -> void:

@@ -11,7 +11,9 @@ extends Node2D
 ## fidget (licks a paw, scratches); "lie" sleeps, lies with her head up when
 ## Fern is near and grooms if Fern lingers; "pace" walks its loop and idles
 ## at the corners; "stand" just stands. A cat that starts speaking meows if
-## it has a meow animation (speak()). world.json "perch" stands it on
+## it has a meow animation (speak()). Any cat with a walk animation walks
+## while it moves (patrol mates following Fern), and rests in its own pose
+## when it stops. world.json "perch" stands it on
 ## something (the leader on the Leader's Rock).
 
 const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
@@ -108,7 +110,8 @@ func _sync_cat(npc: Dictionary, dt: float, near: bool, talking: bool) -> void:
 	if cat.anim == "meow" and not cat.finished():
 		cat.step(dt)
 		return
-	if behavior == "pace" and npc.get("moving", false):
+	if npc.get("moving", false) and cat.has_anim("walk"):
+		# Pacing, or walking with a patrol.
 		cat.show_stride("walk", float(npc.get("distance", 0.0)))
 		return
 	if behavior == "lie" and not (near or talking):

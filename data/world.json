@@ -36,7 +36,7 @@
 		{"id": "leaders_rock", "rect": [426, 158, 1, 12], "talk_radius": 10, "prompt": [430, 146], "message": "camp.leaders_rock"},
 		{"id": "apprentices_den_door", "rect": [586, 100, 28, 1], "talk_radius": 14, "prompt": [600, 76], "label": "den.apprentices.name", "enter": "to_apprentices_den"}
 	],
-	"markers": {"MeetingSpot": [448, 134], "DeputySpot": [502, 170]},
+	"markers": {"MeetingSpot": [448, 134], "DeputySpot": [502, 170], "PatrolMeet": [652, 212]},
 	"zones": {"GatherArea": [404, 184, 96, 40]},
 	"path": {
 		"width": 11,

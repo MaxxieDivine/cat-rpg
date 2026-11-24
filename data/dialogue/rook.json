@@ -1,6 +1,39 @@
 {
 	"start": "start",
 	"nodes": {
-		"start": {"speaker": "rook", "expression": "neutral", "text": "Dawn patrol leaves soon. Stay out of trouble, apprentice.", "end": true}
+		"start": {"branch": [
+			{"if": {"patrol": "report"}, "next": "report"},
+			{"if": {"patrol": "gather"}, "next": "remind_gather"},
+			{"if": {"patrol": "out"}, "next": "remind_out"},
+			{"if": {"patrol_offer": "hunting", "patrol_group": false}, "next": "hunting_solo"},
+			{"if": {"patrol_offer": "hunting", "patrol_group": true}, "next": "hunting_group"},
+			{"if": {"patrol_offer": "border", "patrol_group": false}, "next": "border_solo"},
+			{"if": {"patrol_offer": "border", "patrol_group": true}, "next": "border_group"},
+			{"next": "nothing"}
+		]},
+		"hunting_solo": {"speaker": "rook", "expression": "neutral", "text": "Hunting patrol. Bring back prey for the fresh-kill pile.", "next": "alone"},
+		"hunting_group": {"speaker": "rook", "expression": "neutral", "text": "Hunting patrol. Bring back prey for the fresh-kill pile.", "next": "with_mates"},
+		"border_solo": {"speaker": "rook", "expression": "neutral", "text": "Border patrol. Mark the edge by the second hunting ground.", "next": "alone"},
+		"border_group": {"speaker": "rook", "expression": "neutral", "text": "Border patrol. Mark the edge by the second hunting ground.", "next": "with_mates"},
+		"alone": {"speaker": "rook", "expression": "neutral", "text": "You'll go alone, {player_name}. Can you manage that?", "choices": [
+			{"text": "On my way.", "next": "fern_yes", "set": {"patrol": "accepted"}},
+			{"text": "Not now.", "next": "fern_no", "set": {"patrol": "declined"}}
+		]},
+		"with_mates": {"speaker": "rook", "expression": "neutral", "text": "{patrol_mates} will go with you, {player_name}.", "choices": [
+			{"text": "On my way.", "next": "fern_yes", "set": {"patrol": "accepted"}},
+			{"text": "Not now.", "next": "fern_no", "set": {"patrol": "declined"}}
+		]},
+		"fern_yes": {"speaker": "fern", "expression": "happy", "text": "On my way.", "next": "go"},
+		"go": {"speaker": "rook", "expression": "neutral", "text": "Good. Meet at the camp entrance, then go.", "end": true},
+		"fern_no": {"speaker": "fern", "expression": "neutral", "text": "Not now.", "next": "later"},
+		"later": {"speaker": "rook", "expression": "annoyed", "text": "Then don't get under paw. Come back when you're ready.", "end": true},
+		"remind_gather": {"speaker": "rook", "expression": "annoyed", "text": "Your patrol is waiting at the camp entrance.", "end": true},
+		"remind_out": {"speaker": "rook", "expression": "neutral", "text": "You're not done yet. Get back out there.", "end": true},
+		"report": {"speaker": "rook", "expression": "neutral", "text": "The border's marked? Good. Any sign of trouble?", "choices": [
+			{"text": "All quiet.", "next": "fern_quiet", "set": {"patrol": "reported"}}
+		]},
+		"fern_quiet": {"speaker": "fern", "expression": "happy", "text": "All quiet.", "next": "well_done"},
+		"well_done": {"speaker": "rook", "expression": "happy", "text": "Well done. Rest a while.", "end": true},
+		"nothing": {"speaker": "rook", "expression": "neutral", "text": "Nothing for you right now. Stay out of trouble, apprentice.", "end": true}
 	}
 }
