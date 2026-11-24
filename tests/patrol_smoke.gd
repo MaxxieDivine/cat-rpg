@@ -224,6 +224,144 @@ func test_turning_the_deputy_down() -> void:
 	_close(app)
 
 
+## Border patrol, solo, by keyboard: every spot in Hunting Grounds 2 and
+## the first grounds marked with E, the counter, the rings, then home to
+## report to the deputy.
+func test_border_patrol_marking_and_report_by_keyboard() -> void:
+	var app: Control = await _start(DESKTOP)
+	var g: Control = app.game
+	_freeze_needs(70, 70)
+	_set_offer("border", [])
+	# One extra spot in the first grounds, for a predictable test.
+	Patrols.patrol.offer["marks"].append({"area": "hunting_grounds", "id": "north_2"})
+	var total: int = Patrols.patrol.offer["marks"].size()
+	await _near_deputy(g)
+	_key(KEY_E)
+	await _keys_until_choices(app)
+	_key(KEY_E)
+	await _keys_until_closed(app)
+	_place_near_exit(g, "hunting_grounds")
+	await _walk_until_area(app, "move_right", "hunting_grounds")
+	await _wait_travel(g)
+	var goal := func(n: int) -> String: return strings["patrol.goal_marks"].replace("{n}", str(n)).replace("{of}", str(total))
+	check_eq(g.goal_label.text, goal.call(0), "Scent marks: 0 / %d" % total)
+	# The extra spot in the first grounds shows; the others don't.
+	check(g.world_view.scent_nodes["north_2"].visible, "the wanted spot shows here")
+	check(not g.world_view.scent_nodes["north_1"].visible, "spots this patrol doesn't want are hidden")
+	var n := 0
+	n = await _mark_by(app, "north_2", "key", n)
+	check_eq(g.goal_label.text, goal.call(n), "counter: %d" % n)
+	g.load_area("hunting_grounds_2", "from_hunting_grounds")
+	await _frames(2)
+	for ss: Dictionary in g.world.scent_spots:
+		check(g.world_view.scent_nodes[ss["id"]].visible, "%s shows" % ss["id"])
+		check_eq(str(g.world_view.scent_nodes[ss["id"]].get_meta("key", "")), "ui.scent_ring", "%s unmarked: a dashed ring" % ss["id"])
+	if not is_headless():
+		g.world.player_pos = g.world.scent_spots[0]["pos"] + Vector2(40, 50)
+		await _settle()
+		_save(await _screen(), "patrol_spot_unmarked_desktop")
+	for ss: Dictionary in g.world.scent_spots:
+		n = await _mark_by(app, ss["id"], "key", n)
+		check_eq(str(g.world_view.scent_nodes[ss["id"]].get_meta("key", "")), "ui.scent_marked", "%s looks marked" % ss["id"])
+		if n < total:
+			check_eq(g.goal_label.text, goal.call(n), "counter: %d" % n)
+	check_eq(Patrols.phase(), "report", "all marked: go and report")
+	check_eq(g.goal_label.text, GameState.format_text(strings["patrol.goal_report"]), "goal: tell the deputy")
+	if not is_headless():
+		g.world.player_pos = g.world.scent_spots[3]["pos"] + Vector2(-40, 50)
+		await _settle()
+		_save(await _screen(), "patrol_spot_marked_desktop")
+	# Home and report.
+	g.load_area("camp", "from_hunting")
+	await _frames(2)
+	await _near_deputy(g)
+	_key(KEY_E)
+	await _frames(2)
+	check(str(g.dialogue.line.get("text", "")).contains("border's marked"), "the deputy asks (%s)" % g.dialogue.line.get("text", ""))
+	await _keys_until_choices(app)
+	_key(KEY_E)
+	await _keys_until_closed(app)
+	check(not Patrols.is_active(), "reported: patrol done")
+	check_eq(Patrols.patrol.completed, 1, "counted")
+	check(not g.goal_label.visible, "no goal")
+	_close(app)
+
+
+## Border patrol with a mate on a phone: marks by the paw button and by a
+## gamepad's South button; the mate stays with Fern.
+func test_border_marking_by_touch_and_gamepad() -> void:
+	var app: Control = await _start(TARGET_PHONE)
+	var g: Control = app.game
+	_freeze_needs(70, 70)
+	_set_offer("border", ["wick"])
+	Patrols.patrol.offer["marks"] = Patrols.patrol.offer["marks"].filter(func(m): return m["area"] == "hunting_grounds_2")
+	Patrols.prepare_offer()
+	await _near_deputy(g)
+	await _paw_button(app)
+	await _tap_until_choices(app)
+	await _tap_at(app, g.dialogue.choice_rects[0].get_center())
+	await _tap_until_closed(app)
+	_place_near_exit(g, "hunting_grounds")
+	await _joystick_until_area(app, Vector2.RIGHT, "hunting_grounds")
+	await _wait_travel(g)
+	g.load_area("hunting_grounds_2", "from_hunting_grounds")
+	await _frames(2)
+	check_eq(g.world.followers(), ["wick"], "Wick along")
+	var n := 0
+	var spots: Array = g.world.scent_spots
+	for i in spots.size():
+		n = await _mark_by(app, spots[i]["id"], "touch" if i % 2 == 0 else "pad", n)
+		if i == 0 and not is_headless():
+			await _settle()
+			_save(await _screen(), "patrol_marking_phone")
+	check_eq(Patrols.phase(), "report", "every spot marked by touch and gamepad")
+	# The test jumps Fern from spot to spot; Wick catches up on foot.
+	var wick: Dictionary = g.world.npc_by_id("wick")
+	await _until(func() -> bool: return wick["pos"].distance_to(g.world.player_pos) < float(cfg["follow_gap"]) * 1.5, 6000)
+	check(wick["pos"].distance_to(g.world.player_pos) < float(cfg["follow_gap"]) * 1.5, "Wick catches up with Fern (%.0f px)" % wick["pos"].distance_to(g.world.player_pos))
+	_close(app)
+
+
+## Walks Fern up to spot `id` from below and marks it by "key" (E),
+## "touch" (the paw button) or "pad" (South). Returns the new count.
+func _mark_by(app: Control, id: String, how: String, n: int) -> int:
+	var g: Control = app.game
+	var w = g.world
+	var ss: Dictionary = w.scent_by_id(id)
+	w.player_pos = ss["pos"] + Vector2(0, 24)
+	w.player_vel = Vector2.ZERO
+	w.reset_trail()
+	# Teleported: refresh focus now (it still names the spot she left).
+	w.step(0.0, Vector2.ZERO, false)
+	Input.action_press("move_up")
+	await _until(func() -> bool: return w.focus_id == w.SCENT_PREFIX + id, 3000)
+	Input.action_release("move_up")
+	await _frames(2)
+	check_eq(w.focus_id, w.SCENT_PREFIX + id, "%s: walking up gives it the paw prompt" % id)
+	check(g.world_view.paw.visible, "%s: paw prompt" % id)
+	match how:
+		"key":
+			_key(KEY_E)
+		"touch":
+			# Back to touch after a gamepad press (that hid the buttons).
+			await _tap_at(app, app.metrics.safe_rect.get_center() + Vector2(0, -60))
+			check(g.touch.visible and g.touch.highlight, "%s: the paw button shows, lit" % id)
+			await _paw_button(app)
+		"pad":
+			for pressed in [true, false]:
+				var ev := InputEventJoypadButton.new()
+				ev.button_index = JOY_BUTTON_A
+				ev.pressed = pressed
+				tree.root.push_input(ev)
+	await _frames(2)
+	check_eq(w.action, "mark", "%s: marking (%s)" % [id, how])
+	await _until(func() -> bool: return not w.is_busy(), 3000)
+	await _frames(2)
+	check(Patrols.patrol.is_marked(w.id, id), "%s marked by %s" % [id, how])
+	check_eq(Patrols.patrol.marks_done(), n + 1, "%s: count %d" % [id, n + 1])
+	return n + 1
+
+
 # --- helpers
 
 

@@ -70,8 +70,8 @@ const PAINTED := {
 	"bracken": ["bracken", 11, 12, 131],
 	"patrol_icon": ["patrol_icon"],
 	"patrol_icon_picked": ["patrol_icon", true],
-	"scent_ring": ["scent_ring", 20, 9],
-	"scent_marked": ["scent_ring", 20, 9, true],
+	"scent_ring": ["scent_ring", 26, 11],
+	"scent_marked": ["scent_ring", 26, 11, true],
 }
 
 ## Each area's baked floor: art/<name>.png -> the area file it is painted

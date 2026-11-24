@@ -1271,13 +1271,16 @@ func scent_ring(w: int, h: int, marked: bool = false) -> Image:
 			var d := ((Vector2(x, y) + Vector2(0.5, 0.5) - ctr) / (ctr - Vector2(0.5, 0.5))).length()
 			if d > 1.0:
 				continue
-			var edge := d > 0.72
+			var edge := d > 0.62
 			var ang := atan2((y + 0.5 - ctr.y) * w / float(h), x + 0.5 - ctr.x)
 			if edge:
 				if marked:
 					img.set_pixel(x, y, c("bracken.1"))
-				elif int(floorf((ang + PI) / TAU * 14.0)) % 2 == 0:
-					img.set_pixel(x, y, c("ui.paper", 0.9))
+				elif int(floorf((ang + PI) / TAU * 12.0)) % 2 == 0:
+					# Pale dashes with a dark lower lip, so they read on
+					# any grass.
+					var below := ((Vector2(x, y + 1) + Vector2(0.5, 0.5) - ctr) / (ctr - Vector2(0.5, 0.5))).length()
+					img.set_pixel(x, y, c("ink", 0.7) if below > 1.0 or (y + 0.5 > ctr.y and d > 0.9) else c("ui.paper"))
 			elif marked and dither(x, y) < 0.75:
 				img.set_pixel(x, y, c("bracken.0", 0.55))
 	return img

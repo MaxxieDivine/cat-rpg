@@ -289,3 +289,63 @@ func test_mates_join_fern_in_the_hunting_grounds() -> void:
 	_run(w, 2.0, Vector2.RIGHT)
 	_run(w, 1.0)
 	check_near(b["pos"].distance_to(w.player_pos), float(cfg["follow_gap"]), 4.0, "following")
+
+
+# --- Scent marking (Part C)
+
+
+func _hg2():
+	var w = Areas.new().load_world("hunting_grounds_2", tuning)
+	w.place_at_spawn("start")
+	return w
+
+
+## Fern standing just below spot `ss` (on the bank, where she can reach).
+func _below(w, ss: Dictionary) -> void:
+	w.player_pos = ss["pos"] + Vector2(0, 30)
+	for i in 120:
+		w.step(DT, Vector2.UP, false)
+	w.step(DT, Vector2.ZERO, false)
+
+
+func test_border_spots_are_spread_along_our_bank() -> void:
+	var w = _hg2()
+	var bd: Dictionary = cfg["border"]
+	check(w.scent_spots.size() >= 3 and w.scent_spots.size() <= 6, "about 4 spots (%d)" % w.scent_spots.size())
+	var xs: Array = w.scent_spots.map(func(s): return s["pos"].x)
+	xs.sort()
+	check(xs[xs.size() - 1] - xs[0] >= w.size.x * 0.6, "spread along most of the border (%s)" % [xs])
+	for i in range(1, xs.size()):
+		check(xs[i] - xs[i - 1] >= 120.0, "a walk from one to the next (%s)" % [xs])
+	for ss: Dictionary in w.scent_spots:
+		check(not w.beyond_border(ss["pos"]) and not w.in_stream(ss["pos"]), "%s is on our bank" % ss["id"])
+		check(ss["pos"].y - w.stream_y(ss["pos"].x) < 24.0, "%s is right by the stream" % ss["id"])
+		for s: Rect2 in w.solids:
+			check(not s.intersects(ss["rect"]), "%s isn't in a collider" % ss["id"])
+	check_eq(bd["area"], "hunting_grounds_2", "border patrols mark Hunting Grounds 2")
+	var hg = Areas.new().load_world(bd["extra_area"], tuning)
+	check(hg.scent_spots.size() >= 2, "the first grounds has a few spots too")
+
+
+func test_marking_a_spot() -> void:
+	var w = _hg2()
+	var ss: Dictionary = w.scent_spots[1]
+	var other: Dictionary = w.scent_spots[0]
+	# Not on a patrol: nothing to mark.
+	_below(w, ss)
+	check_eq(w.focus_id, "", "no patrol: the spot takes no focus")
+	w.set_scent_wanted({ss["id"]: false, other["id"]: false})
+	check_eq(w.focus_id, w.SCENT_PREFIX + ss["id"], "wanted: the spot has focus")
+	check_eq(w.focus_kind(), "scent", "kind scent")
+	var ev: Array = w.interact()
+	check_eq(ev[0]["type"], "marking", "interact starts marking")
+	check(w.is_busy(), "busy marking")
+	var got := []
+	for i in roundi((w.mark_s + 0.1) * 60.0):
+		for e in w.step(DT, Vector2.RIGHT, false):
+			if e["type"] == "scent":
+				got.append(e["id"])
+	check_eq(got, [ss["id"]], "a scent event when the mark is done")
+	check(w.scent_wanted[ss["id"]], "marked")
+	check(w.focus_id != w.SCENT_PREFIX + ss["id"], "a marked spot takes no focus")
+	check(not w.is_busy(), "free again")
