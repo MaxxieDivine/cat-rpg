@@ -19,8 +19,9 @@ extends RefCounted
 const JsonData := preload("res://scripts/core/json_data.gd")
 const Names := preload("res://scripts/core/names.gd")
 const STATE_PATH := "res://data/state.json"
-## Placeholders dialogue text may use (format_text()): {player_name}, and
-## {name_<id>} for every cat in naming.json (see placeholders()).
+## Placeholders dialogue text may use (format_text()): {player_name},
+## {name_<id>} for every cat in naming.json, and the text variables
+## state.json "text_vars" declares (set_text_var(); {patrol_mates}).
 const PLAYER_PLACEHOLDER := "player_name"
 
 ## name -> {"type": "bool"} or {"type": "string", "values": [...]}
@@ -29,6 +30,10 @@ var bond_ids: Array[String] = []
 var expressions: Array[String] = []
 var flags: Dictionary = {}
 var bonds: Dictionary = {}
+## Text variables (state.json "text_vars": name -> default): game systems
+## fill them ({patrol_mates} = "Bram and Wick") for dialogue text.
+var text_var_defaults: Dictionary = {}
+var text_vars: Dictionary = {}
 ## cat id -> {"prefix_id", "suffix_id", "fixed", "rank"}. "fixed" is the
 ## starting name of a cat whose name isn't built from words yet ("Bram");
 ## it is cleared once the cat is renamed.
@@ -55,6 +60,7 @@ func _init(defs: Dictionary = {}) -> void:
 		bond_ids.append(str(id))
 	for e in defs.get("expressions", []):
 		expressions.append(str(e))
+	text_var_defaults = defs.get("text_vars", {})
 	reset()
 
 
@@ -62,6 +68,7 @@ func _init(defs: Dictionary = {}) -> void:
 func reset() -> void:
 	flags = {}
 	bonds = {}
+	text_vars = text_var_defaults.duplicate()
 	for id in bond_ids:
 		bonds[id] = 0
 	cats = {}
@@ -84,7 +91,23 @@ func placeholders() -> Array[String]:
 	var out: Array[String] = [PLAYER_PLACEHOLDER]
 	for id in names.cat_ids():
 		out.append("name_" + id)
+	for k: String in text_var_defaults:
+		out.append(k)
 	return out
+
+
+## Sets a text variable state.json declares (unknown names are refused).
+func set_text_var(name: String, value: String) -> bool:
+	if not text_var_defaults.has(name):
+		push_warning("GameState: unknown text variable '%s'" % name)
+		return false
+	text_vars[name] = value
+	return true
+
+
+## Unsets a flag (string flags back to null, bools to false).
+func clear_flag(name: String) -> void:
+	flags.erase(name)
 
 
 func has_cat(id: String) -> bool:
@@ -161,6 +184,8 @@ func format_text(text: String) -> String:
 	text = text.replace("{player_name}", get_player_name())
 	for id: String in cats:
 		text = text.replace("{name_%s}" % id, get_cat_name(id))
+	for k: String in text_vars:
+		text = text.replace("{%s}" % k, str(text_vars[k]))
 	return text
 
 

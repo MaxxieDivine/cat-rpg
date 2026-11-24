@@ -760,6 +760,18 @@ func ground(world: Dictionary) -> Image:
 					if d < dist[y * w + x]:
 						dist[y * w + x] = d
 
+	# A stream (Hunting Grounds 2): water along a polyline, a pebbly bank,
+	# and past it (the border's side) another Clan's grass.
+	var st: Dictionary = world.get("stream", {})
+	var sline: Array = st.get("points", [])
+	var shalf := float(st.get("width", 14)) / 2.0
+	var sbank := float(st.get("bank", 3))
+	var bd: Dictionary = world.get("territory", {})
+	var far_name := str(bd.get("ramp", gname))
+	var far := ramp(far_name)
+	var water := ramp("water")
+	var stone := ramp("stone")
+
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
@@ -767,6 +779,28 @@ func ground(world: Dictionary) -> Image:
 		for x in w:
 			var v := (noise.get_noise_2d(x, y) + 1.0) / 2.0
 			var col: Color = grass[level(clampf((v - 0.5) * 1.25 + 0.5, 0.0, 0.999), grass.size(), x, y, 0.9)]
+			if not sline.is_empty():
+				var sy := _poly_y(sline, x + 0.5) + fine.get_noise_2d(x * 0.5, 300.0) * 1.2
+				var sd := absf(y + 0.5 - sy)
+				if str(bd.get("side", "")) == "north" and y + 0.5 < sy:
+					col = far[level(clampf((v - 0.5) * 1.25 + 0.5, 0.0, 0.999), far.size(), x, y, 0.9)]
+				if sd < shalf - sbank:
+					# Darker in the middle; light glints by dither.
+					var depth := 1.0 - sd / maxf(1.0, shalf - sbank)
+					var wv := clampf(0.55 - depth * 0.45 + fine.get_noise_2d(x * 1.5, y * 3.0) * 0.25, 0.0, 0.999)
+					col = water[level(wv, 4, x, y)]
+					if fine.get_noise_2d(x * 0.6 + 50.0, y * 2.0) > 0.42 and dither(x, y) < 0.3:
+						col = water[4]
+					img.set_pixel(x, y, col)
+					continue
+				elif sd < shalf:
+					col = stone[2] if y + 0.5 < sy and dither(x, y) < 0.6 else stone[1] if dither(x + 1, y) < 0.7 else stone[0]
+					img.set_pixel(x, y, col)
+					continue
+				elif sd < shalf + 1.5 and dither(x, y) < 0.5:
+					col = c((far_name if y + 0.5 < sy else gname) + "_dark")
+					img.set_pixel(x, y, col)
+					continue
 			var d: float = dist[y * w + x] + fine.get_noise_2d(x, y) * 1.6
 			if d < half - 1.0:
 				var dv := (fine.get_noise_2d(x * 0.7 + 100.0, y * 0.7) + 1.0) / 2.0
@@ -780,7 +814,59 @@ func ground(world: Dictionary) -> Image:
 	for i in w * h / 90:
 		var p := Vector2i(rng.randi_range(0, w - 1), rng.randi_range(0, h - 1))
 		if dist[p.y * w + p.x] > half + 2.0:
-			img.set_pixelv(p, c(gname + "_dark") if rng.randf() < 0.6 else c(gname + "_light"))
+			var r := rng.randf()
+			if not sline.is_empty() and absf(p.y + 0.5 - _poly_y(sline, p.x + 0.5)) < shalf + 2.0:
+				continue
+			var gn := far_name if not sline.is_empty() and str(bd.get("side", "")) == "north" and p.y + 0.5 < _poly_y(sline, p.x + 0.5) else gname
+			img.set_pixelv(p, c(gn + "_dark") if r < 0.6 else c(gn + "_light"))
+	return img
+
+
+## y of a left-to-right polyline ([[x, y], ...]) at x, clamped at its ends.
+static func _poly_y(line: Array, x: float) -> float:
+	if x <= float(line[0][0]):
+		return float(line[0][1])
+	for i in range(line.size() - 1):
+		var b: Array = line[i + 1]
+		if x <= float(b[0]):
+			var a: Array = line[i]
+			var u := (x - float(a[0])) / maxf(0.001, float(b[0]) - float(a[0]))
+			return lerpf(float(a[1]), float(b[1]), u)
+	return float(line[line.size() - 1][1])
+
+
+## Bracken: a few arching rust-brown fronds (the plants along a border's
+## far bank). Bottom-centre is the base.
+func bracken(w: int, h: int, seed: int) -> Image:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var shades := ramp("bracken")
+	var cx := (w - 1) / 2.0
+	# Fronds: up the middle, and arching out to each side, tips drooping.
+	var fronds := [[0.0, 1.0, 0.0], [-1.0, 0.8, 0.35], [1.0, 0.85, 0.35], [-0.5, 0.95, 0.15]]
+	for f in fronds:
+		var dir: float = f[0] + rng.randf_range(-0.15, 0.15)
+		var tall: float = (h - 1) * f[1]
+		var droop: float = h * f[2]
+		var steps := h * 3
+		for i in steps:
+			var t := float(i) / float(steps - 1)
+			var x := cx + dir * sin(t * 1.6) * (w / 2.0 - 0.5)
+			var y := (h - 1) - t * tall + droop * t * t * t
+			var px := clampi(int(roundf(x)), 0, w - 1)
+			var py := clampi(int(roundf(y)), 0, h - 1)
+			img.set_pixelv(Vector2i(px, py), shades[1] if t < 0.5 else shades[2])
+			# Leaflets: pale ticks either side, more towards the tip.
+			if t > 0.3 and i % 4 == 0:
+				for side in [-1, 1]:
+					var lx: int = clampi(px + side, 0, w - 1)
+					var ly: int = clampi(py - 1 if absf(dir) < 0.5 else py + (1 if side * dir > 0.0 else -1), 0, h - 1)
+					if img.get_pixel(lx, ly).a == 0.0:
+						img.set_pixel(lx, ly, shades[3] if t > 0.6 else shades[2])
+	for x in range(1, w - 1):
+		if img.get_pixel(x, h - 1).a == 0.0 and dither(x, h) < 0.4:
+			img.set_pixel(x, h - 1, shades[0])
 	return img
 
 
@@ -1145,6 +1231,58 @@ func rank_icon(kind: String) -> Image:
 		fill.erase(Vector2i(7, 1))
 		fill.erase(Vector2i(7, 2))
 	_outline_fill(img, fill)
+	return img
+
+
+## The patrol icon over a cat that could go on a patrol: a small paper
+## chevron ("out we go") with an ink outline, 7x7. `picked`: inside a gold
+## ring (13x13), for the cats the deputy sends.
+const PATROL_SHAPE := ["ww...", ".ww..", "..ww.", ".ww..", "ww..."]
+
+
+func patrol_icon(picked: bool = false) -> Image:
+	var n := 13 if picked else 7
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var at := Vector2i(4, 4) if picked else Vector2i(1, 1)
+	var fill := {}
+	for y in PATROL_SHAPE.size():
+		for x in PATROL_SHAPE[y].length():
+			if PATROL_SHAPE[y][x] != ".":
+				fill[at + Vector2i(x, y)] = "w"
+	if picked:
+		var ctr := Vector2(n, n) / 2.0
+		for y in n:
+			for x in n:
+				var d := (Vector2(x, y) + Vector2(0.5, 0.5)).distance_to(ctr)
+				if d >= 4.7 and d < 5.9:
+					fill[Vector2i(x, y)] = "y"
+	_outline_fill(img, fill)
+	return img
+
+
+## A border marking spot on the ground (w x h, an ellipse seen from
+## above). Unmarked: a dashed pale ring ("mark here"). Marked: the ring
+## drawn solid in rust and filled in with a darker scent patch.
+func scent_ring(w: int, h: int, marked: bool = false) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var ctr := Vector2(w, h) / 2.0
+	for y in h:
+		for x in w:
+			var d := ((Vector2(x, y) + Vector2(0.5, 0.5) - ctr) / (ctr - Vector2(0.5, 0.5))).length()
+			if d > 1.0:
+				continue
+			var edge := d > 0.62
+			var ang := atan2((y + 0.5 - ctr.y) * w / float(h), x + 0.5 - ctr.x)
+			if edge:
+				if marked:
+					img.set_pixel(x, y, c("bracken.1"))
+				elif int(floorf((ang + PI) / TAU * 12.0)) % 2 == 0:
+					# Pale dashes with a dark lower lip, so they read on
+					# any grass.
+					var below := ((Vector2(x, y + 1) + Vector2(0.5, 0.5) - ctr) / (ctr - Vector2(0.5, 0.5))).length()
+					img.set_pixel(x, y, c("ink", 0.7) if below > 1.0 or (y + 0.5 > ctr.y and d > 0.9) else c("ui.paper"))
+			elif marked and dither(x, y) < 0.75:
+				img.set_pixel(x, y, c("bracken.0", 0.55))
 	return img
 
 

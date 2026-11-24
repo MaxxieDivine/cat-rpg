@@ -89,6 +89,46 @@ func test_walk_to_the_hunting_grounds_and_back_by_keyboard() -> void:
 	_close(app)
 
 
+## Patrols Part A: the first Hunting Grounds -> Hunting Grounds 2 and back
+## by keyboard; the border (stream, bracken, other grass) on screen.
+func test_walk_to_hunting_grounds_2_and_back() -> void:
+	var app: Control = await _start(DESKTOP)
+	var g: Control = app.game
+	_freeze_needs(60, 60)
+	g.load_area("hunting_grounds", "from_camp")
+	await _frames(2)
+	_place_near_exit(g, "hunting_grounds_2")
+	var saw_fade := await _walk_until_area(app, "move_right", "hunting_grounds_2")
+	check(saw_fade, "fades on the way")
+	check_eq(g.world.id, "hunting_grounds_2", "in Hunting Grounds 2")
+	check_eq(Player.spawn(), "from_hunting_grounds", "at its spawn")
+	check(g.world.hunt != null, "with mice")
+	_check_camera(g)
+	await _wait_travel(g)
+	check(g.world_view.prey_markers.size() >= 3, "prey spot markers")
+	if not is_headless():
+		await _settle()
+		_save(await _screen(), "hunting2_arrive_desktop")
+		# Up at the border: the stream, the bracken and the far side.
+		g.world.player_pos = Vector2(420, g.world.stream_y(420) + 24)
+		await _settle()
+		var img := await _screen()
+		_save(img, "hunting2_border_desktop")
+		# The far side's grass is not ours: sample just past the bracken.
+		var top: Vector2 = g.world_to_ui(Vector2(420, g.world.stream_y(420) - 26))
+		var near: Vector2 = g.world_to_ui(Vector2(400, g.world.stream_y(400) + 60))
+		var px_far: Color = img.get_pixelv(Vector2i(app.metrics.ui_to_px(top)))
+		var px_near: Color = img.get_pixelv(Vector2i(app.metrics.ui_to_px(near)))
+		check(absf(px_far.h - px_near.h) > 0.05, "the far side is another colour (%s vs %s)" % [px_far, px_near])
+		g.world.place_at_spawn("from_hunting_grounds")
+		await _frames(2)
+	saw_fade = await _walk_until_area(app, "move_left", "hunting_grounds")
+	check(saw_fade, "fades on the way back")
+	check_eq(Player.spawn(), "from_hunting_grounds_2", "back at the first grounds' east spawn")
+	check_eq(g.world.facing, -1, "facing into the first grounds")
+	_close(app)
+
+
 func test_walk_to_the_hunting_grounds_by_joystick() -> void:
 	var app: Control = await _start(TARGET_PHONE)
 	var g: Control = app.game

@@ -67,6 +67,11 @@ const PAINTED := {
 	"den_wall_fern_moss_bottom": ["den_wall_bottom", 32, 12, 96],
 	"den_nest": ["den_nest", 28, 12],
 	"den_nest_mine": ["den_nest", 28, 12, true],
+	"bracken": ["bracken", 11, 12, 131],
+	"patrol_icon": ["patrol_icon"],
+	"patrol_icon_picked": ["patrol_icon", true],
+	"scent_ring": ["scent_ring", 26, 11],
+	"scent_marked": ["scent_ring", 26, 11, true],
 }
 
 ## Each area's baked floor: art/<name>.png -> the area file it is painted
@@ -74,6 +79,7 @@ const PAINTED := {
 const GROUNDS := {
 	"ground": "res://data/world.json",
 	"ground_hunting": "res://data/hunting_grounds.json",
+	"ground_hunting_2": "res://data/hunting_grounds_2.json",
 }
 
 const SPRITES := {

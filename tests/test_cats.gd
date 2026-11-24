@@ -74,10 +74,11 @@ func test_recoloured_cats_are_fresh() -> void:
 	var Recolor = load("res://tools/recolor_cats.gd")
 	var cats: Dictionary = _cats()["cats"]
 	for id: String in cats:
-		if not cats[id].has("recolor"):
-			continue
 		for a: String in cats[id]["anims"]:
-			var want: Image = Recolor.bake(cats[id]["recolor"], a)
+			var rc: Dictionary = Recolor.recolor_for(cats[id], a)
+			if rc.is_empty():
+				continue
+			var want: Image = Recolor.bake(rc, a)
 			var have := Image.load_from_file(ProjectSettings.globalize_path("res://art/cats/%s_%s.png" % [id, a]))
 			if not check(want != null and have != null and not have.is_empty(), "%s %s: both sheets exist" % [id, a]):
 				continue

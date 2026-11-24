@@ -18,6 +18,7 @@ Settings="*res://scripts/autoload/settings.gd"
 Needs="*res://scripts/autoload/needs.gd"
 Player="*res://scripts/autoload/player.gd"
 Hunting="*res://scripts/autoload/hunting.gd"
+Patrols="*res://scripts/autoload/patrols.gd"
 AppFocus="*res://scripts/autoload/app_focus.gd"
 
 [audio]

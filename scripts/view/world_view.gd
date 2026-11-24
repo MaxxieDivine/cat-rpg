@@ -35,6 +35,13 @@ extends Node2D
 ## on the ground), bounces after a catch and carries the mouse in her mouth
 ## (life.mouse_carried, hunt.mouth_px from her feet). These go on the
 ## Overlay layer so they stay readable at night.
+## Patrols: every cat that could go on a patrol (Patrols.could_go()) has a
+## small chevron (ui.patrol) beside its rank symbol; the cats on the patrol
+## (or picked in the offer being made) get it in a gold circle
+## (ui.patrol_picked). The paw prompt rises above both.
+## Border patrols: the patrol's scent spots here show on the ground, a
+## dashed ring (ui.scent_ring) until marked, then filled in
+## (ui.scent_marked); spots the patrol doesn't want stay hidden.
 ## Passing out: `pose` "down" sinks Fern into the low crouch of her stretch
 ## and holds it; "wake" plays the whole stretch, then she is herself again.
 
@@ -80,6 +87,10 @@ var paw: Sprite2D
 ## Each cat's rank symbol over its head (data/names/naming.json "ranks";
 ## the rank comes from GameState), on the Overlay: cat id -> Sprite2D.
 var rank_marks: Dictionary = {}
+## Scent spot sprites by spot id (Ground layer).
+var scent_nodes: Dictionary = {}
+## Each cat's patrol icon (beside its rank symbol), on the Overlay.
+var patrol_marks: Dictionary = {}
 ## Gap between a head and its rank symbol (world px; tuning.json prompt.rank_gap).
 var rank_gap := 2.0
 ## The fresh-catch pile (fresh_catch_pile.gd), or null.
@@ -311,6 +322,16 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 		_rustlers.append({"node": s, "kind": "grass", "t": 0.0, "h": float(s.texture.get_height()), "dir": 1.0})
 
 	_make_markers()
+	for ss: Dictionary in world.scent_spots:
+		var sc := Sprite2D.new()
+		sc.name = "Scent_" + str(ss["id"])
+		sc.texture = AssetCatalog.texture("ui.scent_ring")
+		sc.centered = false
+		sc.offset = -(sc.texture.get_size() / 2.0).floor()
+		sc.position = (ss["pos"] as Vector2).round()
+		sc.visible = false
+		_ground.add_child(sc)
+		scent_nodes[ss["id"]] = sc
 	_make_life()
 	_make_sky()
 	# Indoors: no sky, no butterflies.
@@ -359,6 +380,12 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 		mark.visible = false
 		overlay.add_child(mark)
 		rank_marks[id] = mark
+		var pm := Sprite2D.new()
+		pm.name = "Patrol_" + str(id)
+		pm.centered = false
+		pm.visible = false
+		overlay.add_child(pm)
+		patrol_marks[id] = pm
 	refresh_ranks()
 	GameState.rank_changed.connect(_on_rank_changed)
 	sync()
@@ -528,16 +555,22 @@ func sync(dt: float = 0.0) -> void:
 		npc_nodes[id].sync(npc, dt, world.focus_id == id, world.talk_id == id)
 	if pile != null:
 		pile.sync(world.pile)
+	for sid: String in scent_nodes:
+		var sc: Sprite2D = scent_nodes[sid]
+		sc.visible = world.scent_wanted.has(sid)
+		if sc.visible:
+			var key := "ui.scent_marked" if world.scent_wanted[sid] else "ui.scent_ring"
+			if sc.get_meta("key", "") != key:
+				sc.texture = AssetCatalog.texture(key)
+				sc.set_meta("key", key)
 	_sync_ripple()
 	var focus: String = world.focus_id
 	paw.visible = focus != "" and not world.is_talking() and not world.is_busy() and not world.is_leaping()
 	if paw.visible:
 		var head := focus_head()
 		var bob := roundf((0.5 + 0.5 * sin(_t * TAU * bob_hz)) * bob_px)
-		# Over the cat's rank symbol, if it has one.
-		var mark: Sprite2D = rank_marks.get(focus)
-		if mark != null and mark.texture != null:
-			head.y -= mark.texture.get_height() + rank_gap
+		# Over the cat's rank symbol and patrol icon, if it has them.
+		head.y -= marks_height(focus)
 		paw.position = (head - Vector2(floorf(paw.texture.get_width() / 2.0), paw.texture.get_height() + prompt_gap + bob)).round()
 	_sync_meow(dt)
 	_sync_ranks()
@@ -877,15 +910,42 @@ func _on_rank_changed(_id: String, _rank: String) -> void:
 	refresh_ranks()
 
 
-## Rank symbols sit just over each cat's head.
+## Rank symbols sit just over each cat's head, the patrol icon beside
+## them (both centred together, bottoms level).
 func _sync_ranks() -> void:
 	for id: String in rank_marks:
 		var mark: Sprite2D = rank_marks[id]
 		mark.visible = mark.texture != null
-		if not mark.visible:
+		var pm: Sprite2D = patrol_marks.get(id)
+		var could: bool = pm != null and Patrols.could_go(id)
+		if pm != null:
+			pm.visible = could
+			if could:
+				var key := "ui.patrol_picked" if Patrols.picked(id) else "ui.patrol"
+				if pm.get_meta("key", "") != key:
+					pm.texture = AssetCatalog.texture(key)
+					pm.set_meta("key", key)
+		if not mark.visible and not could:
 			continue
 		var head: Vector2 = player.position + Vector2(0, player.top_y()) if id == PLAYER_ID else npc_head(id)
-		mark.position = (head - Vector2(floorf(mark.texture.get_width() / 2.0), mark.texture.get_height() + rank_gap)).round()
+		var rw := float(mark.texture.get_width()) if mark.visible else 0.0
+		var pw := float(pm.texture.get_width()) if could else 0.0
+		var gap := 1.0 if rw > 0.0 and pw > 0.0 else 0.0
+		var left := head.x - floorf((rw + gap + pw) / 2.0)
+		var bottom := head.y - rank_gap
+		if mark.visible:
+			mark.position = Vector2(left, bottom - mark.texture.get_height()).round()
+		if could:
+			pm.position = Vector2(left + rw + gap, bottom - pm.texture.get_height()).round()
+
+
+## How far the marks over cat `id`'s head reach up (world px; 0 = none).
+func marks_height(id: String) -> float:
+	var h := 0.0
+	for m in [rank_marks.get(id), patrol_marks.get(id)]:
+		if m != null and m.visible and m.texture != null:
+			h = maxf(h, float(m.texture.get_height()))
+	return h + rank_gap if h > 0.0 else 0.0
 
 
 ## A cat starts speaking: it meows (if it can in its pose) and a "meow"
@@ -928,6 +988,8 @@ func focus_head() -> Vector2:
 			return npc_head(world.focus_id)
 		"spot":
 			return world.spot_by_id(world.focus_id)["prompt"]
+		"scent":
+			return world.scent_by_id(world.focus_id.trim_prefix(world.SCENT_PREFIX))["pos"] + Vector2(0, -4)
 	return Vector2.ZERO
 
 

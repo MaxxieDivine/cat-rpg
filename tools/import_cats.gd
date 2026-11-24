@@ -25,6 +25,9 @@ func _initialize() -> void:
 			# A recoloured placeholder (tools/recolor_cats.gd).
 			continue
 		for anim: String in cat["anims"]:
+			if cat["anims"][anim].has("recolor"):
+				# This one anim is a recoloured placeholder (recolor_cats.gd).
+				continue
 			var file: String = cat["anims"][anim]["file"]
 			var src := "%s/%s/%s-%s.png" % [pack, cat["pack"], cat["pack"], file]
 			ok = _copy(src, "res://art/cats/%s_%s.png" % [id, anim]) and ok

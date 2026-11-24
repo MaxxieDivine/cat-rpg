@@ -1,0 +1,109 @@
+{
+	"id": "hunting_grounds_2",
+	"name": "Hunting Grounds 2",
+	"_note": "The edge of the territory. A stream runs along the north side: past it the ground is another Clan's (cooler grass, a line of bracken along the far bank). The stream is solid (stream.points / width; world.gd adds colliders along it). Border patrols mark the near bank here.",
+	"size": [900, 440],
+	"edge_margin": 6,
+	"border": 72,
+	"background": "#a9ae52",
+	"ground_art": "ground.hunting_2",
+	"forest_art": "forest.tile",
+	"ground_paint": {
+		"seed": 9127,
+		"patch_frequency": 0.007,
+		"ramp": "grass_gold"
+	},
+	"grade": {"afternoon": "#fff0c4", "dusk": "#dca494", "night": "#56609a"},
+	"player": {
+		"start": [44, 260],
+		"footprint": [12, 5]
+	},
+	"spawns": {
+		"from_hunting_grounds": {"pos": [44, 260], "facing": 1}
+	},
+	"exits": [
+		{"id": "to_hunting_grounds", "rect": [6, 242, 14, 36], "to": "hunting_grounds", "spawn": "from_hunting_grounds_2"}
+	],
+	"stream": {
+		"width": 16,
+		"bank": 3,
+		"solid_inset": 2,
+		"solid_step": 8,
+		"points": [[-24, 118], [90, 108], [200, 121], [320, 112], [440, 125], [560, 112], [680, 123], [800, 110], [924, 118]]
+	},
+	"territory": {
+		"side": "north",
+		"ramp": "grass_rival",
+		"plants": {"art": "decor.bracken", "seed": 6121, "every": 11, "jitter": 3, "offset": 5}
+	},
+	"scent_spots": [
+		{"id": "bank_1", "pos": [150, 132]},
+		{"id": "bank_2", "pos": [370, 134]},
+		{"id": "bank_3", "pos": [590, 132]},
+		{"id": "bank_4", "pos": [800, 127]}
+	],
+	"prey_spots": [
+		{"id": "spot_1", "pos": [214, 300]},
+		{"id": "spot_2", "pos": [488, 338]},
+		{"id": "spot_3", "pos": [702, 236]},
+		{"id": "spot_4", "pos": [356, 190]}
+	],
+	"hunt_seed": 9241,
+	"npc_spacing": [24, 16],
+	"npcs": [],
+	"path": {
+		"width": 11,
+		"lines": [[[-8, 258], [40, 260], [100, 252], [160, 236], [220, 214], [262, 186], [282, 160], [292, 142]]]
+	},
+	"ground": [
+		{"art": "decor.trail", "pos": [-18, 258], "flip": true}
+	],
+	"prop_types": {
+		"bush_round": {"art": "prop.bush_round", "footprint": [19, 5], "shadow": "shadow.m", "sway": "bush", "rustle": true},
+		"bush_wide": {"art": "prop.bush_wide", "footprint": [26, 5], "shadow": "shadow.m", "sway": "bush", "rustle": true},
+		"bush_small": {"art": "prop.bush_small", "footprint": [11, 4], "shadow": "shadow.s", "sway": "bush", "rustle": true},
+		"rock_big": {"art": "prop.rock_big", "footprint": [14, 4], "shadow": "shadow.s"},
+		"rock_small": {"art": "prop.rock_small", "footprint": [7, 3], "shadow": "shadow.s"},
+		"log": {"art": "prop.log", "footprint": [22, 4], "shadow": "shadow.m"},
+		"tree_a": {"art": "prop.trunk", "canopy": "prop.canopy_a", "canopy_offset": [0, -22], "footprint": [8, 4], "shadow": "shadow.xl", "sway": "canopy"},
+		"tree_b": {"art": "prop.trunk", "canopy": "prop.canopy_b", "canopy_offset": [0, -20], "footprint": [8, 4], "shadow": "shadow.l", "sway": "canopy"}
+	},
+	"props": [
+		{"type": "bush_round", "pos": [36, 234]},
+		{"type": "bush_small", "pos": [34, 294]},
+		{"type": "bush_wide", "pos": [120, 380], "flip": true},
+		{"type": "rock_big", "pos": [150, 168]},
+		{"type": "bush_round", "pos": [470, 196]},
+		{"type": "log", "pos": [600, 300]},
+		{"type": "rock_big", "pos": [540, 410]},
+		{"type": "bush_wide", "pos": [760, 340]},
+		{"type": "bush_small", "pos": [840, 200], "flip": true},
+		{"type": "rock_big", "pos": [860, 400]},
+		{"type": "tree_b", "pos": [320, 400]},
+		{"type": "tree_a", "pos": [620, 186]}
+	],
+	"tree_line": {
+		"seed": 913,
+		"spacing": 30,
+		"jitter": 7,
+		"types": ["tree_a", "tree_b"],
+		"top_y": 12,
+		"bottom_y": 471,
+		"left_x": -18,
+		"right_x": 918,
+		"gaps": [[-18, 278, 50]]
+	},
+	"tall_grass": {
+		"art": "decor.tall_grass_gold",
+		"seed": 3407,
+		"patches": [{"rect": [160, 276, 110, 52], "count": 38}, {"rect": [420, 316, 130, 50], "count": 44}, {"rect": [650, 210, 110, 52], "count": 38}, {"rect": [322, 172, 76, 34], "count": 24}, {"rect": [780, 260, 80, 50], "count": 26}]
+	},
+	"flowers": {
+		"seed": 6150,
+		"clusters": [{"pos": [90, 330], "radius": 14, "count": 10, "colors": ["yellow"]}, {"pos": [560, 240], "radius": 16, "count": 12, "colors": ["yellow", "white"]}, {"pos": [700, 400], "radius": 14, "count": 9, "colors": ["white"]}]
+	},
+	"scatter": {
+		"seed": 4401,
+		"areas": [{"rect": [12, 140, 876, 290], "decor": {"decor.tuft_gold": 60, "decor.flower_yellow": 18, "decor.flower_white": 10}, "props": {"rock_small": 6}}]
+	}
+}
