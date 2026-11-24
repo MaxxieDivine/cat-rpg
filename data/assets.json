@@ -64,6 +64,8 @@
 	"ui.icon_drop": "res://art/icon_drop.png",
 	"fx.ripple": "res://art/ripple.png",
 	"ground.hunting": "res://art/ground_hunting.png",
+	"ground.hunting_2": "res://art/ground_hunting_2.png",
+	"decor.bracken": "res://art/bracken.png",
 	"decor.tall_grass_gold": "res://art/tall_grass_gold.png",
 	"decor.tuft_gold": "res://art/tuft_gold.png",
 	"decor.flower_white": "res://art/flower_white.png",

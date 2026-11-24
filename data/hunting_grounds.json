@@ -18,10 +18,12 @@
 		"footprint": [12, 5]
 	},
 	"spawns": {
-		"from_camp": {"pos": [44, 218], "facing": 1}
+		"from_camp": {"pos": [44, 218], "facing": 1},
+		"from_hunting_grounds_2": {"pos": [914, 210], "facing": -1}
 	},
 	"exits": [
-		{"id": "to_camp", "rect": [6, 198, 14, 36], "to": "camp", "spawn": "from_hunting"}
+		{"id": "to_camp", "rect": [6, 198, 14, 36], "to": "camp", "spawn": "from_hunting"},
+		{"id": "to_hunting_grounds_2", "rect": [940, 192, 14, 36], "to": "hunting_grounds_2", "spawn": "from_hunting_grounds"}
 	],
 	"prey_spots": [
 		{"id": "spot_1", "pos": [292, 104]},
@@ -34,10 +36,11 @@
 	"npcs": [],
 	"path": {
 		"width": 11,
-		"lines": [[[-8, 216], [40, 218], [96, 210], [150, 196], [196, 188]]]
+		"lines": [[[-8, 216], [40, 218], [96, 210], [150, 196], [196, 188]], [[196, 188], [280, 174], [400, 166], [520, 170], [640, 186], [720, 198], [820, 198], [900, 208], [968, 210]]]
 	},
 	"ground": [
-		{"art": "decor.trail", "pos": [-18, 216], "flip": true}
+		{"art": "decor.trail", "pos": [-18, 216], "flip": true},
+		{"art": "decor.trail", "pos": [978, 210]}
 	],
 	"prop_types": {
 		"bush_round": {"art": "prop.bush_round", "footprint": [19, 5], "shadow": "shadow.m", "sway": "bush", "rustle": true},
@@ -74,7 +77,7 @@
 		"bottom_y": 451,
 		"left_x": -18,
 		"right_x": 978,
-		"gaps": [[-18, 236, 50]]
+		"gaps": [[-18, 236, 50], [978, 220, 50]]
 	},
 	"tall_grass": {
 		"art": "decor.tall_grass_gold",

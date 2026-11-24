@@ -40,6 +40,13 @@ extends RefCounted
 ## may have a `label` (strings.json key shown with its prompt) and `enter`
 ## (an exit id: interact goes through that exit, like walking into it).
 ##
+## Borders (Hunting Grounds 2): `stream` ({"points", "width", "bank",
+## "solid_inset", "solid_step"}) is a strip of water along a polyline that
+## runs left to right; colliders every solid_step px keep Fern on her side.
+## `territory` ({"side": "north", "ramp", "plants"}) marks the far side as
+## another Clan's ground: the painter uses its grass ramp there, and a line
+## of plants (bracken) grows along the far bank (decor).
+##
 ## Dens (C.2): an area file with "interior" (den settings) and "door" is a
 ## room built by scripts/core/den_layout.gd: walls, the doorway exit, the
 ## "inside" and "nest" spawns, nests, the "Your nest." spot, decor slots
@@ -167,6 +174,11 @@ var prey_spots: Array[Dictionary] = []
 var grade: Dictionary = {}
 ## Gaps in the generated tree line: each [x, y, radius] (world px).
 var tree_gaps: Array[Vector3] = []
+## A stream along a polyline (left to right): {"points"
+## (PackedVector2Array), "width", "bank"}, or empty. Solid all along.
+var stream: Dictionary = {}
+## Which side of the stream is another Clan's ("north"), or "" (no border).
+var border_side := ""
 
 var walk_speed := 70.0
 var run_speed := 125.0
@@ -277,6 +289,7 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 			"lap_radius": float(pd.get("lap_radius", 40))}
 		drink_radius = float(pd.get("drink_radius", drink_radius))
 		_prop_solids.append(pond["rect"])
+	_load_stream(w.get("stream", {}), w.get("territory", {}))
 	var fc: Dictionary = w.get("fresh_catch", {})
 	if not fc.is_empty():
 		var fpos := _vec(fc.get("pos", [0, 0]))
@@ -352,6 +365,68 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 		place_at_spawn("start")
 	exits_armed = not _on_exit()
 	_update_focus()
+
+
+## The stream (colliders along it) and the border's line of plants on the
+## far bank.
+func _load_stream(st: Dictionary, bd: Dictionary) -> void:
+	if st.is_empty():
+		return
+	var pts := PackedVector2Array()
+	for pt in st.get("points", []):
+		pts.append(_vec(pt))
+	if pts.size() < 2:
+		return
+	stream = {"points": pts, "width": float(st.get("width", 14)), "bank": float(st.get("bank", 3))}
+	var half: float = stream["width"] / 2.0 - float(st.get("solid_inset", 2))
+	var stp := maxf(2.0, float(st.get("solid_step", 8)))
+	var x := pts[0].x
+	while x < pts[pts.size() - 1].x:
+		var y := stream_y(x + stp / 2.0)
+		_prop_solids.append(Rect2(x - 0.5, y - half, stp + 1.0, half * 2.0))
+		x += stp
+	border_side = str(bd.get("side", ""))
+	var pl: Dictionary = bd.get("plants", {})
+	if border_side == "" or pl.is_empty():
+		return
+	var r := RandomNumberGenerator.new()
+	r.seed = int(pl.get("seed", 0))
+	var every := maxf(2.0, float(pl.get("every", 9)))
+	var jit := float(pl.get("jitter", 3))
+	var px := 2.0
+	while px < size.x - 2.0:
+		var bx := roundf(px + r.randf_range(-jit, jit))
+		var by: float = stream_y(bx) - stream["width"] / 2.0 - float(pl.get("offset", 4)) - r.randf_range(0.0, jit)
+		decor.append({"art": str(pl.get("art", "")), "pos": Vector2(bx, roundf(by))})
+		px += every
+
+
+## The stream's centre y at x (INF without a stream; clamped at its ends).
+func stream_y(x: float) -> float:
+	if stream.is_empty():
+		return INF
+	var pts: PackedVector2Array = stream["points"]
+	if x <= pts[0].x:
+		return pts[0].y
+	for i in range(pts.size() - 1):
+		if x <= pts[i + 1].x:
+			var u := (x - pts[i].x) / maxf(0.001, pts[i + 1].x - pts[i].x)
+			return lerpf(pts[i].y, pts[i + 1].y, u)
+	return pts[pts.size() - 1].y
+
+
+## Whether `p` is in the stream's water or on its bank (`grow` px of slack).
+func in_stream(p: Vector2, grow: float = 0.0) -> bool:
+	if stream.is_empty():
+		return false
+	return absf(p.y - stream_y(p.x)) <= stream["width"] / 2.0 + grow
+
+
+## Whether `p` is past the border (on the far side of the stream).
+func beyond_border(p: Vector2) -> bool:
+	if border_side != "north" or stream.is_empty():
+		return false
+	return p.y < stream_y(p.x)
 
 
 ## True inside a den (no sky, no wind, earth underfoot).
@@ -561,7 +636,7 @@ func _in_tree_gap(p: Vector2) -> bool:
 
 
 func _decor_spot_ok(p: Vector2) -> bool:
-	if on_path(p, 2.0):
+	if on_path(p, 2.0) or in_stream(p, 3.0):
 		return false
 	if not pond.is_empty() and Rect2(pond["pos"] - pond["size"] / 2.0, pond["size"]).grow(3).has_point(p):
 		return false

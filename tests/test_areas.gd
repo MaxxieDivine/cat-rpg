@@ -167,6 +167,76 @@ func test_hunting_grounds_layout() -> void:
 	check(Color(str(w.grade.get("afternoon", "#ffffff"))) != Color(str(pal["grade"]["afternoon"])), "its own afternoon grade")
 
 
+## Hunting Grounds 2 (Patrols Part A): joined to the first Hunting Grounds,
+## hunting like it, and the edge of the territory: a stream Fern can't
+## cross, another Clan's ground and a line of bracken past it.
+func test_hunting_grounds_2_layout() -> void:
+	var w = _world("hunting_grounds_2")
+	if not check(w != null, "Hunting Grounds 2 loads"):
+		return
+	var hg = _world("hunting_grounds")
+	check(not _exit_to(hg, "hunting_grounds_2").is_empty(), "the first Hunting Grounds leads to it")
+	check(not _exit_to(w, "hunting_grounds").is_empty(), "and it leads back")
+	check(_exit_to(w, "camp").is_empty(), "not straight to camp: through the first grounds")
+	var base := Vector2(480, 270)
+	var screens: float = (w.size.x * w.size.y) / (base.x * base.y)
+	check(screens >= 2.0 and screens <= 3.5, "about 2-3 screens big (%.1f)" % screens)
+	# Hunting works the same way.
+	check(w.hunt != null, "it has mice")
+	check(w.prey_spots.size() >= 3 and w.prey_spots.size() <= 4, "3-4 prey spots (%d)" % w.prey_spots.size())
+	for ps: Dictionary in w.prey_spots:
+		var near := false
+		for r: Rect2 in w.tall_grass_patches:
+			near = near or r.grow(24.0).has_point(ps["pos"])
+		check(near, "prey spot %s is in or near tall grass" % ps["id"])
+		check(w.bounds.has_point(ps["pos"]) and not w.beyond_border(ps["pos"]), "prey spot %s is on our side" % ps["id"])
+	# The border: a stream all the way across, another Clan's ground past it.
+	check(not w.stream.is_empty(), "a stream marks the border")
+	check_eq(w.border_side, "north", "the far side is north")
+	var pts: PackedVector2Array = w.stream["points"]
+	check(pts[0].x <= 0.0 and pts[pts.size() - 1].x >= w.size.x, "the stream runs edge to edge")
+	check(w.beyond_border(Vector2(400, 40)) and not w.beyond_border(Vector2(400, 300)), "north of the stream is past the border")
+	var d: Dictionary = areas.area_data("hunting_grounds_2")
+	check(str(d["territory"]["ramp"]) != str(d["ground_paint"]["ramp"]), "the far side has its own grass colour")
+	var plants: Array = w.decor.filter(func(e): return e["art"] == "decor.bracken")
+	check(plants.size() * 12 >= int(w.size.x), "bracken all along the far bank (%d)" % plants.size())
+	for e: Dictionary in plants:
+		check(w.beyond_border(e["pos"]) and absf(e["pos"].y - w.stream_y(e["pos"].x)) < 20.0, "bracken at %s is on the far bank" % e["pos"])
+	for e: Dictionary in w.decor:
+		check(not w.in_stream(e["pos"]), "no decor in the water (%s)" % e["pos"])
+	# Fern can't cross: walking north anywhere stops at the near bank.
+	for x in [60.0, 300.0, 520.0, 840.0]:
+		w.place_at_spawn("start")
+		w.player_pos = Vector2(x, w.stream_y(x) + 40.0)
+		for i in 240:
+			w.step(DT, Vector2.UP, false)
+		check(not w.beyond_border(w.player_pos) and not w.in_stream(w.player_pos), "x=%d: stopped on the near bank (%s)" % [x, w.player_pos])
+		check(w.player_pos.y - w.stream_y(x) < 20.0, "x=%d: right up at the water (%.0f px off)" % [x, w.player_pos.y - w.stream_y(x)])
+
+
+## camp -> Hunting Grounds -> Hunting Grounds 2 and back, all on foot.
+func test_walk_camp_to_hunting_grounds_2_and_back() -> void:
+	var route := ["camp", "hunting_grounds", "hunting_grounds_2", "hunting_grounds", "camp"]
+	var w = _world("camp")
+	for i in range(1, route.size()):
+		var e := _exit_to(w, route[i])
+		if not check(not e.is_empty(), "%s has an exit to %s" % [route[i - 1], route[i]]):
+			return
+		# Walk there from wherever Fern arrived.
+		var got := false
+		for n in 2000:
+			var to: Vector2 = (e["rect"] as Rect2).get_center() - w.player_pos
+			var mv := to.normalized()
+			for ev in w.step(DT, mv, true):
+				got = got or (ev["type"] == "exit" and ev["to"] == route[i])
+			if got:
+				break
+		check(got, "walked from %s into the exit to %s" % [route[i - 1], route[i]])
+		var next = _world(route[i])
+		next.place_at_spawn(e["spawn"])
+		w = next
+
+
 func test_scatter_is_deterministic_and_keeps_clear() -> void:
 	var a = _world("hunting_grounds")
 	var b = _world("hunting_grounds")
