@@ -8,7 +8,9 @@
 		"sorrel_thanked": {"type": "bool"},
 		"patrol_offer": {"type": "string", "values": ["hunting", "border"]},
 		"patrol_group": {"type": "bool"},
-		"patrol": {"type": "string", "values": ["accepted", "declined", "gather", "out", "report", "reported"]}
+		"patrol": {"type": "string", "values": ["accepted", "declined", "gather", "out", "report", "reported"]},
+		"wick_missing": {"type": "bool"},
+		"rogue_news": {"type": "bool"}
 	},
 	"text_vars": {"patrol_mates": "your clanmates"},
 	"bonds": ["bram", "sorrel", "wick"],

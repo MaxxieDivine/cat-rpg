@@ -13,11 +13,13 @@
 		"walk_first": {"speaker": "sorrel", "expression": "happy", "text": "Tomorrow you walk the edge for the first time. Remember: we eat because someone walked first.", "set": {"talked_sorrel": true}, "end": true},
 		"repeat": {"branch": [
 			{"if": {"vole": "shared", "sorrel_thanked": false}, "next": "thanks"},
+			{"if": {"wick_missing": true}, "next": "wick_gone"},
 			{"if": {"vole": "kept"}, "next": "empty_pile"},
 			{"next": "dozing"}
 		]},
 		"thanks": {"speaker": "sorrel", "expression": "happy", "text": "A vole? For me? ...You remembered the old way. That warms these bones more than the sun.", "set": {"sorrel_thanked": true}, "end": true},
 		"empty_pile": {"speaker": "sorrel", "expression": "neutral", "text": "The pile's empty, I see. No matter. Old bellies learn patience.", "end": true},
+		"wick_gone": {"speaker": "sorrel", "expression": "sad", "text": "{name_wick}'s nest is cold, little one. He went hunting at sunhigh and hasn't come back.", "end": true},
 		"dozing": {"speaker": "sorrel", "expression": "neutral", "text": "Mm... I'm only dozing. Go on.", "end": true}
 	}
 }

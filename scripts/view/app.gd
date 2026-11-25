@@ -302,6 +302,7 @@ func _update_hud() -> void:
 			"thirst": Needs.thirst(),
 			"travel": game.travel.phase if game != null else "",
 			"collapses": Player.state.collapses,
+			"goal": game.goal_label.text if game != null and game.goal_label.visible else "",
 			"carried": Player.carried_item(),
 			"crouching": game.world.crouching if game != null else false,
 			"pile": int(game.world.pile.get("prey", -1)) if game != null and not game.world.pile.is_empty() else -1,

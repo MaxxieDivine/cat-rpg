@@ -2,6 +2,7 @@
 	"start": "start",
 	"nodes": {
 		"start": {"branch": [
+			{"if": {"talked_bram": true, "wick_missing": true}, "next": "wick_gone"},
 			{"if": {"talked_bram": true}, "next": "repeat"},
 			{"next": "there_you_are"}
 		]},
@@ -15,6 +16,7 @@
 		"fern_nervous": {"speaker": "fern", "expression": "sad", "text": "What if I mess it up?", "next": "bram_nervous"},
 		"bram_nervous": {"speaker": "bram", "expression": "neutral", "text": "Then you mess it up with me beside you. That's what a mentor is for.", "next": "sharp"},
 		"sharp": {"speaker": "bram", "expression": "neutral", "text": "Eat. Sleep. I want you sharp.", "set": {"talked_bram": true}, "end": true},
+		"wick_gone": {"speaker": "bram", "expression": "annoyed", "text": "Have you seen {name_wick}? He left at sunhigh. Should've been back by now.", "end": true},
 		"repeat": {"speaker": "bram", "expression": "neutral", "text": "Sleep, {player_name}. Dawn comes early.", "end": true}
 	}
 }

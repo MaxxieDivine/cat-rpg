@@ -287,7 +287,10 @@ func test_border_patrol_marking_and_report_by_keyboard() -> void:
 	await _keys_until_closed(app)
 	check(not Patrols.is_active(), "reported: patrol done")
 	check_eq(Patrols.patrol.completed, 1, "counted")
-	check(not g.goal_label.visible, "no goal")
+	# The first border patrol also starts the rogue story (story_smoke.gd):
+	# no patrol goal, the story's instead.
+	check(Patrols.goal_text() == "", "no patrol goal")
+	check_eq(g.goal_label.text, Story.goal_text(), "the story's goal (%s)" % g.goal_label.text)
 	_close(app)
 
 

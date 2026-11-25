@@ -55,10 +55,17 @@ func picked(id: String) -> bool:
 
 
 ## The deputy's conversation is starting: pick a patrol if there is none.
+## None while the story needs Fern elsewhere (Story.blocks_patrols()), and
+## never with a cat the story has taken away (Story.absent()).
 func prepare_offer() -> void:
+	if Story.blocks_patrols() and not patrol.is_active():
+		patrol.decline()
+		sync()
+		return
 	var ranks := {}
 	for id: String in GameState.state.cats:
-		ranks[id] = GameState.get_cat_rank(id)
+		if not Story.absent(id):
+			ranks[id] = GameState.get_cat_rank(id)
 	patrol.roll_offer(patrol.candidates(ranks), spots())
 	sync()
 

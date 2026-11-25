@@ -189,14 +189,24 @@ func format_text(text: String) -> String:
 	return text
 
 
-## What a save file will keep of the names and ranks.
-## TODO(save): the save milestone writes this (with flags and bonds) and
-## calls load_save_data() on load.
+## What a save file keeps: flags (story flags included), bonds, names and
+## ranks. TODO(save): the save milestone (1.5) writes this (with
+## Story.save_data()) and calls load_save_data() on load.
 func save_data() -> Dictionary:
-	return {"cats": cats.duplicate(true)}
+	return {"flags": flags.duplicate(true), "bonds": bonds.duplicate(), "cats": cats.duplicate(true)}
 
 
+## Restores save_data(). Unknown flags, bad values and unknown bond cats are
+## dropped (a save from an older build still loads).
 func load_save_data(d: Dictionary) -> void:
+	var saved_flags: Dictionary = d.get("flags", {})
+	for name: String in saved_flags:
+		if is_valid_value(name, saved_flags[name]):
+			flags[name] = saved_flags[name]
+	var saved_bonds: Dictionary = d.get("bonds", {})
+	for id: String in saved_bonds:
+		if bonds.has(id):
+			bonds[id] = int(saved_bonds[id])
 	var saved: Dictionary = d.get("cats", {})
 	for id: String in saved:
 		if not cats.has(id):
