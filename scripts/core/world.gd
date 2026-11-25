@@ -1366,6 +1366,19 @@ func _rebuild_solids() -> void:
 	solids.append_array(_prop_solids)
 
 
+## Takes cat `id` out of this area (a story beat: Wick is missing). Call it
+## before a WorldView is built for the world. False if it isn't here.
+func remove_npc(id: String) -> bool:
+	for i in npcs.size():
+		if npcs[i]["id"] == id:
+			npcs.remove_at(i)
+			_rebuild_solids()
+			if focus_id == id:
+				focus_id = ""
+			return true
+	return false
+
+
 func npc_by_id(id: String) -> Dictionary:
 	for npc in npcs:
 		if npc["id"] == id and id != "":

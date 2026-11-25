@@ -1,0 +1,8 @@
+{
+	"_note": "Story beats (scripts/core/story.gd, autoload Story). rogue = 'The rogue and the missing Wick'. Part A: when a border patrol is fully marked (phase report) and at least after_border_patrols border patrols have been marked by then (this one included), the cat `missing` goes missing (flag wick_missing) unless it is on that patrol; the deputy's report then gives the news (flag rogue_news) once. While the investigation runs the deputy offers no patrols and the goal line shows goal_investigate (a strings.json key).",
+	"rogue": {
+		"after_border_patrols": 1,
+		"missing": "wick",
+		"goal_investigate": "story.goal_investigate"
+	}
+}

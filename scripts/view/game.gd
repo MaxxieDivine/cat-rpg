@@ -66,6 +66,12 @@ extends Control
 ## delivered to the pile counts for a hunting patrol; when the patrol is
 ## done the mates walk home. The goal shows under the needs bars.
 ##
+## Story (Story autoload, scripts/core/story.gd, data/story.json): once
+## enough border patrols are marked, Wick goes missing (load_area() leaves
+## him out of every area) and the deputy's report tells the rogue news;
+## then the story's goal shows when no patrol runs, and the deputy offers
+## no patrols.
+##
 ## Time of day (scripts/core/day_cycle.gd): after the last of the three
 ## conversations, afternoon turns to dusk and night; the world view, the
 ## music and the ambience follow it. Sound (sound.gd) is created here, after
@@ -167,6 +173,7 @@ func _ready() -> void:
 	Needs.reset()
 	Player.reset(areas.start_area(), "start")
 	Patrols.reset()
+	Story.reset()
 
 	viewport = SubViewport.new()
 	viewport.name = "WorldViewport"
@@ -363,6 +370,9 @@ func _handle_patrol(events: Array[Dictionary]) -> void:
 				say(GameStrings.text("patrol.marked"))
 				_update_scent(world)
 			"patrol_report":
+				# Enough border patrols: Wick goes missing; the deputy
+				# tells the news at the report (data/story.json).
+				Story.border_marked(Patrols.mates())
 				say(GameState.format_text(GameStrings.text("patrol.all_marked")))
 				if sound != null:
 					sound.play("confirm")
@@ -393,6 +403,10 @@ func load_area(id: String, spawn_name: String) -> bool:
 	w.hunt_tuning = Hunting.tuning
 	w.player_state = Player.state
 	w.place_at_spawn(spawn_name)
+	# Story beats: a missing cat is in no area (Story autoload).
+	for npc: Dictionary in w.npcs.duplicate():
+		if Story.absent(npc["id"]):
+			w.remove_npc(npc["id"])
 	_patrol_into(w)
 	if world_view != null:
 		viewport.remove_child(world_view)
@@ -977,10 +991,13 @@ func _place_overlays() -> void:
 		message.position = metrics.snap(pos)
 
 
-## The patrol's goal, just under the needs bars (not over the Name Editor
-## or a fade).
+## The patrol's goal (or with no patrol, the story's: "Investigate the
+## rogue scent by the river."), just under the needs bars (not over the
+## Name Editor or a fade).
 func _place_goal() -> void:
 	var text: String = Patrols.goal_text()
+	if text == "":
+		text = Story.goal_text()
 	goal_label.visible = text != "" and not naming() and not (travel != null and travel.busy())
 	if not goal_label.visible:
 		return

@@ -5,6 +5,7 @@
 			{"if": {"patrol": "report"}, "next": "report"},
 			{"if": {"patrol": "gather"}, "next": "remind_gather"},
 			{"if": {"patrol": "out"}, "next": "remind_out"},
+			{"if": {"rogue_news": true}, "next": "remind_investigate"},
 			{"if": {"patrol_offer": "hunting", "patrol_group": false}, "next": "hunting_solo"},
 			{"if": {"patrol_offer": "hunting", "patrol_group": true}, "next": "hunting_group"},
 			{"if": {"patrol_offer": "border", "patrol_group": false}, "next": "border_solo"},
@@ -32,7 +33,16 @@
 		"report": {"speaker": "rook", "expression": "neutral", "text": "The border's marked? Good. Any sign of trouble?", "choices": [
 			{"text": "All quiet.", "next": "fern_quiet", "set": {"patrol": "reported"}}
 		]},
-		"fern_quiet": {"speaker": "fern", "expression": "happy", "text": "All quiet.", "next": "well_done"},
+		"fern_quiet": {"speaker": "fern", "expression": "happy", "text": "All quiet.", "next": "after_report"},
+		"after_report": {"branch": [
+			{"if": {"wick_missing": true, "rogue_news": false}, "next": "news_scent"},
+			{"next": "well_done"}
+		]},
+		"news_scent": {"speaker": "rook", "expression": "neutral", "text": "Good work. But listen. The dawn patrol picked up a strange scent down by the river.", "next": "news_rogue"},
+		"news_rogue": {"speaker": "rook", "expression": "annoyed", "text": "Not Clan. A rogue, I'd bet my tail on it.", "next": "news_wick"},
+		"news_wick": {"speaker": "rook", "expression": "sad", "text": "And {name_wick} hasn't come back from hunting. That's not like him.", "next": "news_go"},
+		"news_go": {"speaker": "rook", "expression": "neutral", "text": "Go back out and find out what's going on. Be careful.", "set": {"rogue_news": true}, "end": true},
+		"remind_investigate": {"speaker": "rook", "expression": "neutral", "text": "No patrols today. Find out about that scent by the river, and keep an eye out for {name_wick}.", "end": true},
 		"well_done": {"speaker": "rook", "expression": "happy", "text": "Well done. Rest a while.", "end": true},
 		"nothing": {"speaker": "rook", "expression": "neutral", "text": "Nothing for you right now. Stay out of trouble, apprentice.", "end": true}
 	}
