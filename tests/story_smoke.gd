@@ -5,6 +5,13 @@ extends "res://tests/test_base.gd"
 ##   report gives the rogue news once, the goal shows, the deputy then only
 ##   reminds (no patrol offer), and all of it survives the save hook;
 ## - by touch on a phone: the report and the news, the goal under the bars.
+## Part B, the rogue Slate by the river in Hunting Grounds 2:
+## - keyboard: question him + the red-fur question; he walks off; the story
+##   exit opens; into rogue land and back; the choice survives the save hook;
+## - touch on a phone, carrying prey: three choices; threaten him; he bolts
+##   and leaves a scent trail;
+## - gamepad: bribe him with the mouse (+ the red-fur question); he keeps
+##   it and stays; the arrow shows the way.
 ## With a display (--shots=<dir>) it saves screenshots (story_*).
 
 const ScreenMetrics := preload("res://scripts/view/screen_metrics.gd")
@@ -196,6 +203,192 @@ func test_rogue_news_by_touch_on_a_phone() -> void:
 	if not is_headless():
 		await _settle()
 		_save(await _screen(), "story_goal_phone")
+	_close(app)
+
+
+# --- Part B
+
+
+## Fern investigating, in Hunting Grounds 2.
+func _investigate(g: Control) -> void:
+	GameState.set_flag("wick_missing", true)
+	GameState.set_flag("rogue_news", true)
+	g.load_area("hunting_grounds_2", "from_hunting_grounds")
+	await _frames(2)
+
+
+func _story_exit(g: Control) -> Dictionary:
+	for e: Dictionary in g.world.exits:
+		if e["id"] == str(JsonData.load_dict("res://data/story.json")["rogue"]["exit"]):
+			return e
+	return {}
+
+
+func _pad(button: JoyButton) -> void:
+	for pressed in [true, false]:
+		var ev := InputEventJoypadButton.new()
+		ev.button_index = button
+		ev.pressed = pressed
+		tree.root.push_input(ev)
+
+
+## Talks to whoever has focus by "key", "touch" or "pad", picking choice
+## number picks[i] at the i-th set of choices. Returns {"lines", "choices"}.
+func _converse(app: Control, how: String, picks: Array) -> Dictionary:
+	var box: Control = app.game.dialogue
+	var lines: Array[String] = []
+	var shown: Array = []
+	match how:
+		"key":
+			_key(KEY_E)
+		"pad":
+			_pad(JOY_BUTTON_A)
+		"touch":
+			await _paw_button(app)
+	await _frames(2)
+	for i in 80:
+		if not box.is_open:
+			break
+		var t := GameState.format_text(str(box.line.get("text", "")))
+		if lines.is_empty() or lines[lines.size() - 1] != t:
+			lines.append(t)
+		if box.choices_shown():
+			shown.append(box.line["choices"])
+			var pick: int = picks.pop_front() if not picks.is_empty() else 0
+			match how:
+				"touch":
+					await _tap_at(app, box.choice_rects[pick].get_center())
+				"key":
+					for k in pick:
+						_key(KEY_DOWN)
+					_key(KEY_E)
+				"pad":
+					for k in pick:
+						_pad(JOY_BUTTON_DPAD_DOWN)
+					_pad(JOY_BUTTON_A)
+		else:
+			match how:
+				"touch":
+					await _tap_at(app, app.metrics.safe_rect.get_center() - Vector2(0, 40))
+				"key":
+					_key(KEY_E)
+				"pad":
+					_pad(JOY_BUTTON_A)
+		await _frames(2)
+	await _frames(2)
+	return {"lines": " | ".join(lines), "choices": shown}
+
+
+func test_question_slate_by_keyboard() -> void:
+	var app: Control = await _start(DESKTOP)
+	var g: Control = app.game
+	_freeze_needs(70, 70)
+	await _investigate(g)
+	var slate := Story.rogue_npc()
+	check(not g.world.npc_by_id(slate).is_empty(), "Slate is by the river")
+	check(g.world_view.npc_nodes.has(slate), "and drawn")
+	var e := _story_exit(g)
+	check(not e.is_empty() and not g.world.is_open(e), "the story exit is closed")
+	check_eq(g.goal_label.text, strings["story.goal_investigate"], "goal: investigate")
+	await _near(g, slate)
+	if not is_headless():
+		await _settle()
+		_save(await _screen(), "story_slate_desktop")
+	var r := await _converse(app, "key", [0, 0])
+	check_eq((r["choices"][0] as Array).size(), 2, "not carrying: no prey choice (%s)" % [r["choices"][0]])
+	check(r["lines"].contains("With friends"), "he lets it slip (%s)" % r["lines"])
+	check(r["lines"].contains("didn't come quietly"), "the red fur (%s)" % r["lines"])
+	check_eq(GameState.get_flag("rogue_choice"), "question", "choice saved")
+	check(g.world.is_leaving(slate), "he walks off")
+	check(g.world.trail_marks.is_empty(), "no scent trail: he's in plain sight")
+	check_eq(g.goal_label.text, strings["story.goal_follow"], "goal: follow the rogue")
+	check(g.world.is_open(e), "the story exit is open")
+	await _until(func() -> bool: return g.world.npc_by_id(slate).is_empty(), 9000)
+	check(g.world.npc_by_id(slate).is_empty(), "he's gone through the exit")
+	await _frames(2)
+	check(not g.world_view.npc_nodes.has(slate), "his sprite too")
+	# After him: into rogue land, and back.
+	_place_near_exit(g, "rogue_camp")
+	await _walk_until_area(app, "move_right", "rogue_camp")
+	await _wait_travel(g)
+	check_eq(g.goal_label.text, strings["story.goal_follow"], "the goal stays")
+	if not is_headless():
+		await _settle()
+		_save(await _screen(), "story_rogue_land_desktop")
+	_place_near_exit(g, "hunting_grounds_2")
+	await _walk_until_area(app, "move_left", "hunting_grounds_2")
+	await _wait_travel(g)
+	check_eq(Player.spawn(), "from_rogue_land", "back by the old trail")
+	check(g.world.npc_by_id(slate).is_empty(), "Slate doesn't come back")
+	# The choice survives the save hook.
+	var saved := JSON.stringify(GameState.state.save_data())
+	GameState.reset()
+	GameState.state.load_save_data(JSON.parse_string(saved))
+	check_eq(GameState.get_flag("rogue_choice"), "question", "loaded: the choice")
+	g.load_area("hunting_grounds_2", "from_hunting_grounds")
+	await _frames(2)
+	check(g.world.npc_by_id(slate).is_empty() and g.world.is_open(_story_exit(g)), "loaded: no Slate, the exit open")
+	_close(app)
+
+
+func test_threaten_slate_by_touch_while_carrying() -> void:
+	var app: Control = await _start(TARGET_PHONE)
+	var g: Control = app.game
+	_freeze_needs(70, 70)
+	Player.state.carried_item = "mouse"
+	await _investigate(g)
+	var slate := Story.rogue_npc()
+	await _near(g, slate)
+	var r := await _converse(app, "touch", [1, 1])
+	check_eq((r["choices"][0] as Array).size(), 3, "carrying: the prey choice too (%s)" % [r["choices"][0]])
+	check(" ".join(r["choices"][1]).contains("red on your fur"), "the red-fur question offered")
+	check(r["lines"].contains("precious border"), "he backs off (%s)" % r["lines"])
+	check_eq(GameState.get_flag("rogue_choice"), "threaten", "choice saved")
+	check(g.world.is_leaving(slate), "he bolts")
+	check_eq(Player.carried_item(), "mouse", "Fern keeps her mouse")
+	check(g.world.trail_marks.size() >= 2, "a scent trail (%d rings)" % g.world.trail_marks.size())
+	await _frames(2)
+	check_eq(g.world_view.trail_nodes.size(), g.world.trail_marks.size(), "drawn")
+	if not is_headless():
+		await _frames(10)
+		_save(await _screen(), "story_trail_phone")
+	await _until(func() -> bool: return g.world.npc_by_id(slate).is_empty(), 4000)
+	check(g.world.npc_by_id(slate).is_empty(), "gone fast")
+	# The trail stays when Fern comes back.
+	g.load_area("hunting_grounds_2", "from_hunting_grounds")
+	await _frames(2)
+	check(g.world_view.trail_nodes.size() >= 2, "the trail is still there after a reload")
+	_place_near_exit(g, "rogue_camp")
+	await _joystick_until_area(app, Vector2.RIGHT, "rogue_camp")
+	_close(app)
+
+
+func test_bribe_slate_by_gamepad() -> void:
+	var app: Control = await _start(DESKTOP)
+	var g: Control = app.game
+	_freeze_needs(70, 70)
+	Player.state.carried_item = "mouse"
+	await _investigate(g)
+	var slate := Story.rogue_npc()
+	await _near(g, slate)
+	var r := await _converse(app, "pad", [2, 0])
+	check(r["lines"].contains("I brought you prey"), "Fern offers the mouse (%s)" % r["lines"])
+	check(r["lines"].contains("didn't come quietly"), "the red fur (%s)" % r["lines"])
+	check(r["lines"].contains("old trail east"), "he tells her where (%s)" % r["lines"])
+	check_eq(GameState.get_flag("rogue_choice"), "bribe", "choice saved")
+	check_eq(Player.carried_item(), "", "he took the mouse")
+	check(not g.world.npc_by_id(slate).is_empty() and not g.world.is_leaving(slate), "he stays to eat")
+	await _frames(2)
+	check(g.world_view.way_arrow.visible, "the arrow shows the way")
+	check(g.world.is_open(_story_exit(g)), "the exit is open")
+	if not is_headless():
+		g.world.player_pos = Vector2(820, 170)
+		await _settle()
+		_save(await _screen(), "story_arrow_desktop")
+	await _near(g, slate)
+	r = await _converse(app, "pad", [])
+	check(r["lines"].contains("get lost"), "after: get lost (%s)" % r["lines"])
+	check(g.world_view.way_arrow.visible, "the arrow stays")
 	_close(app)
 
 

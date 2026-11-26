@@ -19,7 +19,7 @@ const MAX_CHOICES := 3
 const NODE_KEYS := ["speaker", "expression", "text", "next", "choices", "branch", "set", "bond", "end", "await", "cancel"]
 ## Screens a conversation can wait on (game.gd opens them).
 const AWAITS := ["name_editor"]
-const CHOICE_KEYS := ["text", "next", "set", "bond"]
+const CHOICE_KEYS := ["text", "next", "set", "bond", "if"]
 const BRANCH_KEYS := ["if", "next"]
 
 
@@ -158,6 +158,7 @@ static func _check_choices(choices: Variant, where: String, nodes: Dictionary, s
 		return
 	if choices.size() > MAX_CHOICES:
 		errors.append("%s has %d choices (at most %d)" % [where, choices.size(), MAX_CHOICES])
+	var unconditional := 0
 	for i in choices.size():
 		var c: Variant = choices[i]
 		var cw := "%s choice %d" % [where, i + 1]
@@ -173,6 +174,12 @@ static func _check_choices(choices: Variant, where: String, nodes: Dictionary, s
 		_check_target(c.get("next"), cw, nodes, errors, out)
 		_check_set(c.get("set", {}), cw, state, errors)
 		_check_bond(c.get("bond", {}), cw, state, errors)
+		if c.has("if"):
+			_check_cond(c["if"], cw, state, errors)
+		else:
+			unconditional += 1
+	if unconditional == 0:
+		errors.append("%s: every choice has an \"if\" (one must always show)" % where)
 
 
 static func _check_branch(entries: Variant, where: String, nodes: Dictionary, state, errors: Array[String], out: Array) -> void:
@@ -192,20 +199,24 @@ static func _check_branch(entries: Variant, where: String, nodes: Dictionary, st
 		if fallback >= 0:
 			errors.append("%s comes after the fallback and can never match" % ew)
 		if e.has("if"):
-			var cond: Variant = e["if"]
-			if not cond is Dictionary or (cond as Dictionary).is_empty():
-				errors.append("%s: \"if\" must be a non-empty object" % ew)
-			else:
-				for flag: String in cond:
-					if not state.is_known_flag(flag):
-						errors.append("%s tests unknown flag '%s'" % [ew, flag])
-					elif not state.is_valid_value(flag, cond[flag], true):
-						errors.append("%s tests %s against bad value %s" % [ew, flag, var_to_str(cond[flag])])
+			_check_cond(e["if"], ew, state, errors)
 		elif fallback < 0:
 			fallback = i
 		_check_target(e.get("next"), ew, nodes, errors, out)
 	if fallback < 0:
 		errors.append("%s: branch has no fallback (an entry without \"if\")" % where)
+
+
+## An "if" (branch entry or choice): flag -> value, every flag known.
+static func _check_cond(cond: Variant, where: String, state, errors: Array[String]) -> void:
+	if not cond is Dictionary or (cond as Dictionary).is_empty():
+		errors.append("%s: \"if\" must be a non-empty object" % where)
+		return
+	for flag: String in cond:
+		if not state.is_known_flag(flag):
+			errors.append("%s tests unknown flag '%s'" % [where, flag])
+		elif not state.is_valid_value(flag, cond[flag], true):
+			errors.append("%s tests %s against bad value %s" % [where, flag, var_to_str(cond[flag])])
 
 
 ## Text may only use the placeholders GameState fills in ({player_name},

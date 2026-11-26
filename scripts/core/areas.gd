@@ -40,11 +40,20 @@ func area_data(id: String) -> Dictionary:
 
 
 ## A fresh World for area `id` (empty if unknown).
-func load_world(id: String, tuning: Dictionary = {}):
+## `conditions` (GameState's core, or null): NPCs with a "when" (flag ->
+## value) that doesn't match are left out (the rogue is only by the river
+## during the investigation), and the World checks its exits' and spots'
+## "when" against it live.
+func load_world(id: String, tuning: Dictionary = {}, conditions = null):
 	var d := area_data(id)
 	if d.is_empty():
 		push_warning("Areas: unknown area '%s'" % id)
 		return null
 	if not d.has("id"):
 		d["id"] = id
-	return World.new(d, tuning)
+	if conditions != null:
+		d["npcs"] = (d.get("npcs", []) as Array).filter(func(n: Dictionary) -> bool:
+			return (n.get("when", {}) as Dictionary).is_empty() or conditions.matches(n["when"]))
+	var w = World.new(d, tuning)
+	w.conditions = conditions
+	return w
