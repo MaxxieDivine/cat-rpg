@@ -14,6 +14,14 @@ extends RefCounted
 ##   absent()         Wick isn't in any area while he is missing
 ##   goal_key()       "Investigate the rogue scent by the river."
 ##   blocks_patrols() no patrol offers while the investigation runs
+##
+## Part B, the rogue by the river (data/dialogue/slate.json):
+##   the rogue (rogue.npc) stands in rogue.area while rogue_news is set and
+##   rogue_met isn't (his layout entry's "when"); talking sets rogue_choice
+##   and rogue_met; leave_plan() says how he goes; the story exit
+##   (rogue.exit, "when" rogue_met) is open from then on
+##   trail() / way_mark() the scent trail (threaten) or the arrow (bribe)
+##   goal_key()       "Follow the rogue."
 
 const JsonData := preload("res://scripts/core/json_data.gd")
 const CONFIG_PATH := "res://data/story.json"
@@ -75,9 +83,80 @@ func blocks_patrols(state) -> bool:
 
 ## The story goal for the hud (a strings.json key), or "".
 func goal_key(state) -> String:
+	if bool(state.get_flag("rogue_met")):
+		return str(rogue().get("goal_follow", "story.goal_follow"))
 	if investigating(state):
 		return str(rogue().get("goal_investigate", "story.goal_investigate"))
 	return ""
+
+
+## The rogue's id ("slate").
+func rogue_npc() -> String:
+	return str(rogue().get("npc", "slate"))
+
+
+## The rogue's area ("hunting_grounds_2").
+func rogue_area() -> String:
+	return str(rogue().get("area", ""))
+
+
+## Where the rogue stands, then the way he leaves (world px).
+func rogue_route() -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for p in rogue().get("route", []):
+		out.append(Vector2(float(p[0]), float(p[1])))
+	return out
+
+
+## How the rogue goes once Fern is done talking (choice = rogue_choice):
+## {"mode": "walk" / "run" / "stay", "speed", "route" (without where he
+## stands)}. "stay" (bribed): he keeps eating the prey.
+func leave_plan(choice: Variant) -> Dictionary:
+	var route := rogue_route()
+	route = route.slice(1)
+	match choice:
+		"threaten":
+			return {"mode": "run", "speed": float(rogue().get("run_speed", 110)), "route": route}
+		"bribe":
+			return {"mode": "stay", "speed": 0.0, "route": []}
+	return {"mode": "walk", "speed": float(rogue().get("walk_speed", 24)), "route": route}
+
+
+## The scent trail he left when he bolted: points every trail_every px
+## along his route, inside the area (`area_size`). Empty unless Fern
+## threatened him and the trail is still worth following.
+func trail(state, area_size: Vector2) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	if not following(state) or state.get_flag("rogue_choice") != "threaten":
+		return out
+	var route := rogue_route()
+	var every := float(rogue().get("trail_every", 34))
+	var left := every * 0.6
+	for i in range(1, route.size()):
+		var a := route[i - 1]
+		var b := route[i]
+		var seg := a.distance_to(b)
+		var d := left
+		while d <= seg:
+			var p := a.lerp(b, d / seg)
+			if p.x > 8.0 and p.x < area_size.x - 8.0 and p.y > 8.0 and p.y < area_size.y - 8.0:
+				out.append(p)
+			d += every
+		left = d - seg
+	return out
+
+
+## Where the arrow pointing out of the territory goes (bribed), or INF.
+func way_mark(state) -> Vector2:
+	if not following(state) or state.get_flag("rogue_choice") != "bribe":
+		return Vector2.INF
+	var p: Array = rogue().get("way_mark", [])
+	return Vector2(float(p[0]), float(p[1])) if p.size() >= 2 else Vector2.INF
+
+
+## Fern met the rogue and should follow him out of the territory.
+func following(state) -> bool:
+	return bool(state.get_flag("rogue_met"))
 
 
 ## What a save file keeps of the story beyond the flags.

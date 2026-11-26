@@ -45,6 +45,24 @@ func goal_text() -> String:
 	return "" if key == "" else GameState.format_text(GameStrings.text(key))
 
 
+func rogue_npc() -> String:
+	return story.rogue_npc()
+
+
+func leave_plan() -> Dictionary:
+	return story.leave_plan(GameState.get_flag("rogue_choice"))
+
+
+func trail(area_id: String, area_size: Vector2) -> Array[Vector2]:
+	if area_id != story.rogue_area():
+		return [] as Array[Vector2]
+	return story.trail(GameState.state, area_size)
+
+
+func way_mark(area_id: String) -> Vector2:
+	return story.way_mark(GameState.state) if area_id == story.rogue_area() else Vector2.INF
+
+
 ## The story part of a save (GameState.save_data() holds the flags).
 func save_data() -> Dictionary:
 	return story.save_data()

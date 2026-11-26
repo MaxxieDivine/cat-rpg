@@ -1260,6 +1260,22 @@ func patrol_icon(picked: bool = false) -> Image:
 	return img
 
 
+const WAY_SHAPE := ["ww...ww...", ".ww...ww..", "..ww...ww.", "...ww...ww", "..ww...ww.", ".ww...ww..", "ww...ww..."]
+
+
+## A double chevron (">>", 12x9 with its outline): "this way", over the
+## story exit after the rogue points the way.
+func way_arrow() -> Image:
+	var img := Image.create(12, 9, false, Image.FORMAT_RGBA8)
+	var fill := {}
+	for y in WAY_SHAPE.size():
+		for x in WAY_SHAPE[y].length():
+			if WAY_SHAPE[y][x] != ".":
+				fill[Vector2i(1 + x, 1 + y)] = "w"
+	_outline_fill(img, fill)
+	return img
+
+
 ## A border marking spot on the ground (w x h, an ellipse seen from
 ## above). Unmarked: a dashed pale ring ("mark here"). Marked: the ring
 ## drawn solid in rust and filled in with a darker scent patch.

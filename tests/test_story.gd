@@ -4,6 +4,10 @@ extends "res://tests/test_base.gd"
 ## one), the deputy's report giving the news once, the reminder, Bram's and
 ## Sorrel's new lines, the goal, no patrols while investigating, Wick left
 ## out of the camp, and the save hook keeping all of it.
+## Part B: the rogue Slate by the river only during the investigation,
+## his three choices (prey only while carrying) and the red-fur question in
+## every branch, the saved choice, the story exit opening, how he leaves,
+## the scent trail and the arrow, conditional choices in the dialogue core.
 ## Expected values come from data/story.json.
 
 const Story := preload("res://scripts/core/story.gd")
@@ -170,3 +174,189 @@ func test_the_story_survives_save_and_load() -> void:
 	check(not gs.flags.has("no_such_flag"), "unknown flag dropped")
 	check_eq(gs.get_flag("vole"), null, "bad value dropped")
 	check_eq(gs.get_flag("rogue_news"), true, "a bad type doesn't overwrite")
+
+
+# --- Part B: the rogue by the river
+
+
+func _hg2(flags: Dictionary):
+	for k: String in flags:
+		gs.set_flag(k, flags[k])
+	return Areas.new().load_world(str(cfg["rogue"]["area"]), JsonData.load_dict("res://data/tuning.json"), gs)
+
+
+func _exit(w, id: String) -> Dictionary:
+	for e: Dictionary in w.exits:
+		if e["id"] == id:
+			return e
+	return {}
+
+
+func test_slate_only_while_investigating() -> void:
+	var slate := str(cfg["rogue"]["npc"])
+	check(_hg2({}).npc_by_id(slate).is_empty(), "not before the news")
+	gs = GameStateCore.new()
+	check(_hg2({"wick_missing": true}).npc_by_id(slate).is_empty(), "not when Wick has only just gone")
+	gs = GameStateCore.new()
+	var w = _hg2({"wick_missing": true, "rogue_news": true})
+	var npc: Dictionary = w.npc_by_id(slate)
+	check(not npc.is_empty(), "there while investigating")
+	check(w.stream_y(npc["pos"].x) > npc["pos"].y - 60.0 and not w.beyond_border(npc["pos"]), "by the river, on our side (%s)" % npc["pos"])
+	check(npc["pos"].x > w.size.x * 0.85, "at the far end (%s)" % npc["pos"])
+	check(World.talkable(npc), "talkable")
+	gs.set_flag("rogue_met", true)
+	check(_hg2({}).npc_by_id(slate).is_empty(), "gone once met (after the area reloads)")
+
+
+func test_story_exit_opens_with_the_rogue() -> void:
+	var w = _hg2({"rogue_news": true})
+	var e := _exit(w, str(cfg["rogue"]["exit"]))
+	check(not e.is_empty(), "the story exit exists")
+	check_eq(e["to"], "rogue_camp", "to rogue land")
+	check(not w.is_open(e), "closed during the investigation")
+	# Walking into it does nothing yet; the spot says why.
+	w.player_pos = (e["rect"] as Rect2).get_center() + Vector2(-30, 0)
+	w.exits_armed = true
+	var exited := false
+	var saw_spot := false
+	for i in 120:
+		for ev: Dictionary in w.step(1.0 / 60.0, Vector2.RIGHT, false):
+			exited = exited or ev["type"] == "exit"
+		saw_spot = saw_spot or w.focus_id == "old_trail"
+	check(not exited, "no way through while closed")
+	check(saw_spot, "the old trail says something instead")
+	gs.set_flag("rogue_met", true)
+	check(w.is_open(e), "open as soon as Fern met him (live)")
+	w.player_pos = (e["rect"] as Rect2).get_center() + Vector2(-30, 0)
+	w.exits_armed = true
+	for i in 120:
+		for ev: Dictionary in w.step(1.0 / 60.0, Vector2.RIGHT, false):
+			exited = exited or (ev["type"] == "exit" and ev["to"] == "rogue_camp")
+	check(exited, "walking in leaves for rogue land")
+	check(w.focus_id != "old_trail", "the closed-trail spot is gone")
+
+
+func _slate(flags: Dictionary, picks: Array) -> Dictionary:
+	gs = GameStateCore.new()
+	for k: String in flags:
+		gs.set_flag(k, flags[k])
+	var d = Dialogue.new(gs)
+	var lines: Array[String] = []
+	var shown: Array = []
+	var line: Dictionary = d.start(JsonData.load_dict("res://data/dialogue/slate.json"))
+	for i in 30:
+		if line.get("type", "") != "line":
+			break
+		lines.append(gs.format_text(str(line["text"])))
+		if not (line["choices"] as Array).is_empty():
+			shown.append(line["choices"])
+			line = d.choose(int(picks.pop_front()) if not picks.is_empty() else 0)
+		else:
+			line = d.advance()
+	return {"lines": " | ".join(lines), "choices": shown}
+
+
+func test_slate_choices() -> void:
+	var r := _slate({"rogue_news": true}, [0, 1])
+	check_eq((r["choices"][0] as Array).size(), 2, "without prey: two choices (%s)" % [r["choices"][0]])
+	check(not " ".join(r["choices"][0]).contains("prey"), "no prey choice")
+	check(r["lines"].contains("nice rest. With friends"), "questioned: he lets it slip (%s)" % r["lines"])
+	check_eq(gs.get_flag("rogue_choice"), "question", "saved: question")
+	check_eq(gs.get_flag("rogue_met"), true, "met")
+	r = _slate({"rogue_news": true, "carrying": true}, [1, 1])
+	check_eq((r["choices"][0] as Array).size(), 3, "carrying: three choices")
+	check(r["lines"].contains("Keep your precious border"), "threatened: he backs off (%s)" % r["lines"])
+	check_eq(gs.get_flag("rogue_choice"), "threaten", "saved: threaten")
+	r = _slate({"rogue_news": true, "carrying": true}, [2, 1])
+	check(r["lines"].contains("old trail east"), "bribed: he tells (%s)" % r["lines"])
+	check_eq(gs.get_flag("rogue_choice"), "bribe", "saved: bribe")
+	check_eq(gs.get_flag("rogue_met"), true, "met")
+
+
+func test_red_fur_in_every_branch() -> void:
+	var ends := {0: "I've got places to be", 1: "Keep your precious border", 2: "old trail east"}
+	for pick: int in ends:
+		var r := _slate({"rogue_news": true, "carrying": true}, [pick, 0])
+		check(" ".join(r["choices"][1]).contains("red on your fur"), "branch %d offers the question" % pick)
+		check(r["lines"].contains("He didn't come quietly"), "branch %d: the hint (%s)" % [pick, r["lines"]])
+		check(r["lines"].contains(ends[pick]), "branch %d: then its own ending (%s)" % [pick, r["lines"]])
+		check_eq(gs.get_flag("rogue_red"), true, "asked")
+		check_eq(gs.get_flag("rogue_met"), true, "met")
+	var r := _slate({"rogue_met": true}, [])
+	check(r["lines"].contains("get lost"), "afterwards: get lost (%s)" % r["lines"])
+
+
+func test_conditional_choices() -> void:
+	var conv := {"start": "a", "nodes": {
+		"a": {"speaker": "fern", "text": "?", "choices": [
+			{"text": "one", "next": "b"},
+			{"if": {"carrying": true}, "text": "two", "next": "c", "set": {"vole": "kept"}}]},
+		"b": {"speaker": "fern", "text": "b", "end": true},
+		"c": {"speaker": "fern", "text": "c", "end": true}}}
+	var d = Dialogue.new(gs)
+	check_eq(d.start(conv)["choices"], ["one"], "hidden while not carrying")
+	check_eq(d.choose(1)["choices"], ["one"], "a hidden choice can't be picked")
+	gs.set_flag("carrying", true)
+	d = Dialogue.new(gs)
+	check_eq(d.start(conv)["choices"], ["one", "two"], "shown while carrying")
+	check_eq(d.choose(1)["text"], "c", "picked by its shown index")
+	check_eq(gs.get_flag("vole"), "kept", "its set applies")
+	var Validator := preload("res://scripts/core/dialogue_validator.gd")
+	check(Validator.validate(conv).is_empty(), "valid: %s" % [Validator.validate(conv)])
+	var bad := conv.duplicate(true)
+	bad["nodes"]["a"]["choices"][0]["if"] = {"nope": true}
+	var errs: Array = Validator.validate(bad)
+	check(" ".join(errs).contains("unknown flag 'nope'"), "unknown flag in a choice's if (%s)" % [errs])
+	check(" ".join(errs).contains("every choice has an"), "one choice must always show (%s)" % [errs])
+
+
+func test_how_slate_leaves() -> void:
+	var route: Array[Vector2] = story.rogue_route()
+	check(route.size() >= 2, "a route")
+	var walk: Dictionary = story.leave_plan("question")
+	var run: Dictionary = story.leave_plan("threaten")
+	check_eq(walk["mode"], "walk", "questioned: he walks off")
+	check_eq(run["mode"], "run", "threatened: he bolts")
+	check(float(run["speed"]) > float(walk["speed"]) * 3.0, "running is much faster")
+	check_eq(story.leave_plan("bribe")["mode"], "stay", "bribed: he stays and eats")
+	var w = _hg2({"rogue_news": true})
+	var exit_r: Rect2 = _exit(w, str(cfg["rogue"]["exit"]))["rect"]
+	var npc: Dictionary = w.npc_by_id(story.rogue_npc())
+	check(npc["pos"].distance_to(route[0]) < 1.0, "the route starts where he stands")
+	var crosses := false
+	for i in range(1, route.size()):
+		for t in 20:
+			crosses = crosses or exit_r.has_point(route[i - 1].lerp(route[i], t / 20.0))
+	check(crosses, "it goes out through the story exit")
+	check(route[route.size() - 1].x > w.size.x, "and on out of the area")
+	check(w.leave_npc(story.rogue_npc(), walk["route"], float(run["speed"])), "sent")
+	check(w.is_leaving(story.rogue_npc()), "leaving")
+	check(not World.talkable(w.npc_by_id(story.rogue_npc())), "can't be talked to while leaving")
+	var left := false
+	for i in 240:
+		for ev: Dictionary in w.step(1.0 / 60.0, Vector2.ZERO, false):
+			left = left or (ev["type"] == "npc_left" and ev["id"] == story.rogue_npc())
+	check(left, "an npc_left event")
+	check(w.npc_by_id(story.rogue_npc()).is_empty(), "gone from the area")
+
+
+func test_trail_and_arrow() -> void:
+	var size := Vector2(900, 440)
+	check(story.trail(gs, size).is_empty(), "no trail before")
+	check_eq(story.way_mark(gs), Vector2.INF, "no arrow before")
+	gs.set_flag("rogue_met", true)
+	gs.set_flag("rogue_choice", "question")
+	check(story.trail(gs, size).is_empty(), "questioned: no trail")
+	gs.set_flag("rogue_choice", "threaten")
+	var t: Array[Vector2] = story.trail(gs, size)
+	check(t.size() >= 2, "threatened: a trail of scent rings (%d)" % t.size())
+	var every := float(cfg["rogue"]["trail_every"])
+	for i in range(1, t.size()):
+		check_near(t[i].distance_to(t[i - 1]), every, every * 0.35, "rings about trail_every apart")
+	for p in t:
+		check(Rect2(Vector2.ZERO, size).grow(-8).has_point(p), "ring %s inside the area" % p)
+	gs.set_flag("rogue_choice", "bribe")
+	check(story.trail(gs, size).is_empty(), "bribed: no trail")
+	check(story.way_mark(gs) != Vector2.INF, "bribed: the arrow")
+	check_eq(story.goal_key(gs), str(cfg["rogue"]["goal_follow"]), "goal: follow the rogue")
+	check_eq(str(strings.get(story.goal_key(gs), "")), "Follow the rogue.", "its text")

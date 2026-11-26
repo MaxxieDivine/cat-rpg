@@ -177,8 +177,20 @@ var _hunt_filled := false
 ## Named places Fern can appear: name -> {"pos", "facing"}. "start" is
 ## world.json's player.start.
 var spawns: Dictionary = {}
-## Each: {"id", "rect", "to", "spawn"}. Walking into one gives an "exit" event.
+## Each: {"id", "rect", "to", "spawn", "when"}. Walking into one gives an
+## "exit" event. One with a "when" (flag -> value) is only there while
+## `conditions` match it (a story-only exit), checked live.
 var exits: Array[Dictionary] = []
+## Something with matches(cond: Dictionary) -> bool (GameState's core):
+## exits and spots with a "when" are open while it matches (game.gd sets
+## it; null = every "when" counts as open, for tools and plain tests).
+## Areas.load_world() also leaves out NPCs whose "when" doesn't match.
+var conditions = null
+## Story marks for the view: a trail of scent rings (world px) and a
+## bobbing arrow (INF = none). game.gd sets them from the Story autoload.
+var trail_marks: Array[Vector2] = []
+var way_mark := Vector2.INF
+var way_facing := 1
 ## False until Fern stands clear of every exit (set again on each exit).
 var exits_armed := true
 ## Where prey will appear (next milestone): each {"id", "pos"}.
@@ -209,6 +221,9 @@ var _trail: Array[Vector2] = []
 var follow_gap := 20.0
 var follow_speed := 150.0
 var home_speed := 45.0
+## NPCs that finished leaving this frame, and their events for step().
+var _left: Array[String] = []
+var _left_events: Array[Dictionary] = []
 const TRAIL_STEP := 2.0
 const TRAIL_MAX := 200
 
@@ -271,7 +286,7 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 	for e: Dictionary in w.get("exits", []):
 		var r: Array = e.get("rect", [0, 0, 0, 0])
 		exits.append({"id": str(e.get("id", "")), "rect": Rect2(float(r[0]), float(r[1]), float(r[2]), float(r[3])),
-			"to": str(e.get("to", "")), "spawn": str(e.get("spawn", ""))})
+			"to": str(e.get("to", "")), "spawn": str(e.get("spawn", "")), "when": e.get("when", {})})
 	for ps: Dictionary in w.get("prey_spots", []):
 		prey_spots.append({"id": str(ps.get("id", "")), "pos": _vec(ps.get("pos", [0, 0]))})
 	for g in w.get("tree_line", {}).get("gaps", []):
@@ -340,7 +355,8 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 			"talk_radius": float(sp_d.get("talk_radius", 10)),
 			"prompt": _vec(sp_d.get("prompt", [rect.get_center().x, rect.position.y])),
 			"message": str(sp_d.get("message", "")),
-			"label": str(sp_d.get("label", "")), "enter": str(sp_d.get("enter", ""))})
+			"label": str(sp_d.get("label", "")), "enter": str(sp_d.get("enter", "")),
+			"when": sp_d.get("when", {})})
 	for ss: Dictionary in w.get("scent_spots", []):
 		var spos := _vec(ss.get("pos", [0, 0]))
 		scent_spots.append({"id": str(ss.get("id", "")), "pos": spos,
@@ -583,10 +599,16 @@ func place_at_spawn(name: String) -> bool:
 
 
 ## The exit Fern's footprint touches, or {}.
+## Whether an exit or spot with a "when" is there now (see `conditions`).
+func is_open(entry: Dictionary) -> bool:
+	var cond: Dictionary = entry.get("when", {})
+	return cond.is_empty() or conditions == null or conditions.matches(cond)
+
+
 func exit_at_player() -> Dictionary:
 	var pr := player_rect()
 	for e in exits:
-		if (e["rect"] as Rect2).intersects(pr):
+		if is_open(e) and (e["rect"] as Rect2).intersects(pr):
 			return e
 	return {}
 
@@ -828,6 +850,8 @@ func step(dt: float, move: Vector2, run: bool, crouch: bool = false) -> Array[Di
 			action = ""
 			_update_focus()
 	_step_npcs(dt)
+	events.append_array(_left_events)
+	_left_events.clear()
 	if is_leaping():
 		_step_leap(dt, events)
 		_step_hunt(dt, true, events)
@@ -1133,6 +1157,9 @@ func _step_npcs(dt: float) -> void:
 			"goto", "wait":
 				moved = _step_goto(npc, dt) or moved
 				continue
+			"leave":
+				moved = _step_leave(npc, dt) or moved
+				continue
 		if not npc.has("path"):
 			continue
 		npc["moving"] = false
@@ -1161,9 +1188,53 @@ func _step_npcs(dt: float) -> void:
 			npc["wait"] = npc["pause"]
 	if moved:
 		_rebuild_solids()
+	for id in _left:
+		remove_npc(id)
+		_left_events.append({"type": "npc_left", "id": id})
+	_left.clear()
 
 
 # --- Patrol mates
+
+
+## Sends NPC `id` along `route` (world px points, straight legs) at
+## `speed` px/s, then out of the area: it is removed and step() gives an
+## "npc_left" event. Not solid, not talkable meanwhile. A story beat: the
+## rogue walking (or running) off. False if no such NPC.
+func leave_npc(id: String, route: Array, speed: float) -> bool:
+	var npc := npc_by_id(id)
+	if npc.is_empty() or route.is_empty():
+		return false
+	var pts: Array[Vector2] = []
+	for p in route:
+		pts.append(p if p is Vector2 else _vec(p))
+	npc["mode"] = "leave"
+	npc["route"] = pts
+	npc["leave_speed"] = speed
+	_rebuild_solids()
+	return true
+
+
+## Whether NPC `id` is walking out of the area.
+func is_leaving(id: String) -> bool:
+	return str(npc_by_id(id).get("mode", "")) == "leave"
+
+
+func _step_leave(npc: Dictionary, dt: float) -> bool:
+	var route: Array[Vector2] = npc["route"]
+	var pos: Vector2 = npc["pos"]
+	var next := pos.move_toward(route[0], float(npc["leave_speed"]) * dt)
+	if absf(next.x - pos.x) > 0.001:
+		npc["facing"] = 1 if next.x > pos.x else -1
+	npc["distance"] += pos.distance_to(next)
+	npc["pos"] = next
+	npc["rect"] = footprint_rect(next, npc["footprint"])
+	npc["moving"] = true
+	if next.distance_to(route[0]) < 0.5:
+		route.remove_at(0)
+		if route.is_empty():
+			_left.append(npc["id"])
+	return true
 
 
 ## Sends NPC `id` walking (straight) to `to`; it waits there. `then_home`:
@@ -1439,6 +1510,8 @@ func _update_focus() -> void:
 			best = POND_ID
 			best_d = d
 	for sp in spots:
+		if not is_open(sp):
+			continue
 		var d := distance_to_rect(sp["rect"])
 		if d <= sp["talk_radius"] and d < best_d:
 			best = sp["id"]

@@ -1,0 +1,49 @@
+{
+	"start": "start",
+	"nodes": {
+		"start": {"branch": [
+			{"if": {"rogue_met": true}, "next": "go_away"},
+			{"next": "hello"}
+		]},
+		"hello": {"speaker": "slate", "expression": "annoyed", "text": "Well, well. A Clan kit, sniffing about by the river.", "choices": [
+			{"text": "What are you doing on our land?", "next": "fern_question", "set": {"rogue_choice": "question"}},
+			{"text": "Leave now, or else.", "next": "fern_threaten", "set": {"rogue_choice": "threaten"}},
+			{"if": {"carrying": true}, "text": "I brought you prey.", "next": "fern_bribe", "set": {"rogue_choice": "bribe"}}
+		]},
+
+		"fern_question": {"speaker": "fern", "expression": "neutral", "text": "What are you doing on our land?", "next": "question_1"},
+		"question_1": {"speaker": "slate", "expression": "happy", "text": "Your land? The river doesn't care whose land it is.", "next": "question_2"},
+		"question_2": {"speaker": "slate", "expression": "happy", "text": "Your Clan cat? He's having a nice rest. With friends.", "choices": [
+			{"text": "Why is there red on your fur?", "next": "fern_red"},
+			{"text": "Where is he?", "next": "fern_where"}
+		]},
+		"fern_where": {"speaker": "fern", "expression": "annoyed", "text": "Where is he?", "next": "end_question"},
+		"end_question": {"speaker": "slate", "expression": "happy", "text": "Wouldn't you like to know. I've got places to be.", "set": {"rogue_met": true}, "end": true},
+
+		"fern_threaten": {"speaker": "fern", "expression": "annoyed", "text": "Leave now, or else.", "next": "threaten_1"},
+		"threaten_1": {"speaker": "slate", "expression": "annoyed", "text": "Or else what, little one?", "choices": [
+			{"text": "Why is there red on your fur?", "next": "fern_red"},
+			{"text": "You'll find out.", "next": "fern_find_out"}
+		]},
+		"fern_find_out": {"speaker": "fern", "expression": "annoyed", "text": "You'll find out.", "next": "end_threaten"},
+		"end_threaten": {"speaker": "slate", "expression": "sad", "text": "...Fine. Fine! Keep your precious border.", "set": {"rogue_met": true}, "end": true},
+
+		"fern_bribe": {"speaker": "fern", "expression": "neutral", "text": "I brought you prey.", "next": "bribe_1"},
+		"bribe_1": {"speaker": "slate", "expression": "happy", "text": "Hm. Not bad, for Clan prey.", "choices": [
+			{"text": "Why is there red on your fur?", "next": "fern_red"},
+			{"text": "Now tell me where {name_wick} is.", "next": "fern_tell"}
+		]},
+		"fern_tell": {"speaker": "fern", "expression": "neutral", "text": "Now tell me where {name_wick} is.", "next": "end_bribe"},
+		"end_bribe": {"speaker": "slate", "expression": "neutral", "text": "Take the old trail east, past your border. Don't say I sent you.", "set": {"rogue_met": true}, "end": true},
+
+		"fern_red": {"speaker": "fern", "expression": "sad", "text": "Why is there red on your fur?", "next": "red"},
+		"red": {"speaker": "slate", "expression": "happy", "text": "This? Ask your friend. He didn't come quietly.", "set": {"rogue_red": true}, "next": "after_red"},
+		"after_red": {"branch": [
+			{"if": {"rogue_choice": "threaten"}, "next": "end_threaten"},
+			{"if": {"rogue_choice": "bribe"}, "next": "end_bribe"},
+			{"next": "end_question"}
+		]},
+
+		"go_away": {"speaker": "slate", "expression": "annoyed", "text": "You got what you came for. Now get lost.", "end": true}
+	}
+}

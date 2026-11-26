@@ -12,6 +12,7 @@ const Travel := preload("res://scripts/core/travel.gd")
 const PlayerState := preload("res://scripts/core/player_state.gd")
 const JsonData := preload("res://scripts/core/json_data.gd")
 const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
+const GameStateCore := preload("res://scripts/core/game_state.gd")
 const DT := 1.0 / 60.0
 
 var areas
@@ -204,7 +205,9 @@ func test_hunting_grounds_2_layout() -> void:
 		check(w.beyond_border(e["pos"]) and absf(e["pos"].y - w.stream_y(e["pos"].x)) < 20.0, "bracken at %s is on the far bank" % e["pos"])
 	for e: Dictionary in w.decor:
 		check(not w.in_stream(e["pos"]), "no decor in the water (%s)" % e["pos"])
-	# Fern can't cross: walking north anywhere stops at the near bank.
+	# Fern can't cross: walking north anywhere stops at the near bank. (A
+	# game with no story yet: the rogue isn't standing by the water.)
+	w = areas.load_world("hunting_grounds_2", tuning, GameStateCore.new())
 	for x in [60.0, 300.0, 520.0, 840.0]:
 		w.place_at_spawn("start")
 		w.player_pos = Vector2(x, w.stream_y(x) + 40.0)

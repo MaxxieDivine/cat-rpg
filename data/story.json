@@ -3,6 +3,16 @@
 	"rogue": {
 		"after_border_patrols": 1,
 		"missing": "wick",
-		"goal_investigate": "story.goal_investigate"
+		"goal_investigate": "story.goal_investigate",
+		"goal_follow": "story.goal_follow",
+		"_rogue_note": "Part B. The rogue (npc, in area; its layout gives it a when) talks by the river. Choices set rogue_choice; the last line sets rogue_met. Then: question = he walks off along route (its first point = where he stands) at walk_speed; threaten = he runs off at run_speed and the route is marked with scent rings every trail_every px; bribe = he takes the prey, stays, and an arrow (way_mark) shows the story exit. The exit (exit id in area) has when rogue_met.",
+		"npc": "slate",
+		"area": "hunting_grounds_2",
+		"exit": "to_rogue_land",
+		"route": [[836, 150], [862, 166], [894, 160], [940, 160]],
+		"walk_speed": 24,
+		"run_speed": 115,
+		"trail_every": 34,
+		"way_mark": [874, 152]
 	}
 }

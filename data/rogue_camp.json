@@ -1,0 +1,68 @@
+{
+	"id": "rogue_camp",
+	"name": "Rogue Camp",
+	"_note": "Rogue land, just past the territory's east border (joined to Hunting Grounds 2 by its story-only exit). Story Part B: the trail ends here. Part C fills it in: the flattened clearing, scraps of bedding, bones, the fallen log to hide behind, Wick under guard, the cutscene.",
+	"size": [560, 320],
+	"edge_margin": 6,
+	"border": 72,
+	"background": "#6f8a52",
+	"ground_art": "ground.rogue_camp",
+	"forest_art": "forest.tile",
+	"ground_paint": {
+		"seed": 7313,
+		"patch_frequency": 0.009,
+		"ramp": "grass_rival"
+	},
+	"grade": {"afternoon": "#e4e4d0", "dusk": "#c89a90", "night": "#4a5288"},
+	"player": {
+		"start": [44, 170],
+		"footprint": [12, 5]
+	},
+	"spawns": {
+		"from_hunting_grounds_2": {"pos": [44, 170], "facing": 1}
+	},
+	"exits": [
+		{"id": "to_hunting_grounds_2", "rect": [6, 152, 14, 36], "to": "hunting_grounds_2", "spawn": "from_rogue_land"}
+	],
+	"npc_spacing": [24, 16],
+	"npcs": [],
+	"path": {
+		"width": 11,
+		"lines": [[[-8, 170], [50, 170], [110, 176], [170, 182]]]
+	},
+	"ground": [
+		{"art": "decor.trail", "pos": [-18, 170], "flip": true}
+	],
+	"prop_types": {
+		"bush_round": {"art": "prop.bush_round", "footprint": [19, 5], "shadow": "shadow.m", "sway": "bush", "rustle": true},
+		"bush_wide": {"art": "prop.bush_wide", "footprint": [26, 5], "shadow": "shadow.m", "sway": "bush", "rustle": true},
+		"bush_small": {"art": "prop.bush_small", "footprint": [11, 4], "shadow": "shadow.s", "sway": "bush", "rustle": true},
+		"rock_big": {"art": "prop.rock_big", "footprint": [14, 4], "shadow": "shadow.s"},
+		"rock_small": {"art": "prop.rock_small", "footprint": [7, 3], "shadow": "shadow.s"},
+		"tree_a": {"art": "prop.trunk", "canopy": "prop.canopy_a", "canopy_offset": [0, -22], "footprint": [8, 4], "shadow": "shadow.xl", "sway": "canopy"},
+		"tree_b": {"art": "prop.trunk", "canopy": "prop.canopy_b", "canopy_offset": [0, -20], "footprint": [8, 4], "shadow": "shadow.l", "sway": "canopy"}
+	},
+	"props": [
+		{"type": "bush_round", "pos": [40, 140]},
+		{"type": "bush_wide", "pos": [46, 210], "flip": true},
+		{"type": "rock_big", "pos": [300, 120]},
+		{"type": "bush_wide", "pos": [420, 250]},
+		{"type": "rock_small", "pos": [250, 240]},
+		{"type": "tree_b", "pos": [480, 120]}
+	],
+	"tree_line": {
+		"seed": 717,
+		"spacing": 30,
+		"jitter": 7,
+		"types": ["tree_a", "tree_b"],
+		"top_y": 12,
+		"bottom_y": 351,
+		"left_x": -18,
+		"right_x": 578,
+		"gaps": [[-18, 188, 46]]
+	},
+	"scatter": {
+		"seed": 7331,
+		"areas": [{"rect": [12, 40, 536, 270], "decor": {"decor.tuft": 40}, "props": {"rock_small": 4}}]
+	}
+}

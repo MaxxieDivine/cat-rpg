@@ -1,7 +1,7 @@
 {
 	"id": "hunting_grounds_2",
 	"name": "Hunting Grounds 2",
-	"_note": "The edge of the territory. A stream runs along the north side: past it the ground is another Clan's (cooler grass, a line of bracken along the far bank). The stream is solid (stream.points / width; world.gd adds colliders along it). Border patrols mark the near bank here.",
+	"_note": "The edge of the territory. At the east end, by the stream, an old trail leaves the territory (exit to_rogue_land, open only while the rogue story says so: its \"when\"); the rogue Slate stands near it during the investigation (data/story.json). A stream runs along the north side: past it the ground is another Clan's (cooler grass, a line of bracken along the far bank). The stream is solid (stream.points / width; world.gd adds colliders along it). Border patrols mark the near bank here.",
 	"size": [900, 440],
 	"edge_margin": 6,
 	"border": 72,
@@ -19,10 +19,15 @@
 		"footprint": [12, 5]
 	},
 	"spawns": {
-		"from_hunting_grounds": {"pos": [44, 260], "facing": 1}
+		"from_hunting_grounds": {"pos": [44, 260], "facing": 1},
+		"from_rogue_land": {"pos": [862, 164], "facing": -1}
 	},
 	"exits": [
-		{"id": "to_hunting_grounds", "rect": [6, 242, 14, 36], "to": "hunting_grounds", "spawn": "from_hunting_grounds_2"}
+		{"id": "to_hunting_grounds", "rect": [6, 242, 14, 36], "to": "hunting_grounds", "spawn": "from_hunting_grounds_2"},
+		{"id": "to_rogue_land", "rect": [886, 144, 14, 34], "to": "rogue_camp", "spawn": "from_hunting_grounds_2", "when": {"rogue_met": true}}
+	],
+	"spots": [
+		{"id": "old_trail", "rect": [892, 146, 1, 30], "talk_radius": 10, "prompt": [886, 136], "message": "story.trail_closed", "when": {"rogue_met": false}}
 	],
 	"stream": {
 		"width": 16,
@@ -50,13 +55,16 @@
 	],
 	"hunt_seed": 9241,
 	"npc_spacing": [24, 16],
-	"npcs": [],
+	"npcs": [
+		{"id": "slate", "art": "cat.slate.idle", "pos": [836, 150], "footprint": [16, 5], "talk_radius": 22, "behavior": "stand", "facing": -1, "dialogue": "res://data/dialogue/slate.json", "when": {"rogue_news": true, "rogue_met": false}}
+	],
 	"path": {
 		"width": 11,
-		"lines": [[[-8, 258], [40, 260], [100, 252], [160, 236], [220, 214], [262, 186], [282, 160], [292, 142]]]
+		"lines": [[[-8, 258], [40, 260], [100, 252], [160, 236], [220, 214], [262, 186], [282, 160], [292, 142]], [[796, 176], [836, 170], [870, 163], [908, 160]]]
 	},
 	"ground": [
-		{"art": "decor.trail", "pos": [-18, 258], "flip": true}
+		{"art": "decor.trail", "pos": [-18, 258], "flip": true},
+		{"art": "decor.trail", "pos": [918, 160]}
 	],
 	"prop_types": {
 		"bush_round": {"art": "prop.bush_round", "footprint": [19, 5], "shadow": "shadow.m", "sway": "bush", "rustle": true},
@@ -91,7 +99,7 @@
 		"bottom_y": 471,
 		"left_x": -18,
 		"right_x": 918,
-		"gaps": [[-18, 278, 50]]
+		"gaps": [[-18, 278, 50], [918, 160, 44]]
 	},
 	"tall_grass": {
 		"art": "decor.tall_grass_gold",

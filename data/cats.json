@@ -35,6 +35,11 @@
 			"idle": {"file": "Idle", "fps": 6},
 			"meow": {"file": "Meow", "fps": 8, "loops": 1}
 		}},
+		"slate": {"recolor": {"from": "wick", "map": {"#d5d5d5": "#3c4141", "#c2c2c2": "#2d3131", "#836d67": "#8c2a22", "#716f6f": "#2d3131", "#625956": "#1d2020", "#5d5b5b": "#6a1e1a", "#554c48": "#171919", "#267792": "#c8a030"}}, "anims": {
+			"idle": {"file": "Idle", "fps": 7},
+			"walk": {"file": "Walk", "stride_px": 3},
+			"meow": {"file": "Meow", "fps": 8, "loops": 1}
+		}},
 		"rook": {"recolor": {"from": "bram", "map": {"#1d2020": "#c4c0cc", "#2d3131": "#e4e0e8", "#3c4141": "#f6f4f8", "#171919": "#7c7884"}}, "fidget_after_s": 5.0, "fidgets": ["lick", "itch"], "anims": {
 			"sit": {"file": "Sitting", "fps": 1},
 			"lick": {"file": "Licking 1", "fps": 6, "loops": 2},

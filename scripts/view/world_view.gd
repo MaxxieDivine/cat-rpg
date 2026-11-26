@@ -89,6 +89,10 @@ var paw: Sprite2D
 var rank_marks: Dictionary = {}
 ## Scent spot sprites by spot id (Ground layer).
 var scent_nodes: Dictionary = {}
+## Story marks (world.trail_marks, world.way_mark): scent rings on the
+## Ground layer along the rogue's trail, and a bobbing ">>" on the Overlay.
+var trail_nodes: Array[Sprite2D] = []
+var way_arrow: Sprite2D
 ## Each cat's patrol icon (beside its rank symbol), on the Overlay.
 var patrol_marks: Dictionary = {}
 ## Gap between a head and its rank symbol (world px; tuning.json prompt.rank_gap).
@@ -386,6 +390,12 @@ func setup(w, tuning: Dictionary, day_cycle = null) -> void:
 		pm.visible = false
 		overlay.add_child(pm)
 		patrol_marks[id] = pm
+	way_arrow = Sprite2D.new()
+	way_arrow.name = "WayArrow"
+	way_arrow.texture = AssetCatalog.texture("ui.way_arrow")
+	way_arrow.centered = false
+	way_arrow.visible = false
+	overlay.add_child(way_arrow)
 	refresh_ranks()
 	GameState.rank_changed.connect(_on_rank_changed)
 	sync()
@@ -563,6 +573,7 @@ func sync(dt: float = 0.0) -> void:
 			if sc.get_meta("key", "") != key:
 				sc.texture = AssetCatalog.texture(key)
 				sc.set_meta("key", key)
+	_sync_story_marks()
 	_sync_ripple()
 	var focus: String = world.focus_id
 	paw.visible = focus != "" and not world.is_talking() and not world.is_busy() and not world.is_leaping()
@@ -894,6 +905,40 @@ func _draw_alert_bars() -> void:
 		var w := roundf(10.0 * float(m["alert"]))
 		if w > 0.0:
 			alert_bars.draw_rect(Rect2(at + Vector2(1, 1), Vector2(w, 1)), calm.lerp(scared, float(m["alert"])))
+
+
+## The rogue's scent trail (rings, rebuilt when the list changes) and the
+## arrow out of the territory (bobbing sideways along its direction).
+func _sync_story_marks() -> void:
+	if trail_nodes.size() != world.trail_marks.size():
+		for n in trail_nodes:
+			n.queue_free()
+		trail_nodes.clear()
+		for i in world.trail_marks.size():
+			var sc := Sprite2D.new()
+			sc.name = "Trail_%d" % i
+			sc.texture = AssetCatalog.texture("ui.scent_ring")
+			sc.centered = false
+			sc.offset = -(sc.texture.get_size() / 2.0).floor()
+			sc.set_meta("key", "ui.scent_ring")
+			_ground.add_child(sc)
+			trail_nodes.append(sc)
+	for i in trail_nodes.size():
+		trail_nodes[i].position = world.trail_marks[i].round()
+	way_arrow.visible = world.way_mark != Vector2.INF
+	if way_arrow.visible:
+		way_arrow.flip_h = world.way_facing < 0
+		var bob := roundf(sin(_t * 5.0) * 1.5 + 1.5) * float(world.way_facing)
+		way_arrow.position = (world.way_mark - (way_arrow.texture.get_size() / 2.0).floor() + Vector2(bob, 0)).round()
+
+
+## An NPC left the area (world.leave_npc()): its sprite and marks go.
+func remove_npc(id: String) -> void:
+	for d: Dictionary in [npc_nodes, rank_marks, patrol_marks]:
+		var n: Node = d.get(id)
+		if n != null:
+			n.queue_free()
+		d.erase(id)
 
 
 ## Picks each cat's rank symbol texture (none: hidden).

@@ -79,7 +79,7 @@ func current() -> Dictionary:
 	if n.has("await"):
 		return {"type": "await", "node": node_id, "conversation": conversation_id, "await": str(n["await"])}
 	var choices: Array[String] = []
-	for c: Dictionary in n.get("choices", []):
+	for c: Dictionary in shown_choices():
 		choices.append(_format(str(c.get("text", ""))))
 	return {
 		"type": "line",
@@ -93,7 +93,19 @@ func current() -> Dictionary:
 
 
 func has_choices() -> bool:
-	return is_active() and not (node().get("choices", []) as Array).is_empty()
+	return is_active() and not shown_choices().is_empty()
+
+
+## The current line's choices whose "if" matches (a choice without one
+## always shows): "Offer prey" only while carrying some.
+func shown_choices() -> Array:
+	var out: Array = []
+	if not is_active():
+		return out
+	for c: Dictionary in node().get("choices", []):
+		if not c.has("if") or state.matches(c["if"]):
+			out.append(c)
+	return out
 
 
 ## Moves past a line without choices: to its "next", or ends the
@@ -113,7 +125,7 @@ func advance() -> Dictionary:
 func choose(index: int) -> Dictionary:
 	if not has_choices():
 		return current()
-	var choices: Array = node()["choices"]
+	var choices: Array = shown_choices()
 	if index < 0 or index >= choices.size():
 		return current()
 	var c: Dictionary = choices[index]

@@ -70,7 +70,11 @@ extends Control
 ## enough border patrols are marked, Wick goes missing (load_area() leaves
 ## him out of every area) and the deputy's report tells the rogue news;
 ## then the story's goal shows when no patrol runs, and the deputy offers
-## no patrols.
+## no patrols. Part B: the rogue Slate stands by the river in Hunting
+## Grounds 2 (his layout "when"); after talking he walks off or bolts along
+## Story.leave_plan() (or, bribed, takes Fern's prey), the story exit opens
+## ("when" rogue_met, checked live: World.conditions = GameState's core)
+## and the scent trail / arrow show (_story_into()).
 ##
 ## Time of day (scripts/core/day_cycle.gd): after the last of the three
 ## conversations, afternoon turns to dusk and night; the world view, the
@@ -143,6 +147,9 @@ var goal_label: Label
 ## The NPC Fern is talking to (the deputy's conversation ends a patrol
 ## offer or report).
 var _talk_npc := ""
+## Whether Fern had met the rogue before this conversation (its end makes
+## him leave only the first time).
+var _rogue_was_met := false
 var _message_t := 0.0
 ## Distance walked when the last footstep played (world px).
 var _step_at := 0.0
@@ -338,6 +345,28 @@ func _patrol_into(w) -> void:
 	w.follow(mates)
 
 
+## The story's marks in area `w`: the rogue's scent trail (threatened) or
+## the arrow out of the territory (bribed).
+func _story_into(w) -> void:
+	w.trail_marks = Story.trail(w.id, w.size)
+	w.way_mark = Story.way_mark(w.id)
+	w.way_facing = 1
+
+
+## The rogue's conversation ended with rogue_met newly set: he walks off,
+## bolts, or (bribed) takes the prey and stays put.
+func _rogue_leaves() -> void:
+	var plan: Dictionary = Story.leave_plan()
+	match plan["mode"]:
+		"stay":
+			if Player.carried_item() != "":
+				Player.state.carried_item = ""
+				say(GameStrings.text("story.took_prey"))
+		_:
+			world.leave_npc(Story.rogue_npc(), plan["route"], plan["speed"])
+	_story_into(world)
+
+
 ## Tells the world which of its scent spots the patrol wants (marked or not).
 func _update_scent(w) -> void:
 	var wanted := {}
@@ -394,7 +423,7 @@ func _handle_patrol(events: Array[Dictionary]) -> void:
 ## area shown now. Camera limits follow the area. Needs, Player, flags and
 ## the time of day are untouched.
 func load_area(id: String, spawn_name: String) -> bool:
-	var w = areas.load_world(id, tuning)
+	var w = areas.load_world(id, tuning, GameState.state)
 	if w == null:
 		return false
 	if not w.spawns.has(spawn_name):
@@ -408,6 +437,7 @@ func load_area(id: String, spawn_name: String) -> bool:
 		if Story.absent(npc["id"]):
 			w.remove_npc(npc["id"])
 	_patrol_into(w)
+	_story_into(w)
 	if world_view != null:
 		viewport.remove_child(world_view)
 		world_view.queue_free()
@@ -814,6 +844,9 @@ func _handle(events: Array[Dictionary]) -> void:
 		match ev["type"]:
 			"talk":
 				_talk_npc = str(ev.get("id", ""))
+				# Choices may depend on what Fern carries ("I brought you prey.").
+				GameState.set_flag("carrying", world.carrying() != "")
+				_rogue_was_met = bool(GameState.get_flag("rogue_met"))
 				if _talk_npc == Patrols.deputy():
 					Patrols.prepare_offer()
 				_show(DialogueManager.start(ev["dialogue"], DialogueManager.follow_up_for(_talk_npc)))
@@ -855,6 +888,8 @@ func _handle(events: Array[Dictionary]) -> void:
 					sound.play("rustle")
 			"scent":
 				_handle_patrol(Patrols.mark(world.id, ev["id"]))
+			"npc_left":
+				world_view.remove_npc(ev["id"])
 
 
 ## Quieter with distance from Fern; -80 dB (silent) past hunt.hear_px.
@@ -904,6 +939,8 @@ func _show(ev: Dictionary) -> void:
 		_talk_npc = ""
 		if who == Patrols.deputy():
 			_handle_patrol(Patrols.after_talk())
+		if who == Story.rogue_npc() and not _rogue_was_met and GameState.get_flag("rogue_met"):
+			_rogue_leaves()
 	_update_touch_visibility()
 	_place_overlays()
 
