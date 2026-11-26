@@ -70,6 +70,17 @@ func setup(id: String) -> void:
 		play(rest)
 
 
+## Makes `n` the resting pose (its head row places the marks over it).
+func set_rest(n: String) -> void:
+	if not has_anim(n):
+		return
+	rest = n
+	var img: Image = anims[rest]["texture"].get_image()
+	if img != null:
+		_top = img.get_used_rect().position.y
+	play(rest)
+
+
 func has_anim(n: String) -> bool:
 	return anims.has(n)
 

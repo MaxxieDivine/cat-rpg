@@ -29,7 +29,14 @@
 		"wick": {"pack": "Cat-3", "anims": {
 			"idle": {"file": "Idle", "fps": 7},
 			"walk": {"file": "Walk", "stride_px": 3},
-			"meow": {"file": "Meow", "fps": 8, "loops": 1}
+			"meow": {"file": "Meow", "fps": 8, "loops": 1},
+			"sleep": {"file": "Sleeping1", "fps": 1, "recolor": {"from": "sorrel", "map": {"#e6e6e6": "#d5d5d5", "#d1d1d1": "#c2c2c2", "#adadad": "#c2c2c2", "#c3bab2": "#836d67", "#8d8d8d": "#625956", "#7d746c": "#554c48", "#7e7e7e": "#5d5b5b", "#595959": "#171919", "#1385c0": "#267792", "#e2d656": "#267792"}}},
+			"lie_down": {"file": "Laying", "fps": 8, "loops": 1, "recolor": {"from": "sorrel", "map": {"#e6e6e6": "#d5d5d5", "#d1d1d1": "#c2c2c2", "#adadad": "#c2c2c2", "#c3bab2": "#836d67", "#8d8d8d": "#625956", "#7d746c": "#554c48", "#7e7e7e": "#5d5b5b", "#595959": "#171919", "#1385c0": "#267792", "#e2d656": "#267792"}}}
+		}},
+		"vex": {"recolor": {"from": "bram", "map": {"#1d2020": "#5e4b40", "#2d3131": "#7c6555", "#3c4141": "#937a66", "#171919": "#2c211c", "#b5aa30": "#d0d8a0"}}, "fidget_after_s": 6.0, "fidgets": ["lick", "itch"], "anims": {
+			"sit": {"file": "Sitting", "fps": 1},
+			"lick": {"file": "Licking 1", "fps": 6, "loops": 2},
+			"itch": {"file": "Itch", "fps": 8, "loops": 5}
 		}},
 		"larch": {"recolor": {"from": "wick", "map": {"#c2c2c2": "#6e4a36", "#d5d5d5": "#86603f", "#625956": "#2e201a", "#554c48": "#261a16", "#5d5b5b": "#3a2a22", "#836d67": "#4a342a", "#716f6f": "#5a4032", "#267792": "#e0b040"}}, "anims": {
 			"idle": {"file": "Idle", "fps": 6},

@@ -289,10 +289,22 @@ func test_every_line_fits_the_narrowest_box() -> void:
 	var app: Control = await _start(PHONE)
 	var box: Control = app.game.dialogue
 	var d: Dictionary = tuning["dialogue"]
+	var files: Array[String] = []
 	for f in DirAccess.get_files_at("res://data/dialogue"):
+		files.append("res://data/dialogue/" + f)
+	# Cutscene lines show in the same box.
+	for f in DirAccess.get_files_at("res://data/cutscenes"):
+		files.append("res://data/cutscenes/" + f)
+	for path in files:
+		var f := path.get_file()
 		if not f.ends_with(".json"):
 			continue
-		var nodes: Dictionary = JsonData.load_dict("res://data/dialogue/" + f)["nodes"]
+		var raw := JsonData.load_dict(path)
+		var nodes: Dictionary = raw.get("nodes", {})
+		for i in (raw.get("steps", []) as Array).size():
+			var st: Dictionary = raw["steps"][i]
+			if st.has("say"):
+				nodes["step_%d" % i] = st
 		for id in nodes:
 			if not nodes[id].has("text"):
 				continue

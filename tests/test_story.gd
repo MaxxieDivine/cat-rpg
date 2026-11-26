@@ -16,6 +16,7 @@ const Areas := preload("res://scripts/core/areas.gd")
 const JsonData := preload("res://scripts/core/json_data.gd")
 const Dialogue := preload("res://scripts/core/dialogue.gd")
 const GameStateCore := preload("res://scripts/core/game_state.gd")
+const Cutscene := preload("res://scripts/core/cutscene.gd")
 
 var cfg: Dictionary
 var strings: Dictionary
@@ -360,3 +361,183 @@ func test_trail_and_arrow() -> void:
 	check(story.way_mark(gs) != Vector2.INF, "bribed: the arrow")
 	check_eq(story.goal_key(gs), str(cfg["rogue"]["goal_follow"]), "goal: follow the rogue")
 	check_eq(str(strings.get(story.goal_key(gs), "")), "Follow the rogue.", "its text")
+
+
+# --- Part C: the rogue camp, hiding, the cutscene, warning the deputy
+
+
+func _camp_w(flags: Dictionary):
+	gs = GameStateCore.new()
+	for k: String in flags:
+		gs.set_flag(k, flags[k])
+	return Areas.new().load_world(str(cfg["rogue"]["camp_area"]), JsonData.load_dict("res://data/tuning.json"), gs)
+
+
+const FOLLOWING := {"wick_missing": true, "rogue_news": true, "rogue_met": true, "rogue_choice": "question"}
+
+
+func test_rogue_camp_layout() -> void:
+	var w = _camp_w(FOLLOWING)
+	check(w != null, "the rogue camp loads")
+	check(not w.npc_by_id("wick").is_empty(), "Wick is here")
+	check(not story.absent(gs, "wick", "rogue_camp"), "not absent from the rogue camp")
+	check(story.absent(gs, "wick", "camp") and story.absent(gs, "wick"), "absent everywhere else")
+	check(not World.talkable(w.npc_by_id("wick")), "Wick doesn't talk yet")
+	check_eq(w.npc_by_id("wick")["rest"], "sleep", "lying down")
+	for id in ["vex", "slate"]:
+		check(not w.npc_by_id(id).is_empty(), "%s is here" % id)
+	var wick: Vector2 = w.npc_by_id("wick")["pos"]
+	check(wick.x > w.size.x * 0.8 and wick.y < w.size.y * 0.4, "Wick is in a corner (%s)" % wick)
+	check(w.npc_by_id("slate")["pos"].distance_to(wick) < 60.0, "guarded")
+	# The log by the entrance, the hiding spot behind it.
+	var logs: Array = w.props.filter(func(p): return p["type"] == "log")
+	check_eq(logs.size(), 1, "a fallen log")
+	var spawn: Vector2 = w.spawns["from_hunting_grounds_2"]["pos"]
+	check(logs[0]["pos"].distance_to(spawn) < 100.0, "near the entrance")
+	var sp: Dictionary = w.spot_by_id("hide_log")
+	check(not sp.is_empty() and sp["event"] == "hide", "a hide spot")
+	check(sp["at"].y < logs[0]["pos"].y and absf(sp["at"].x - logs[0]["pos"].x) < 6.0, "Fern hides just behind (north of) the log")
+	# The barrier keeps Fern in the entrance pocket.
+	check(not w.barriers.is_empty(), "a barrier")
+	for b: Dictionary in w.barriers:
+		check(b["rect"].position.x > spawn.x and b["rect"].position.x < wick.x, "between the entrance and the camp")
+	w.place_at_spawn("from_hunting_grounds_2")
+	var msgs: Array = []
+	for i in 300:
+		for ev: Dictionary in w.step(1.0 / 60.0, Vector2.RIGHT, false):
+			if ev["type"] == "message":
+				msgs.append(ev["key"])
+	check(w.player_pos.x < w.barriers[0]["rect"].position.x, "walking east stops at the hedge (%s)" % w.player_pos)
+	check(msgs.has("story.too_risky"), "Too risky. Find somewhere to hide.")
+	check(msgs.size() <= 3, "not every frame (%d)" % msgs.size())
+	check_eq(str(strings.get("story.too_risky", "")), "Too risky. Find somewhere to hide.", "its text")
+	check_eq(w.arrive_message.get("message", ""), "story.stay_hidden", "a line on arrival")
+	check(w.is_open(w.arrive_message), "while the camp isn't found")
+
+
+func test_reaching_the_log() -> void:
+	var w = _camp_w(FOLLOWING)
+	w.place_at_spawn("from_hunting_grounds_2")
+	var sp: Dictionary = w.spot_by_id("hide_log")
+	var target: Vector2 = sp["prompt"] + Vector2(0, 6)
+	var found := false
+	for i in 600:
+		var to: Vector2 = (target - w.player_pos)
+		w.step(1.0 / 60.0, to.normalized() if to.length() > 2.0 else Vector2.ZERO, false)
+		if w.focus_id == "hide_log":
+			found = true
+			break
+	check(found, "Fern can walk up to the log and it takes focus")
+	var ev: Array[Dictionary] = w.interact()
+	check(not ev.is_empty() and ev[0]["type"] == "hide", "interact = hide (%s)" % [ev])
+	gs.set_flag("rogue_camp_found", true)
+	w.step(1.0 / 60.0, Vector2.ZERO, false)
+	check(w.focus_id != "hide_log", "once found, nothing to hide for")
+	check(not w.is_open(w.arrive_message), "no 'stay out of sight' line any more")
+
+
+func test_cutscene_file() -> void:
+	var data := Cutscene.load_file(story.cutscene_path())
+	var errs := Cutscene.check(data, JsonData.load_dict("res://data/speakers.json"), GameStateCore.new())
+	check(errs.is_empty(), "valid: %s" % [errs])
+	var says: Array = (data["steps"] as Array).filter(func(s): return s.has("say"))
+	var who := {}
+	for s in says:
+		who[s["say"]] = true
+	for id in ["slate", "vex"]:
+		check(who.has(id), "%s speaks" % id)
+	var text := " ".join(says.map(func(s): return str(s["text"])))
+	for bit in ["patrol times", "loners", "land", "Let them come"]:
+		check(text.contains(bit), "the talk covers '%s'" % bit)
+	var kinds := {}
+	for s: Dictionary in data["steps"]:
+		for k in Cutscene.STEP_KINDS:
+			if s.has(k):
+				kinds[k] = true
+	for k in ["camera", "move", "say"]:
+		check(kinds.has(k), "uses %s steps" % k)
+	check_eq(data["steps"][data["steps"].size() - 1].get("set", {}), {"rogue_camp_found": true}, "ends by setting rogue_camp_found")
+	var bad := Cutscene.check({"steps": [{"say": "nobody", "text": "x"}, {"wait": 1, "say": "fern"}, {"set": {"nope": 1}}]}, JsonData.load_dict("res://data/speakers.json"), GameStateCore.new())
+	check_eq(bad.size(), 3, "bad speaker, two kinds in one step, bad flag (%s)" % [bad])
+
+
+func test_cutscene_runs() -> void:
+	var w = _camp_w(FOLLOWING)
+	var data := Cutscene.load_file(story.cutscene_path())
+	var says := (data["steps"] as Array).filter(func(s): return s.has("say")).size()
+	var c = Cutscene.new(data)
+	var follow := Vector2(120, 180)
+	var lines: Array[String] = []
+	var ends := 0
+	var furthest := 0.0
+	var ev: Array[Dictionary] = c.start(w, gs, follow)
+	check(c.is_running(), "running")
+	for i in 6000:
+		for e: Dictionary in ev:
+			if e["type"] == "line":
+				lines.append(str(e["text"]))
+				check(e["choices"].is_empty(), "no choices in a cutscene")
+			if e["type"] == "end":
+				ends += 1
+		if c.is_done():
+			break
+		if c.camera_point() != Vector2.INF:
+			furthest = maxf(furthest, c.camera_point().x)
+		if not c.line.is_empty():
+			ev = c.advance()
+		else:
+			w.step(1.0 / 60.0, Vector2.ZERO, false)
+			ev = c.step(1.0 / 60.0, follow)
+	check(c.is_done(), "it finishes")
+	check_eq(ends, 1, "one end event")
+	check_eq(lines.size(), says, "every line shown once")
+	check(furthest > 380.0, "the camera went over to the camp (%.0f)" % furthest)
+	check_eq(c.camera_point(), Vector2.INF, "and back to Fern at the end")
+	var to: Array = (data["steps"] as Array).filter(func(s): return s.has("move"))[0]["to"]
+	check(w.npc_by_id("slate")["pos"].distance_to(Vector2(to[0], to[1])) < 1.0, "Slate walked over to Vex")
+	check_eq(gs.get_flag("rogue_camp_found"), true, "rogue_camp_found")
+	check(not story.can_hide(gs), "not again")
+
+
+func test_warning_the_deputy() -> void:
+	var flags := FOLLOWING.duplicate()
+	flags["rogue_camp_found"] = true
+	gs = GameStateCore.new()
+	check_eq(story.goal_key(gs), "", "start: no goal")
+	var lines := _talk("res://data/dialogue/rook.json", flags)
+	var all := " | ".join(lines)
+	check(story.goal_key(gs) == "" and gs.get_flag("rogue_warned") == true, "warned: goal done")
+	check(all.contains("Rogues have Wick") and all.contains("loners"), "Fern tells him (%s)" % all)
+	check(all.contains("Larch"), "he takes it to the leader")
+	check(not story.investigating(gs) and not story.blocks_patrols(gs), "patrols come back")
+	check(story.absent(gs, "wick"), "Wick stays in the rogue camp")
+	# Afterwards: the normal offers again.
+	var gs2 = GameStateCore.new()
+	for k: String in flags:
+		gs2.set_flag(k, flags[k])
+	gs2.set_flag("rogue_warned", true)
+	gs2.set_flag("patrol_offer", "hunting")
+	gs = gs2
+	check(_talk("res://data/dialogue/rook.json", {})[0].contains("Hunting patrol"), "a patrol offer again")
+
+
+func test_goals_through_the_story() -> void:
+	var expect := [
+		[{}, ""],
+		[{"rogue_news": true}, "story.goal_investigate"],
+		[{"rogue_met": true}, "story.goal_follow"],
+		[{"rogue_camp_found": true}, "story.goal_warn"],
+		[{"rogue_warned": true}, ""],
+	]
+	gs = GameStateCore.new()
+	for e in expect:
+		for k: String in e[0]:
+			gs.set_flag(k, e[0][k])
+		check_eq(story.goal_key(gs), e[1], "after %s" % [e[0]])
+	check_eq(str(strings["story.goal_warn"]), "Get back to camp and warn the deputy.", "the warn goal's text")
+	# And they survive the save hook.
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(gs.save_data()))
+	var gs2 = GameStateCore.new()
+	gs2.load_save_data(saved)
+	for k in ["rogue_news", "rogue_met", "rogue_camp_found", "rogue_warned"]:
+		check_eq(gs2.get_flag(k), true, "loaded %s" % k)

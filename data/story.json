@@ -13,6 +13,10 @@
 		"walk_speed": 24,
 		"run_speed": 115,
 		"trail_every": 34,
-		"way_mark": [874, 152]
+		"way_mark": [874, 152],
+		"_camp_note": "Part C. camp_area: the rogue camp, where Wick is (absent from every other area). Hiding behind its log plays cutscene, which sets rogue_camp_found; goal_warn until the deputy is told (rogue_warned).",
+		"camp_area": "rogue_camp",
+		"cutscene": "res://data/cutscenes/rogue_camp.json",
+		"goal_warn": "story.goal_warn"
 	}
 }

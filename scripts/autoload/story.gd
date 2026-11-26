@@ -27,8 +27,21 @@ func border_marked(mates: Array) -> bool:
 	return went
 
 
-func absent(id: String) -> bool:
-	return story.absent(GameState.state, id)
+## Whether cat `id` is away (from area `area`, if given).
+func absent(id: String, area: String = "") -> bool:
+	return story.absent(GameState.state, id, area)
+
+
+func camp_area() -> String:
+	return story.camp_area()
+
+
+func can_hide() -> bool:
+	return story.can_hide(GameState.state)
+
+
+func cutscene_path() -> String:
+	return story.cutscene_path()
 
 
 func investigating() -> bool:

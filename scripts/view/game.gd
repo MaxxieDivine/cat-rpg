@@ -74,7 +74,12 @@ extends Control
 ## Grounds 2 (his layout "when"); after talking he walks off or bolts along
 ## Story.leave_plan() (or, bribed, takes Fern's prey), the story exit opens
 ## ("when" rogue_met, checked live: World.conditions = GameState's core)
-## and the scent trail / arrow show (_story_into()).
+## and the scent trail / arrow show (_story_into()). Part C: in the rogue
+## camp (Wick is there, Story.absent() everywhere else) a barrier keeps
+## Fern in the entrance pocket; the log's "Hide" spot plays the cutscene
+## (hide_behind(), scripts/core/cutscene.gd, data/cutscenes/rogue_camp.json): no
+## control, the camera follows the script, lines advance by tap / key /
+## pad (_on_advance()); it sets rogue_camp_found.
 ##
 ## Time of day (scripts/core/day_cycle.gd): after the last of the three
 ## conversations, afternoon turns to dusk and night; the world view, the
@@ -97,6 +102,7 @@ const AssetCatalog := preload("res://scripts/core/asset_catalog.gd")
 const Areas := preload("res://scripts/core/areas.gd")
 const Travel := preload("res://scripts/core/travel.gd")
 const NameEditor := preload("res://scripts/view/name_editor.gd")
+const Cutscene := preload("res://scripts/core/cutscene.gd")
 
 ## The Name Editor opened or closed (app.gd hides the corner buttons under it).
 signal naming_changed(open: bool)
@@ -150,6 +156,9 @@ var _talk_npc := ""
 ## Whether Fern had met the rogue before this conversation (its end makes
 ## him leave only the first time).
 var _rogue_was_met := false
+## The cutscene playing (scripts/core/cutscene.gd), or null. While it
+## runs: no control, touch controls hidden, its lines in the dialogue box.
+var cutscene = null
 var _message_t := 0.0
 ## Distance walked when the last footstep played (world px).
 var _step_at := 0.0
@@ -434,7 +443,7 @@ func load_area(id: String, spawn_name: String) -> bool:
 	w.place_at_spawn(spawn_name)
 	# Story beats: a missing cat is in no area (Story autoload).
 	for npc: Dictionary in w.npcs.duplicate():
-		if Story.absent(npc["id"]):
+		if Story.absent(npc["id"], id):
 			w.remove_npc(npc["id"])
 	_patrol_into(w)
 	_story_into(w)
@@ -457,6 +466,9 @@ func load_area(id: String, spawn_name: String) -> bool:
 	_cam_center = Vector2.INF
 	_cam_easing = false
 	Player.arrive(id, spawn_name)
+	# "Stay out of sight..." on arriving in the rogue camp (layout on_arrive).
+	if not w.arrive_message.is_empty() and w.is_open(w.arrive_message):
+		say(GameState.format_text(GameStrings.text(str(w.arrive_message.get("message", "")))))
 	if metrics != null:
 		_update_camera(0.0)
 		world_view.camera_rect = camera_rect
@@ -548,6 +560,14 @@ func _update_camera(dt: float) -> void:
 	if world.is_talking():
 		target = _talk_center()
 		_cam_easing = true
+	elif in_cutscene():
+		# The scene's camera (or following Fern), lifted clear of the box.
+		var p: Vector2 = cutscene.camera_point()
+		if p != Vector2.INF:
+			target = p
+		if dialogue.is_open:
+			target.y += _box_lift()
+		_cam_easing = true
 	if _cam_easing:
 		rate = float(tuning.get("dialogue", {}).get("camera_ease", 10))
 	if _cam_center == Vector2.INF or dt <= 0.0 or rate <= 0.0:
@@ -569,13 +589,19 @@ func _talk_center() -> Vector2:
 	var npc: Dictionary = world.npc_by_id(world.talk_id)
 	var feet: Vector2 = (world.player_pos + npc["pos"]) / 2.0
 	var mid := feet - Vector2(0, 10)
+	return mid + Vector2(0, _box_lift())
+
+
+## How far down to move the camera's centre so a point at it shows in the
+## middle of the screen above the dialogue box (world px).
+func _box_lift() -> float:
 	# World y of the box's top edge, if the camera were at the top (offset
 	# within the view is all that matters).
 	var box_top_view: float = (dialogue.box_rect.position.y - view_rect.position.y) * float(view_size.y) / view_rect.size.y
 	var free_mid := clampf(box_top_view, 0.0, float(view_size.y)) / 2.0
 	# A little lift, so heads clear the name plate and choices sit beside them.
 	var lift := float(tuning.get("dialogue", {}).get("camera_lift_px", 6))
-	return mid + Vector2(0, float(view_size.y) / 2.0 - free_mid + lift)
+	return float(view_size.y) / 2.0 - free_mid + lift
 
 
 static func _vec(a: Variant) -> Vector2:
@@ -591,8 +617,10 @@ func _process(dt: float) -> void:
 	if touch.stick_vector != Vector2.ZERO:
 		_set_last_input("touch")
 	# No control while fading or passed out.
-	var locked: bool = travel.busy()
+	var locked: bool = travel.busy() or in_cutscene()
 	_handle(world.step(dt, Vector2.ZERO if locked else inp["move"], false if locked else inp["run"], inp["crouch"] and not locked))
+	if cutscene != null:
+		_cutscene_events(cutscene.step(dt, world.camera_rect(Vector2(view_size)).get_center()))
 	if travel.busy():
 		_handle_travel(travel.step(dt))
 	else:
@@ -611,7 +639,7 @@ func _process(dt: float) -> void:
 ## Hunger or thirst at 0 makes Fern pass out, once: not mid-conversation or
 ## mid-meal (those finish first), and never while a fade already runs.
 func _check_collapse() -> void:
-	if Needs.needs.collapsed() and not is_talking() and not world.is_talking() and not world.is_busy() and not world.is_leaping():
+	if Needs.needs.collapsed() and not is_talking() and not in_cutscene() and not world.is_talking() and not world.is_busy() and not world.is_leaping():
 		collapse()
 
 
@@ -787,6 +815,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_talking():
 		_dialogue_input(event)
 		return
+	if in_cutscene():
+		return
 	# Pounce shares Interact's keys: a mouse in range wins.
 	if event.is_action_pressed("pounce") and not event.is_echo() and world.can_pounce():
 		pounce()
@@ -830,7 +860,7 @@ func _on_touch_interact() -> void:
 ## Interacts with whatever has focus: talks to a cat, eats from the pile or
 ## drinks at the pond.
 func interact() -> void:
-	if is_talking() or travel.busy():
+	if is_talking() or travel.busy() or in_cutscene():
 		return
 	_handle(world.interact(Needs.needs))
 	Needs.refresh()
@@ -890,6 +920,8 @@ func _handle(events: Array[Dictionary]) -> void:
 				_handle_patrol(Patrols.mark(world.id, ev["id"]))
 			"npc_left":
 				world_view.remove_npc(ev["id"])
+			"hide":
+				hide_behind(ev)
 
 
 ## Quieter with distance from Fern; -80 dB (silent) past hunt.hear_px.
@@ -909,7 +941,64 @@ func say(text: String) -> void:
 
 
 func _on_advance() -> void:
+	if in_cutscene() and not cutscene.line.is_empty():
+		_cutscene_events(cutscene.advance())
+		return
 	_show(DialogueManager.advance())
+
+
+func in_cutscene() -> bool:
+	return cutscene != null
+
+
+## Hiding behind the rogue camp's log (a spot with "event": "hide"): Fern
+## crouches there and the overheard talk plays (Story.cutscene_path()).
+## Only once; afterwards there's nothing more to hear.
+func hide_behind(ev: Dictionary) -> bool:
+	if in_cutscene() or travel.busy():
+		return false
+	if not Story.can_hide():
+		say(GameStrings.text("story.hide_again"))
+		return false
+	var data: Dictionary = Cutscene.load_file(Story.cutscene_path())
+	if data.is_empty():
+		return false
+	world.player_pos = ev.get("at", world.player_pos)
+	world.player_vel = Vector2.ZERO
+	world.facing = 1
+	world.hiding = true
+	world.focus_id = ""
+	world.reset_trail()
+	touch.reset()
+	_message_t = 0.0
+	cutscene = Cutscene.new(data)
+	_cutscene_events(cutscene.start(world, GameState.state, world.camera_rect(Vector2(view_size)).get_center()))
+	_update_touch_visibility()
+	_place_overlays()
+	return true
+
+
+## Cutscene events: its lines in the dialogue box, the box closing between
+## them, the end (control back).
+func _cutscene_events(events: Array[Dictionary]) -> void:
+	for ev in events:
+		match ev["type"]:
+			"line":
+				_show(ev)
+			"line_done":
+				if dialogue.is_open:
+					_speaker = ""
+					dialogue.close()
+			"end":
+				_speaker = ""
+				if dialogue.is_open:
+					dialogue.close()
+				cutscene = null
+				world.hiding = false
+				GameState.changed.emit()
+	if not events.is_empty():
+		_update_touch_visibility()
+		_place_overlays()
 
 
 func _on_choice(index: int) -> void:
@@ -997,7 +1086,7 @@ func _set_last_input(kind: String) -> void:
 ## keyboard is used and while a conversation is open (a tap advances then).
 func _update_touch_visibility() -> void:
 	var show := last_input == "touch" or (last_input == "" and ScreenMetrics.is_touch())
-	if is_talking() or naming() or (travel != null and travel.busy()):
+	if is_talking() or naming() or in_cutscene() or (travel != null and travel.busy()):
 		show = false
 	if touch.visible != show:
 		touch.visible = show
@@ -1035,7 +1124,7 @@ func _place_goal() -> void:
 	var text: String = Patrols.goal_text()
 	if text == "":
 		text = Story.goal_text()
-	goal_label.visible = text != "" and not naming() and not (travel != null and travel.busy())
+	goal_label.visible = text != "" and not naming() and not in_cutscene() and not (travel != null and travel.busy())
 	if not goal_label.visible:
 		return
 	if goal_label.text != text:
@@ -1050,7 +1139,7 @@ func _place_prompt_label() -> void:
 	var sp: Dictionary = world.spot_by_id(world.focus_id)
 	var key: String = str(sp.get("label", ""))
 	var paw: Sprite2D = world_view.paw
-	prompt_label.visible = key != "" and paw.visible and _message_t <= 0.0 and not (travel != null and travel.busy())
+	prompt_label.visible = key != "" and paw.visible and _message_t <= 0.0 and not in_cutscene() and not (travel != null and travel.busy())
 	if not prompt_label.visible:
 		return
 	prompt_label.text = GameState.format_text(GameStrings.text(key))

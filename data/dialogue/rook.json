@@ -5,7 +5,8 @@
 			{"if": {"patrol": "report"}, "next": "report"},
 			{"if": {"patrol": "gather"}, "next": "remind_gather"},
 			{"if": {"patrol": "out"}, "next": "remind_out"},
-			{"if": {"rogue_news": true}, "next": "remind_investigate"},
+			{"if": {"rogue_camp_found": true, "rogue_warned": false}, "next": "warn"},
+			{"if": {"rogue_news": true, "rogue_warned": false}, "next": "remind_investigate"},
 			{"if": {"patrol_offer": "hunting", "patrol_group": false}, "next": "hunting_solo"},
 			{"if": {"patrol_offer": "hunting", "patrol_group": true}, "next": "hunting_group"},
 			{"if": {"patrol_offer": "border", "patrol_group": false}, "next": "border_solo"},
@@ -42,6 +43,13 @@
 		"news_rogue": {"speaker": "rook", "expression": "annoyed", "text": "Not Clan. A rogue, I'd bet my tail on it.", "next": "news_wick"},
 		"news_wick": {"speaker": "rook", "expression": "sad", "text": "And {name_wick} hasn't come back from hunting. That's not like him.", "next": "news_go"},
 		"news_go": {"speaker": "rook", "expression": "neutral", "text": "Go back out and find out what's going on. Be careful.", "set": {"rogue_news": true}, "end": true},
+		"warn": {"speaker": "rook", "expression": "neutral", "text": "{player_name}? You look like you've run all the way. What did you find?", "choices": [
+			{"text": "Rogues have {name_wick}.", "next": "fern_warn"}
+		]},
+		"fern_warn": {"speaker": "fern", "expression": "sad", "text": "Rogues have {name_wick}. They have a camp past the east border.", "next": "fern_warn_2"},
+		"fern_warn_2": {"speaker": "fern", "expression": "sad", "text": "Their leader is gathering loners. They want our land, and {name_wick} knows our patrols.", "next": "warn_reply"},
+		"warn_reply": {"speaker": "rook", "expression": "annoyed", "text": "Rogues, organised. And one of ours in their claws.", "next": "warn_end"},
+		"warn_end": {"speaker": "rook", "expression": "neutral", "text": "You did well. I'll take this to {name_larch}. Stay close to camp for now.", "set": {"rogue_warned": true}, "end": true},
 		"remind_investigate": {"speaker": "rook", "expression": "neutral", "text": "No patrols today. Find out about that scent by the river, and keep an eye out for {name_wick}.", "end": true},
 		"well_done": {"speaker": "rook", "expression": "happy", "text": "Well done. Rest a while.", "end": true},
 		"nothing": {"speaker": "rook", "expression": "neutral", "text": "Nothing for you right now. Stay out of trouble, apprentice.", "end": true}

@@ -189,6 +189,17 @@ var conditions = null
 ## Story marks for the view: a trail of scent rings (world px) and a
 ## bobbing arrow (INF = none). game.gd sets them from the Story autoload.
 var trail_marks: Array[Vector2] = []
+## Lines Fern can't cross ("Too risky. Find somewhere to hide."): each
+## {"rect", "message" (strings.json key), "when"}. Walking into one stops
+## her and gives a "message" event (at most every barrier_every s).
+var barriers: Array[Dictionary] = []
+var barrier_every := 2.0
+var _barrier_t := 0.0
+var _barrier_hit := ""
+## Layout "on_arrive": {"message", "when"}: game.gd says it on arrival.
+var arrive_message: Dictionary = {}
+## Fern is hiding (a cutscene watched from cover): crouched, no control.
+var hiding := false
 var way_mark := Vector2.INF
 var way_facing := 1
 ## False until Fern stands clear of every exit (set again on each exit).
@@ -305,6 +316,7 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 			"facing": int(n.get("facing", 1)),
 			"gift": str(n.get("gift", "")),
 			"perch": float(n.get("perch", 0)),
+			"rest": str(n.get("rest", "")),
 			"moving": false,
 			"distance": 0.0,
 		}
@@ -356,7 +368,13 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 			"prompt": _vec(sp_d.get("prompt", [rect.get_center().x, rect.position.y])),
 			"message": str(sp_d.get("message", "")),
 			"label": str(sp_d.get("label", "")), "enter": str(sp_d.get("enter", "")),
+			"event": str(sp_d.get("event", "")), "at": _vec(sp_d.get("at", [rect.get_center().x, rect.position.y])),
 			"when": sp_d.get("when", {})})
+	for b: Dictionary in w.get("barriers", []):
+		var br: Array = b.get("rect", [0, 0, 0, 0])
+		barriers.append({"rect": Rect2(float(br[0]), float(br[1]), float(br[2]), float(br[3])),
+			"message": str(b.get("message", "")), "when": b.get("when", {})})
+	arrive_message = w.get("on_arrive", {})
 	for ss: Dictionary in w.get("scent_spots", []):
 		var spos := _vec(ss.get("pos", [0, 0]))
 		scent_spots.append({"id": str(ss.get("id", "")), "pos": spos,
@@ -504,6 +522,7 @@ func apply_interior(settings: Dictionary) -> void:
 		var d: Dictionary = sp.duplicate()
 		d["label"] = ""
 		d["enter"] = ""
+		d["event"] = ""
 		spots.append(d)
 	for n: String in interior["markers"]:
 		markers[n] = interior["markers"][n]
@@ -836,7 +855,10 @@ func step(dt: float, move: Vector2, run: bool, crouch: bool = false) -> Array[Di
 	if is_talking() or is_busy() or is_leaping():
 		move = Vector2.ZERO
 		run = false
-	crouching = crouch and not is_talking()
+	crouching = (crouch or hiding) and not is_talking()
+	if hiding:
+		move = Vector2.ZERO
+		run = false
 	if crouching:
 		run = false
 	if is_busy():
@@ -882,6 +904,12 @@ func step(dt: float, move: Vector2, run: bool, crouch: bool = false) -> Array[Di
 	if focus_id != old_focus:
 		events.append({"type": "focus", "id": focus_id})
 	_check_exits(events)
+	_barrier_t = maxf(0.0, _barrier_t - dt)
+	if _barrier_hit != "":
+		if _barrier_t <= 0.0:
+			events.append({"type": "message", "key": _barrier_hit, "barrier": true})
+			_barrier_t = barrier_every
+		_barrier_hit = ""
 	_step_hunt(dt, speed() >= hunt_tuning.still_speed, events)
 	return events
 
@@ -1026,6 +1054,9 @@ func interact(needs = null) -> Array[Dictionary]:
 		_begin_action("eat", eat_s, pile["pos"])
 		return [{"type": "eat", "prey": pile["prey"]}, {"type": "pile", "prey": pile["prey"]}]
 	var spot := spot_by_id(focus_id)
+	if not spot.is_empty() and spot["event"] != "":
+		# A story spot (hide behind the log): game.gd acts on it.
+		return [{"type": spot["event"], "spot": spot["id"], "at": spot["at"]}]
 	if not spot.is_empty() and spot["enter"] != "":
 		# A doorway: go in, as if walking into its exit.
 		for e: Dictionary in exits:
@@ -1239,7 +1270,8 @@ func _step_leave(npc: Dictionary, dt: float) -> bool:
 
 ## Sends NPC `id` walking (straight) to `to`; it waits there. `then_home`:
 ## once there it is itself again (sits, paces...). False if no such NPC.
-func send_npc(id: String, to: Vector2, then_home: bool = false) -> bool:
+## `speed` (px/s, 0 = the usual) sets how fast (a cutscene's walk).
+func send_npc(id: String, to: Vector2, then_home: bool = false, speed: float = 0.0) -> bool:
 	var npc := npc_by_id(id)
 	if npc.is_empty():
 		return false
@@ -1248,6 +1280,7 @@ func send_npc(id: String, to: Vector2, then_home: bool = false) -> bool:
 	npc["mode"] = "goto"
 	npc["goto"] = to
 	npc["then_home"] = then_home
+	npc["goto_speed"] = speed
 	if npc["pos"].distance_to(to) < 0.5:
 		_arrive(npc)
 	_rebuild_solids()
@@ -1287,6 +1320,8 @@ func _step_goto(npc: Dictionary, dt: float) -> bool:
 	var pos: Vector2 = npc["pos"]
 	var to: Vector2 = npc["goto"]
 	var spd := home_speed if npc.get("then_home", false) else follow_speed * 0.5
+	if float(npc.get("goto_speed", 0.0)) > 0.0:
+		spd = float(npc["goto_speed"])
 	var next := pos.move_toward(to, spd * dt)
 	if absf(next.x - pos.x) > 0.001:
 		npc["facing"] = 1 if next.x > pos.x else -1
@@ -1486,10 +1521,21 @@ func _move_axis(delta: Vector2) -> void:
 			else:
 				player_vel.y = 0.0
 			return
+	for b in barriers:
+		if is_open(b) and (b["rect"] as Rect2).intersects(r) and not (b["rect"] as Rect2).intersects(player_rect()):
+			if delta.x != 0.0:
+				player_vel.x = 0.0
+			else:
+				player_vel.y = 0.0
+			_barrier_hit = b["message"]
+			return
 	player_pos = next
 
 
 func _update_focus() -> void:
+	if hiding:
+		focus_id = ""  # watching from cover: nothing to interact with
+		return
 	var best := ""
 	var best_d := INF
 	for npc in npcs:

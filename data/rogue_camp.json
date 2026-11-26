@@ -1,7 +1,7 @@
 {
 	"id": "rogue_camp",
 	"name": "Rogue Camp",
-	"_note": "Rogue land, just past the territory's east border (joined to Hunting Grounds 2 by its story-only exit). Story Part B: the trail ends here. Part C fills it in: the flattened clearing, scraps of bedding, bones, the fallen log to hide behind, Wick under guard, the cutscene.",
+	"_note": "Rogue land, just past the territory's east border (joined to Hunting Grounds 2 by its story-only exit). A flattened clearing with torn bedding and old bones; Vex (the rogue leader) sits in the middle, Slate guards Wick, who lies in the far corner. Fern stays in the entrance pocket: a hedge of bushes with a barrier along it ('Too risky...'). The fallen log by the entrance is the hiding place (spot hide_log, event hide): hiding plays data/cutscenes/rogue_camp.json once.",
 	"size": [560, 320],
 	"edge_margin": 6,
 	"border": 72,
@@ -25,13 +25,31 @@
 		{"id": "to_hunting_grounds_2", "rect": [6, 152, 14, 36], "to": "hunting_grounds_2", "spawn": "from_rogue_land"}
 	],
 	"npc_spacing": [24, 16],
-	"npcs": [],
+	"npcs": [
+		{"id": "vex", "art": "cat.vex.sit", "pos": [396, 160], "footprint": [14, 5], "talk_radius": 22, "behavior": "sit", "facing": 1},
+		{"id": "slate", "art": "cat.slate.idle", "pos": [470, 122], "footprint": [16, 5], "talk_radius": 22, "behavior": "stand", "facing": -1, "when": {"rogue_met": true}},
+		{"id": "wick", "art": "cat.wick.sleep", "rest": "sleep", "pos": [506, 92], "footprint": [18, 5], "talk_radius": 22, "behavior": "lie", "facing": -1, "when": {"wick_missing": true}}
+	],
+	"spots": [
+		{"id": "hide_log", "rect": [100, 199, 24, 3], "talk_radius": 12, "prompt": [112, 184], "label": "story.hide_label", "event": "hide", "at": [112, 201], "when": {"rogue_camp_found": false}}
+	],
+	"barriers": [
+		{"rect": [150, 0, 16, 320], "message": "story.too_risky"}
+	],
+	"on_arrive": {"message": "story.stay_hidden", "when": {"rogue_camp_found": false}},
 	"path": {
 		"width": 11,
-		"lines": [[[-8, 170], [50, 170], [110, 176], [170, 182]]]
+		"lines": [[[-8, 170], [50, 172], [100, 176], [140, 178]]]
 	},
 	"ground": [
-		{"art": "decor.trail", "pos": [-18, 170], "flip": true}
+		{"art": "decor.trail", "pos": [-18, 170], "flip": true},
+		{"art": "decor.rogue_clearing", "pos": [392, 168]},
+		{"art": "decor.rogue_bedding", "pos": [330, 136]},
+		{"art": "decor.rogue_bedding_b", "pos": [440, 130]},
+		{"art": "decor.rogue_bedding", "pos": [472, 216], "flip": true},
+		{"art": "decor.rogue_bedding_b", "pos": [510, 98], "flip": true},
+		{"art": "decor.rogue_bones", "pos": [300, 202]},
+		{"art": "decor.rogue_bones", "pos": [418, 228], "flip": true}
 	],
 	"prop_types": {
 		"bush_round": {"art": "prop.bush_round", "footprint": [19, 5], "shadow": "shadow.m", "sway": "bush", "rustle": true},
@@ -39,16 +57,26 @@
 		"bush_small": {"art": "prop.bush_small", "footprint": [11, 4], "shadow": "shadow.s", "sway": "bush", "rustle": true},
 		"rock_big": {"art": "prop.rock_big", "footprint": [14, 4], "shadow": "shadow.s"},
 		"rock_small": {"art": "prop.rock_small", "footprint": [7, 3], "shadow": "shadow.s"},
+		"log": {"art": "prop.log", "footprint": [22, 4], "shadow": "shadow.m"},
 		"tree_a": {"art": "prop.trunk", "canopy": "prop.canopy_a", "canopy_offset": [0, -22], "footprint": [8, 4], "shadow": "shadow.xl", "sway": "canopy"},
 		"tree_b": {"art": "prop.trunk", "canopy": "prop.canopy_b", "canopy_offset": [0, -20], "footprint": [8, 4], "shadow": "shadow.l", "sway": "canopy"}
 	},
 	"props": [
 		{"type": "bush_round", "pos": [40, 140]},
-		{"type": "bush_wide", "pos": [46, 210], "flip": true},
-		{"type": "rock_big", "pos": [300, 120]},
-		{"type": "bush_wide", "pos": [420, 250]},
-		{"type": "rock_small", "pos": [250, 240]},
-		{"type": "tree_b", "pos": [480, 120]}
+		{"type": "bush_small", "pos": [60, 230], "flip": true},
+		{"type": "log", "pos": [112, 206]},
+		{"type": "bush_wide", "pos": [158, 44]},
+		{"type": "bush_round", "pos": [160, 76], "flip": true},
+		{"type": "bush_small", "pos": [156, 104]},
+		{"type": "bush_round", "pos": [160, 134]},
+		{"type": "bush_small", "pos": [158, 158], "flip": true},
+		{"type": "bush_round", "pos": [160, 212]},
+		{"type": "bush_wide", "pos": [158, 244], "flip": true},
+		{"type": "bush_round", "pos": [160, 276]},
+		{"type": "bush_small", "pos": [156, 302]},
+		{"type": "rock_big", "pos": [292, 104]},
+		{"type": "rock_small", "pos": [250, 250]},
+		{"type": "bush_wide", "pos": [430, 284]}
 	],
 	"tree_line": {
 		"seed": 717,
@@ -63,6 +91,6 @@
 	},
 	"scatter": {
 		"seed": 7331,
-		"areas": [{"rect": [12, 40, 536, 270], "decor": {"decor.tuft": 40}, "props": {"rock_small": 4}}]
+		"areas": [{"rect": [12, 40, 130, 270], "decor": {"decor.tuft": 14}}, {"rect": [190, 40, 350, 270], "decor": {"decor.tuft": 18}}]
 	}
 }
