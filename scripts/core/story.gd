@@ -22,6 +22,13 @@ extends RefCounted
 ##   (rogue.exit, "when" rogue_met) is open from then on
 ##   trail() / way_mark() the scent trail (threaten) or the arrow (bribe)
 ##   goal_key()       "Follow the rogue."
+##
+## Part C, the rogue camp (rogue.camp_area, data/rogue_camp.json):
+##   Wick is there (absent() everywhere else); hiding behind the log
+##   (can_hide()) plays the cutscene (rogue.cutscene) that sets
+##   rogue_camp_found; goal_key() "Get back to camp and warn the deputy.";
+##   telling the deputy sets rogue_warned (data/dialogue/rook.json): the
+##   investigation is over and patrols come back. Wick stays where he is.
 
 const JsonData := preload("res://scripts/core/json_data.gd")
 const CONFIG_PATH := "res://data/story.json"
@@ -66,14 +73,33 @@ func border_marked(state, mates: Array) -> bool:
 	return true
 
 
-## Whether cat `id` is away from every area now.
-func absent(state, id: String) -> bool:
+## Whether cat `id` is away from area `area` now (the missing cat is only
+## in the rogue camp).
+func absent(state, id: String, area: String = "") -> bool:
+	if area != "" and area == camp_area():
+		return false
 	return id == missing_cat() and bool(state.get_flag("wick_missing"))
 
 
-## The rogue investigation is running (the deputy told the news).
+## The rogue investigation is running (the deputy told the news, and
+## hasn't been warned about the rogue camp yet).
 func investigating(state) -> bool:
-	return bool(state.get_flag("rogue_news"))
+	return bool(state.get_flag("rogue_news")) and not bool(state.get_flag("rogue_warned"))
+
+
+## The rogue camp's area id.
+func camp_area() -> String:
+	return str(rogue().get("camp_area", "rogue_camp"))
+
+
+## The cutscene file played from hiding.
+func cutscene_path() -> String:
+	return str(rogue().get("cutscene", ""))
+
+
+## Hiding behind the log plays the cutscene (once: until the camp is found).
+func can_hide(state) -> bool:
+	return bool(state.get_flag("rogue_met")) and not bool(state.get_flag("rogue_camp_found"))
 
 
 ## The deputy hands out no patrols while the story needs Fern elsewhere.
@@ -83,6 +109,10 @@ func blocks_patrols(state) -> bool:
 
 ## The story goal for the hud (a strings.json key), or "".
 func goal_key(state) -> String:
+	if bool(state.get_flag("rogue_warned")):
+		return ""
+	if bool(state.get_flag("rogue_camp_found")):
+		return str(rogue().get("goal_warn", "story.goal_warn"))
 	if bool(state.get_flag("rogue_met")):
 		return str(rogue().get("goal_follow", "story.goal_follow"))
 	if investigating(state):
@@ -154,9 +184,10 @@ func way_mark(state) -> Vector2:
 	return Vector2(float(p[0]), float(p[1])) if p.size() >= 2 else Vector2.INF
 
 
-## Fern met the rogue and should follow him out of the territory.
+## Fern met the rogue and should follow him out of the territory (until
+## she has found the rogue camp).
 func following(state) -> bool:
-	return bool(state.get_flag("rogue_met"))
+	return bool(state.get_flag("rogue_met")) and not bool(state.get_flag("rogue_camp_found"))
 
 
 ## What a save file keeps of the story beyond the flags.

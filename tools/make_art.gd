@@ -73,6 +73,10 @@ const PAINTED := {
 	"scent_ring": ["scent_ring", 26, 11],
 	"scent_marked": ["scent_ring", 26, 11, true],
 	"way_arrow": ["way_arrow"],
+	"rogue_bedding": ["bedding_scraps", 24, 10, 171],
+	"rogue_bedding_b": ["bedding_scraps", 20, 9, 172],
+	"rogue_bones": ["bones", 12, 8],
+	"rogue_clearing": ["worn_patch", 150, 56],
 }
 
 ## Each area's baked floor: art/<name>.png -> the area file it is painted

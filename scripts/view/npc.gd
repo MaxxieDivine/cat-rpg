@@ -63,6 +63,11 @@ func setup(npc: Dictionary, speaker: Dictionary, tuning: Dictionary) -> void:
 		_fidgets = spec.get("fidgets", [])
 		_fidget_after = float(spec.get("fidget_after_s", _fidget_after))
 		_idle = _phase
+		# A layout may give a cat another resting pose (Wick lying in the
+		# rogue camp: "rest": "sleep").
+		var rest_anim := str(npc.get("rest", ""))
+		if rest_anim != "":
+			cat.set_rest(rest_anim)
 		sprite = cat
 		add_child(sprite)
 		return

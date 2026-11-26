@@ -1,0 +1,26 @@
+{
+	"id": "rogue_camp",
+	"_note": "Played once when Fern hides behind the log in the rogue camp (Story Part C). Steps: see scripts/core/cutscene.gd. Vex and Slate are placeholder names.",
+	"steps": [
+		{"wait": 0.5},
+		{"camera": [404, 150], "s": 1.6},
+		{"move": "slate", "to": [424, 162], "speed": 26},
+		{"face": "vex", "dir": 1},
+		{"say": "slate", "expression": "annoyed", "text": "A Clan apprentice found me by the river. Sniffing around like they own the place."},
+		{"say": "vex", "text": "They think they do. Did you lead them here?"},
+		{"say": "slate", "text": "'Course not."},
+		{"say": "vex", "text": "Good. And our guest?"},
+		{"camera": [480, 120], "s": 1.0},
+		{"say": "slate", "expression": "happy", "text": "Still sulking. He fought hard for a scrawny thing."},
+		{"camera": [404, 150], "s": 1.0},
+		{"say": "vex", "text": "{name_wick} is worth more to us awake than hurt."},
+		{"say": "vex", "text": "He knows their patrol times, their borders, which elders are weak."},
+		{"say": "vex", "text": "The loners by the twoleg fences already listen to us. The old fox-den cats too."},
+		{"say": "vex", "expression": "happy", "text": "One Clan's worth of land, and every stray in the forest will follow us."},
+		{"say": "slate", "text": "And if the Clan comes for him?"},
+		{"say": "vex", "text": "Then we see how brave they really are. Let them come to us."},
+		{"camera": "player", "s": 1.4},
+		{"say": "fern", "expression": "sad", "text": "They're gathering loners... and they have {name_wick}. I have to warn {name_rook}."},
+		{"set": {"rogue_camp_found": true}}
+	]
+}

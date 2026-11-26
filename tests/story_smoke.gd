@@ -12,6 +12,12 @@ extends "res://tests/test_base.gd"
 ##   and leaves a scent trail;
 ## - gamepad: bribe him with the mouse (+ the red-fur question); he keeps
 ##   it and stays; the arrow shows the way.
+## Part C, the rogue camp:
+## - keyboard: "Stay out of sight...", Wick lying in the corner, the hedge
+##   ("Too risky..."), the log's Hide prompt, the cutscene (control locked,
+##   the camera goes over and back, Slate walks to Vex, every line), the
+##   goal, back home on foot to warn the deputy, patrols again, save hook;
+## - touch on a phone and a gamepad: hide and tap / press through.
 ## With a display (--shots=<dir>) it saves screenshots (story_*).
 
 const ScreenMetrics := preload("res://scripts/view/screen_metrics.gd")
@@ -389,6 +395,185 @@ func test_bribe_slate_by_gamepad() -> void:
 	r = await _converse(app, "pad", [])
 	check(r["lines"].contains("get lost"), "after: get lost (%s)" % r["lines"])
 	check(g.world_view.way_arrow.visible, "the arrow stays")
+	_close(app)
+
+
+# --- Part C
+
+
+## Fern following Slate, arrived in the rogue camp.
+func _in_rogue_camp(g: Control) -> void:
+	for k in ["wick_missing", "rogue_news", "rogue_met"]:
+		GameState.set_flag(k, true)
+	GameState.set_flag("rogue_choice", "question")
+	g.load_area(Story.camp_area(), "from_hunting_grounds_2")
+	await _frames(2)
+
+
+## Walks Fern from the entrance to the log until it has focus.
+func _walk_to_log(app: Control) -> void:
+	var g: Control = app.game
+	var w = g.world
+	var sp: Dictionary = w.spot_by_id("hide_log")
+	var target: Vector2 = sp["prompt"] + Vector2(0, 6)
+	for i in 400:
+		if w.focus_id == "hide_log":
+			break
+		var d: Vector2 = target - w.player_pos
+		w.player_pos += d.limit_length(1.5)
+		await tree.process_frame
+	check_eq(w.focus_id, "hide_log", "the log has the prompt")
+
+
+## Presses through the cutscene ("key", "pad" or "touch") until it ends.
+## Returns the lines shown and the furthest the camera went (world x).
+func _watch(app: Control, how: String) -> Dictionary:
+	var g: Control = app.game
+	var box: Control = g.dialogue
+	var lines: Array[String] = []
+	var furthest := 0.0
+	var until := Time.get_ticks_msec() + 30000
+	while g.in_cutscene() and Time.get_ticks_msec() < until:
+		furthest = maxf(furthest, g.camera_rect.get_center().x)
+		if box.is_open:
+			var t := GameState.format_text(str(box.line.get("text", "")))
+			if lines.is_empty() or lines[lines.size() - 1] != t:
+				lines.append(t)
+			match how:
+				"key":
+					_key(KEY_E)
+				"pad":
+					_pad(JOY_BUTTON_A)
+				"touch":
+					await _tap_at(app, app.metrics.safe_rect.get_center() - Vector2(0, 40))
+		await _frames(3)
+	check(not g.in_cutscene(), "the cutscene ends (%s)" % how)
+	return {"lines": " | ".join(lines), "n": lines.size(), "furthest": furthest}
+
+
+func test_rogue_camp_cutscene_by_keyboard() -> void:
+	var app: Control = await _start(DESKTOP)
+	var g: Control = app.game
+	_freeze_needs(70, 70)
+	await _in_rogue_camp(g)
+	check(g.message.visible and g.message.text == strings["story.stay_hidden"], "Stay out of sight... (%s)" % g.message.text)
+	for id in ["wick", "vex", "slate"]:
+		check(g.world_view.npc_nodes.has(id), "%s is drawn" % id)
+	check_eq(g.world_view.npc_nodes["wick"].cat.rest, "sleep", "Wick lies down")
+	# Walking into the open: stopped, and told.
+	Input.action_press("move_right")
+	await _until(func() -> bool: return g.message.text == strings["story.too_risky"], 4000)
+	Input.action_release("move_right")
+	check_eq(g.message.text, strings["story.too_risky"], "Too risky. Find somewhere to hide.")
+	check(g.world.player_pos.x < g.world.barriers[0]["rect"].position.x, "she stays in the entrance pocket")
+	# The log.
+	await _walk_to_log(app)
+	# (The label waits until the last line over Fern has faded.)
+	await _until(func() -> bool: return not g.message.visible, 4000)
+	await _frames(2)
+	check(g.prompt_label.visible and g.prompt_label.text == strings["story.hide_label"], "a 'Hide' label over the prompt")
+	if not is_headless():
+		await _settle()
+		_save(await _screen(), "story_log_desktop")
+	_key(KEY_E)
+	await _frames(2)
+	check(g.in_cutscene(), "hiding starts the cutscene")
+	check(g.world.hiding and g.world.crouching, "Fern crouches behind the log")
+	var at: Vector2 = g.world.player_pos
+	Input.action_press("move_left")
+	await _frames(20)
+	Input.action_release("move_left")
+	check(g.world.player_pos.distance_to(at) < 0.5, "no walking during the cutscene")
+	check(not g.touch.visible, "no touch controls")
+	await _frames(2)
+	check(not g.world_view.paw.visible and not g.prompt_label.visible, "no paw prompt or Hide label while hiding")
+	check(not g.goal_label.visible, "no goal line over the cutscene")
+	var shot := false
+	var box: Control = g.dialogue
+	await _until(func() -> bool: return box.is_open, 8000)
+	if not is_headless():
+		await _until(func() -> bool: return not box.is_typing(), 4000)
+		_save(await _screen(), "story_cutscene_desktop")
+		shot = true
+	var r := await _watch(app, "key")
+	var data := JsonData.load_dict(Story.cutscene_path())
+	var says: int = (data["steps"] as Array).filter(func(st): return st.has("say")).size()
+	check_eq(r["n"], says, "every line shown (%s)" % r["lines"])
+	check(r["lines"].contains("patrol times") and r["lines"].contains("Let them come to us"), "the overheard talk")
+	check(r["furthest"] > 340.0, "the camera went over to the rogues (%.0f)" % r["furthest"])
+	check(g.camera_rect.has_point(g.world.player_pos), "and back to Fern")
+	check(g.world.npc_by_id("slate")["pos"].distance_to(Vector2(424, 162)) < 1.0, "Slate walked over to Vex")
+	check(not g.world.hiding, "Fern can move again")
+	check_eq(GameState.get_flag("rogue_camp_found"), true, "rogue_camp_found")
+	await _frames(2)
+	check_eq(g.goal_label.text, strings["story.goal_warn"], "goal: warn the deputy")
+	check(g.world.spot_by_id("hide_log").is_empty() or not g.world.is_open(g.world.spot_by_id("hide_log")), "no hiding again")
+	# Home on foot through Hunting Grounds 2, then the deputy.
+	_place_near_exit(g, "hunting_grounds_2")
+	await _walk_until_area(app, "move_left", "hunting_grounds_2")
+	await _wait_travel(g)
+	check(g.world.npc_by_id("wick").is_empty(), "Wick stays behind")
+	g.load_area("camp", "from_hunting")
+	await _frames(2)
+	await _near(g, Patrols.deputy())
+	var lines := await _talk_by_keys(app)
+	var all := " | ".join(lines)
+	check(all.contains("What did you find?") and all.contains("Rogues have Wick"), "Fern warns him (%s)" % all)
+	check(all.contains("Larch"), "he takes it to the leader")
+	check_eq(GameState.get_flag("rogue_warned"), true, "rogue_warned")
+	await _frames(2)
+	check(not g.goal_label.visible, "the story's goal is done")
+	lines = await _talk_by_keys(app)
+	check(" ".join(lines).contains("patrol."), "Rook offers patrols again (%s)" % " | ".join(lines))
+	check(g.world.npc_by_id("wick").is_empty(), "Wick still isn't in camp")
+	# The save hook.
+	var saved := JSON.stringify(GameState.state.save_data())
+	GameState.reset()
+	GameState.state.load_save_data(JSON.parse_string(saved))
+	for k in ["rogue_camp_found", "rogue_warned", "wick_missing"]:
+		check_eq(GameState.get_flag(k), true, "loaded: %s" % k)
+	g.load_area(Story.camp_area(), "from_hunting_grounds_2")
+	await _frames(2)
+	check(not g.world.npc_by_id("wick").is_empty(), "loaded: Wick still in the rogue camp")
+	check(g.message.text != strings["story.stay_hidden"] or not g.message.visible, "no 'stay out of sight' once found")
+	_close(app)
+
+
+func test_rogue_camp_cutscene_by_touch() -> void:
+	var app: Control = await _start(TARGET_PHONE)
+	var g: Control = app.game
+	_freeze_needs(70, 70)
+	await _in_rogue_camp(g)
+	await _walk_to_log(app)
+	await _frames(2)
+	check(g.touch.visible and g.touch.highlight, "the paw button is lit at the log")
+	await _paw_button(app)
+	check(g.in_cutscene(), "the paw button hides Fern")
+	check(not g.touch.visible, "touch controls hidden")
+	await _until(func() -> bool: return g.dialogue.is_open, 8000)
+	if not is_headless():
+		await _until(func() -> bool: return not g.dialogue.is_typing(), 4000)
+		_save(await _screen(), "story_cutscene_phone")
+	var r := await _watch(app, "touch")
+	check(r["lines"].contains("Let them come to us"), "tapped through (%s)" % r["lines"])
+	check_eq(GameState.get_flag("rogue_camp_found"), true, "found")
+	await _frames(2)
+	check(g.touch.visible, "touch controls back")
+	_close(app)
+
+
+func test_rogue_camp_cutscene_by_gamepad() -> void:
+	var app: Control = await _start(DESKTOP)
+	var g: Control = app.game
+	_freeze_needs(70, 70)
+	await _in_rogue_camp(g)
+	await _walk_to_log(app)
+	_pad(JOY_BUTTON_A)
+	await _frames(2)
+	check(g.in_cutscene(), "South hides Fern")
+	var r := await _watch(app, "pad")
+	check(r["lines"].contains("Let them come to us"), "pressed through (%s)" % r["lines"])
+	check_eq(GameState.get_flag("rogue_camp_found"), true, "found")
 	_close(app)
 
 

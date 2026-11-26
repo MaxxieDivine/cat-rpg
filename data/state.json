@@ -14,6 +14,8 @@
 		"rogue_met": {"type": "bool"},
 		"rogue_choice": {"type": "string", "values": ["question", "threaten", "bribe"]},
 		"rogue_red": {"type": "bool"},
+		"rogue_camp_found": {"type": "bool"},
+		"rogue_warned": {"type": "bool"},
 		"carrying": {"type": "bool"}
 	},
 	"text_vars": {"patrol_mates": "your clanmates"},

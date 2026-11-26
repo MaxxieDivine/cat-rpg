@@ -501,6 +501,72 @@ func den_nest(w: int, h: int, mine: bool = false) -> Image:
 	return img
 
 
+## Rogue bedding: torn, flattened scraps of moss with bare earth showing
+## through, a few loose bits around (seeded, so it is deterministic).
+func bedding_scraps(w: int, h: int, seed: int) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var leaf := ramp("leaf")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var blobs: Array = []
+	for i in 3:
+		blobs.append([Vector2(rng.randf_range(w * 0.25, w * 0.75), rng.randf_range(h * 0.35, h * 0.65)),
+			Vector2(rng.randf_range(w * 0.18, w * 0.3), rng.randf_range(h * 0.28, h * 0.42))])
+	for y in h:
+		for x in w:
+			var p := Vector2(x, y) + Vector2(0.5, 0.5)
+			var best := 9.0
+			for b in blobs:
+				best = minf(best, ((p - b[0]) / b[1]).length())
+			if best > 1.0:
+				continue
+			if best > 0.7 and dither(x, y) < (best - 0.7) * 3.0:
+				continue
+			var col: Color = leaf[1] if dither(x + 3, y) < 0.55 else leaf[2]
+			if best < 0.45 and dither(x, y + 1) < 0.35:
+				col = c("dirt_edge")
+			elif y < h / 2 and dither(x, y) < 0.2:
+				col = leaf[3]
+			img.set_pixel(x, y, col)
+	for i in 5:
+		var q := Vector2i(rng.randi_range(0, w - 1), rng.randi_range(0, h - 1))
+		if img.get_pixelv(q).a == 0.0:
+			img.set_pixelv(q, leaf[2])
+	return img
+
+
+## Old bones on the ground: a long bone and a short one, pale with an ink
+## outline.
+func bones(w: int, h: int) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var fill := {}
+	var light := c("flower.white")
+	var shade := c("stone.3")
+	# Long bone, left-right, with knobbed ends.
+	var y0 := h - 3
+	for x in range(2, w - 3):
+		fill[Vector2i(x, y0)] = light
+	for p in [Vector2i(1, y0 - 1), Vector2i(1, y0 + 1), Vector2i(w - 3, y0 - 1), Vector2i(w - 3, y0 + 1)]:
+		fill[p] = shade
+	# Short bone, slanting.
+	for i in 4:
+		fill[Vector2i(3 + i, 2 + i / 2)] = light
+	fill[Vector2i(2, 1)] = shade
+	fill[Vector2i(7, 4)] = shade
+	for y in h:
+		for x in w:
+			var p := Vector2i(x, y)
+			if fill.has(p):
+				continue
+			for d in _N4:
+				if fill.has(p + d):
+					img.set_pixel(x, y, c("ink"))
+					break
+	for p: Vector2i in fill:
+		img.set_pixelv(p, fill[p])
+	return img
+
+
 ## A fallen log lying left-right, with a cut end showing rings on the right.
 func log_art(w: int, h: int) -> Image:
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
