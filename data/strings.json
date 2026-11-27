@@ -61,5 +61,21 @@
 	"camp.leaders_rock": "The leader's rock. Only the leader speaks from up there.",
 	"camp.leaders_den": "You should wait to be invited.",
 	"den.apprentices.name": "Apprentices' den",
-	"den.your_nest": "Your nest."
+	"den.your_nest": "Your nest.",
+	"story.goal_rest": "Rest in the apprentices' den.",
+	"story.goal_rescue": "Sneak out and rescue {name_wick}.",
+	"story.sleep_label": "Sleep",
+	"story.sleep_message": "You can't stop thinking about {name_wick}...",
+	"story.stay_in_camp": "{name_rook} said to stay in camp. Rest first.",
+	"story.sneak_label": "Sneak to {name_wick}",
+	"story.home_with_wick": "You slip out together and run all the way home.",
+	"story.dragged_away": "Slate drags you off by the scruff. Everything goes dark...",
+	"story.prison_wake": "You wake on sour bedding. This isn't your den...",
+	"story.prison_bedding": "Flattened bedding. It smells of strangers.",
+	"story.prison_name": "Prisoner den",
+	"story.to_be_continued": "To be continued: the escape is coming soon.",
+	"scene_select.title": "Scene select",
+	"scene_select.button": "Scene select",
+	"scene_select.close": "Close",
+	"debug.scenes": "Scenes"
 }

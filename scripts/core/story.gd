@@ -28,7 +28,18 @@ extends RefCounted
 ##   (can_hide()) plays the cutscene (rogue.cutscene) that sets
 ##   rogue_camp_found; goal_key() "Get back to camp and warn the deputy.";
 ##   telling the deputy sets rogue_warned (data/dialogue/rook.json): the
-##   investigation is over and patrols come back. Wick stays where he is.
+##   investigation is over. Wick stays where he is.
+##
+## Rescuing Wick, Part A (data/story.json "rescue"):
+##   telling the deputy also sets told_rook: goal "Rest in the apprentices'
+##   den." and no patrols until the rescue is over (rescue set)
+##   can_rest() / rest()   sleeping in her nest wakes Fern at night (flag night)
+##   sneaking()            night, rescue not settled: the rogue camp's log
+##                         lets her watch (log_watched), then sneak: fate()
+##                         flips the coin (lucky_chance, own seeded RNG)
+##   lucky = the lucky cutscene ends with rescue = rescued and finish_rescue()
+##   (Wick home, morning); caught = rescue = captured, the prisoner den;
+##   escape_placeholder() walking out of it (Part A stand-in for Part D).
 
 const JsonData := preload("res://scripts/core/json_data.gd")
 const CONFIG_PATH := "res://data/story.json"
@@ -37,6 +48,10 @@ var config: Dictionary = {}
 ## Border patrols marked in full this game (counted when the last spot is
 ## marked, so the one that reaches the deputy counts).
 var border_patrols := 0
+## Odds that sneaking from the log goes unseen (Part A's coin flip).
+var lucky_chance := 0.5
+## The coin flip's own seeded RNG (gameplay randomness, saved).
+var rng := RandomNumberGenerator.new()
 
 
 func _init(cfg: Dictionary = {}) -> void:
@@ -46,6 +61,12 @@ func _init(cfg: Dictionary = {}) -> void:
 
 func reset() -> void:
 	border_patrols = 0
+	lucky_chance = clampf(float(rescue().get("lucky_chance", 0.5)), 0.0, 1.0)
+	rng.seed = int(rescue().get("seed", 1))
+
+
+func rescue() -> Dictionary:
+	return config.get("rescue", {})
 
 
 func rogue() -> Dictionary:
@@ -102,13 +123,71 @@ func can_hide(state) -> bool:
 	return bool(state.get_flag("rogue_met")) and not bool(state.get_flag("rogue_camp_found"))
 
 
-## The deputy hands out no patrols while the story needs Fern elsewhere.
+## The deputy hands out no patrols while the story needs Fern elsewhere
+## (the investigation, then until the rescue is settled).
 func blocks_patrols(state) -> bool:
-	return investigating(state)
+	return investigating(state) or rescue_pending(state)
+
+
+## Fern told the deputy and the rescue isn't settled yet.
+func rescue_pending(state) -> bool:
+	return bool(state.get_flag("told_rook")) and state.get_flag("rescue") == null
+
+
+## The night flag (the night tint over every area).
+func is_night(state) -> bool:
+	return bool(state.get_flag("night"))
+
+
+## Sleeping in her nest now wakes her at night.
+func can_rest(state) -> bool:
+	return rescue_pending(state) and not is_night(state)
+
+
+## She slept: it's the middle of the night.
+func rest(state) -> void:
+	state.set_flag("night", true)
+
+
+## Out at night to get Wick (until caught or home).
+func sneaking(state) -> bool:
+	return rescue_pending(state) and is_night(state)
+
+
+## The coin flip when she leaves the log: "lucky" or "caught".
+func fate() -> String:
+	return "lucky" if rng.randf() < lucky_chance else "caught"
+
+
+## The cutscene for hiding at the log at night, or for a fate.
+func night_cutscene(which: String) -> String:
+	return str(rescue().get(which + "_cutscene", ""))
+
+
+## The lucky cutscene ended: Wick is home, the night is over.
+func finish_rescue(state) -> void:
+	state.set_flag("rescue", "rescued")
+	state.set_flag("wick_missing", false)
+	state.set_flag("night", false)
+
+
+## Part A stand-in: walking out of the prisoner den goes home ("to be
+## continued"), morning.
+func escape_placeholder(state) -> void:
+	state.set_flag("rescue", "escaped")
+	state.set_flag("night", false)
+
+
+func prison_area() -> String:
+	return str(rescue().get("prison_area", "prisoner_den"))
 
 
 ## The story goal for the hud (a strings.json key), or "".
 func goal_key(state) -> String:
+	if sneaking(state):
+		return str(rescue().get("goal_rescue", "story.goal_rescue"))
+	if rescue_pending(state):
+		return str(rescue().get("goal_rest", "story.goal_rest"))
 	if bool(state.get_flag("rogue_warned")):
 		return ""
 	if bool(state.get_flag("rogue_camp_found")):
@@ -194,8 +273,10 @@ func following(state) -> bool:
 ## TODO(save): the save milestone (1.5) writes this next to
 ## GameState.save_data() and calls load_save_data() on load.
 func save_data() -> Dictionary:
-	return {"border_patrols": border_patrols}
+	return {"border_patrols": border_patrols, "rng_state": str(rng.state)}
 
 
 func load_save_data(d: Dictionary) -> void:
 	border_patrols = maxi(0, int(d.get("border_patrols", 0)))
+	if d.has("rng_state"):
+		rng.state = int(str(d["rng_state"]))

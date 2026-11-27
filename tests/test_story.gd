@@ -506,17 +506,21 @@ func test_warning_the_deputy() -> void:
 	check_eq(story.goal_key(gs), "", "start: no goal")
 	var lines := _talk("res://data/dialogue/rook.json", flags)
 	var all := " | ".join(lines)
-	check(story.goal_key(gs) == "" and gs.get_flag("rogue_warned") == true, "warned: goal done")
-	check(all.contains("Rogues have Wick") and all.contains("loners"), "Fern tells him (%s)" % all)
-	check(all.contains("Larch"), "he takes it to the leader")
-	check(not story.investigating(gs) and not story.blocks_patrols(gs), "patrols come back")
+	check(gs.get_flag("rogue_warned") == true and gs.get_flag("told_rook") == true, "warned and told")
+	check_eq(story.goal_key(gs), str(cfg["rescue"]["goal_rest"]), "goal: rest")
+	check(all.contains("where they're keeping Wick") and all.contains("loners"), "Fern tells him (%s)" % all)
+	check(all.contains("past the border? Alone?") and all.contains("speak to Larch") and all.contains("Go rest. And stay in camp."), "he stalls (%s)" % all)
+	check(not story.investigating(gs) and story.blocks_patrols(gs), "no patrols until the rescue is over")
 	check(story.absent(gs, "wick"), "Wick stays in the rogue camp")
-	# Afterwards: the normal offers again.
+	# Once the rescue is settled: the normal offers again.
 	var gs2 = GameStateCore.new()
 	for k: String in flags:
 		gs2.set_flag(k, flags[k])
 	gs2.set_flag("rogue_warned", true)
+	gs2.set_flag("told_rook", true)
+	gs2.set_flag("rescue", "rescued")
 	gs2.set_flag("patrol_offer", "hunting")
+	check(not story.blocks_patrols(gs2), "patrols after the rescue")
 	gs = gs2
 	check(_talk("res://data/dialogue/rook.json", {})[0].contains("Hunting patrol"), "a patrol offer again")
 
@@ -528,6 +532,9 @@ func test_goals_through_the_story() -> void:
 		[{"rogue_met": true}, "story.goal_follow"],
 		[{"rogue_camp_found": true}, "story.goal_warn"],
 		[{"rogue_warned": true}, ""],
+		[{"told_rook": true}, "story.goal_rest"],
+		[{"night": true}, "story.goal_rescue"],
+		[{"rescue": "captured"}, ""],
 	]
 	gs = GameStateCore.new()
 	for e in expect:
@@ -539,5 +546,6 @@ func test_goals_through_the_story() -> void:
 	var saved: Dictionary = JSON.parse_string(JSON.stringify(gs.save_data()))
 	var gs2 = GameStateCore.new()
 	gs2.load_save_data(saved)
-	for k in ["rogue_news", "rogue_met", "rogue_camp_found", "rogue_warned"]:
+	for k in ["rogue_news", "rogue_met", "rogue_camp_found", "rogue_warned", "told_rook", "night"]:
 		check_eq(gs2.get_flag(k), true, "loaded %s" % k)
+	check_eq(gs2.get_flag("rescue"), "captured", "loaded rescue")

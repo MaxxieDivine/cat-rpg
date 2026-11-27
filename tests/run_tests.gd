@@ -2,7 +2,7 @@ extends SceneTree
 ## Runs every suite in SUITES. Exit code is non-zero if any test fails.
 ##   godot --headless --path . --script res://tests/run_tests.gd
 ##   xvfb-run -a godot --path . --script res://tests/run_tests.gd -- --shots=<dir>
-## Optional: --only=<substring> runs matching tests only.
+## Optional: --only=<substring> runs matching tests only (test or suite file name).
 
 const SUITES := [
 	"res://tests/test_assets.gd",
@@ -23,6 +23,7 @@ const SUITES := [
 	"res://tests/test_den.gd",
 	"res://tests/test_patrol.gd",
 	"res://tests/test_story.gd",
+	"res://tests/test_rescue.gd",
 	"res://tests/test_app_focus.gd",
 	"res://tests/app_smoke.gd",
 	"res://tests/dialogue_smoke.gd",
@@ -34,6 +35,7 @@ const SUITES := [
 	"res://tests/den_smoke.gd",
 	"res://tests/patrol_smoke.gd",
 	"res://tests/story_smoke.gd",
+	"res://tests/rescue_smoke.gd",
 	"res://tests/perf_smoke.gd",
 ]
 
@@ -68,7 +70,7 @@ func _run() -> void:
 			continue
 		for m in script.get_script_method_list():
 			var name: String = m["name"]
-			if not name.begins_with("test_") or (only != "" and not name.contains(only)):
+			if not name.begins_with("test_") or (only != "" and not name.contains(only) and not path.get_file().contains(only)):
 				continue
 			var suite: RefCounted = script.new()
 			suite.tree = self

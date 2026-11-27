@@ -1,0 +1,10 @@
+{
+	"_note": "Scene select (dev tool, scripts/core/scene_presets.gd, menu scripts/view/scene_select.gd): jump straight to a story point. Shown while the debug overlay is on (debug builds, F3, three corner taps, ?debug=1): a 'Scene select' button on the title screen, F1 or the 'Scenes' debug button in the game. Each preset starts a new game, then sets: flags (GameState; 'base' = another preset whose flags come first), needs (hunger / thirst), time (time of day 0..1), story (Story.load_save_data: border_patrols), area + spawn (or pos + facing in that area), and optionally 'wake' (a strings.json key: arrive through a fade with that line on black, as if just waking). A new story point is one more line.",
+	"presets": [
+		{"id": "camp_day", "label": "Camp, day", "area": "camp", "spawn": "start"},
+		{"id": "after_rogue_camp", "label": "After the rogue camp", "flags": {"wick_missing": true, "rogue_news": true, "rogue_met": true, "rogue_choice": "question", "rogue_camp_found": true}, "story": {"border_patrols": 1}, "area": "camp", "pos": [478, 176], "facing": 1},
+		{"id": "rest", "label": "Rest for the night", "base": "after_rogue_camp", "flags": {"rogue_warned": true, "told_rook": true}, "area": "apprentices_den", "spawn": "inside"},
+		{"id": "night_log", "label": "Night: at the log", "base": "rest", "flags": {"night": true, "log_watched": true}, "area": "rogue_camp", "pos": [112, 201], "facing": 1},
+		{"id": "prisoner_den", "label": "Prisoner den", "base": "night_log", "flags": {"rescue": "captured"}, "area": "prisoner_den", "spawn": "nest", "wake": "story.prison_wake"}
+	]
+}

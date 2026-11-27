@@ -16,7 +16,8 @@ extends "res://tests/test_base.gd"
 ## - keyboard: "Stay out of sight...", Wick lying in the corner, the hedge
 ##   ("Too risky..."), the log's Hide prompt, the cutscene (control locked,
 ##   the camera goes over and back, Slate walks to Vex, every line), the
-##   goal, back home on foot to warn the deputy, patrols again, save hook;
+##   goal, back home on foot to warn the deputy (he stalls: "Go rest."),
+##   the goal turns to resting, no patrols yet, save hook;
 ## - touch on a phone and a gamepad: hide and tap / press through.
 ## With a display (--shots=<dir>) it saves screenshots (story_*).
 
@@ -518,19 +519,20 @@ func test_rogue_camp_cutscene_by_keyboard() -> void:
 	await _near(g, Patrols.deputy())
 	var lines := await _talk_by_keys(app)
 	var all := " | ".join(lines)
-	check(all.contains("What did you find?") and all.contains("Rogues have Wick"), "Fern warns him (%s)" % all)
-	check(all.contains("Larch"), "he takes it to the leader")
+	check(all.contains("What did you find?") and all.contains("where they're keeping Wick"), "Fern warns him (%s)" % all)
+	check(all.contains("past the border") and all.contains("speak to Larch") and all.contains("Go rest"), "he stalls (%s)" % all)
 	check_eq(GameState.get_flag("rogue_warned"), true, "rogue_warned")
+	check_eq(GameState.get_flag("told_rook"), true, "told_rook")
 	await _frames(2)
-	check(not g.goal_label.visible, "the story's goal is done")
+	check_eq(g.goal_label.text, strings["story.goal_rest"], "goal: rest in the den")
 	lines = await _talk_by_keys(app)
-	check(" ".join(lines).contains("patrol."), "Rook offers patrols again (%s)" % " | ".join(lines))
+	check(lines.size() == 1 and lines[0].contains("I said rest"), "Rook only says to rest (%s)" % " | ".join(lines))
 	check(g.world.npc_by_id("wick").is_empty(), "Wick still isn't in camp")
 	# The save hook.
 	var saved := JSON.stringify(GameState.state.save_data())
 	GameState.reset()
 	GameState.state.load_save_data(JSON.parse_string(saved))
-	for k in ["rogue_camp_found", "rogue_warned", "wick_missing"]:
+	for k in ["rogue_camp_found", "rogue_warned", "wick_missing", "told_rook"]:
 		check_eq(GameState.get_flag(k), true, "loaded: %s" % k)
 	g.load_area(Story.camp_area(), "from_hunting_grounds_2")
 	await _frames(2)

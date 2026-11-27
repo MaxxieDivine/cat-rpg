@@ -640,6 +640,12 @@ func _sync_time() -> void:
 		g = day.blend(_pal_grade("afternoon"), _pal_grade("dusk"), _pal_grade("night"))
 		night = day.night_amount()
 		dayness = day.day_amount()
+	if world.is_night:
+		# The story's night (Rescuing Wick): the area's night grade, tinted
+		# darker blue. A stand-in until real day / night lighting.
+		g = _pal_grade("night") * night_tint
+		night = 1.0
+		dayness = 0.0
 	grade.color = g
 	if pond != null and pond.material != null:
 		(pond.material as ShaderMaterial).set_shader_parameter("night", night)
@@ -656,6 +662,11 @@ func _sync_time() -> void:
 	for c in clouds:
 		c.modulate.a = dayness
 	bird.modulate.a = dayness
+
+
+## The story night's extra tint over the night grade (game.gd sets it
+## from data/story.json rescue.tint).
+var night_tint := Color(0.72, 0.77, 1.0)
 
 
 func _pal_grade(stage: String) -> Color:

@@ -71,8 +71,10 @@ func setup(w) -> void:
 
 ## The settings as den_layout.gd takes them.
 func settings() -> Dictionary:
-	return {"size": size_name, "floor_color": "#" + floor_color.to_html(false), "walls": wall_material,
-		"nests": nest_count, "player_nest": player_nest}
+	var out: Dictionary = world.interior["settings"].duplicate() if world != null else {}
+	out.merge({"size": size_name, "floor_color": "#" + floor_color.to_html(false), "walls": wall_material,
+		"nests": nest_count, "player_nest": player_nest}, true)
+	return out
 
 
 func _changed() -> void:
@@ -95,7 +97,7 @@ func rebuild() -> void:
 		var n: Dictionary = lay["nests"][i]
 		var s := Sprite2D.new()
 		s.name = "Nest_player" if n["mine"] else "Nest_%d" % i
-		s.texture = AssetCatalog.texture("den.nest_mine" if n["mine"] else "den.nest")
+		s.texture = AssetCatalog.texture("den.nest_mine" if n.get("feather", n["mine"]) else "den.nest")
 		s.centered = false
 		var r: Rect2 = n["rect"]
 		s.position = (r.get_center() - s.texture.get_size() / 2.0).round()

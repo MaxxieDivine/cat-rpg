@@ -1,0 +1,16 @@
+{
+	"id": "night_caught",
+	"_note": "Rescuing Wick, Part A: the coin flip went badly. Slate spots Fern past the hedge and drags her to the prisoner den (then: a fade there, she wakes on its bedding). Parts B / C replace the coin flip with real stealth.",
+	"steps": [
+		{"move": "fern", "to": [176, 188], "speed": 28},
+		{"move": "fern", "to": [214, 196], "speed": 28},
+		{"face": "slate", "dir": -1},
+		{"say": "slate", "expression": "annoyed", "text": "Well, well. Look what crept out of the bushes."},
+		{"move": "slate", "to": [238, 194], "speed": 120},
+		{"face": "fern", "dir": 1},
+		{"say": "fern", "expression": "sad", "text": "Let go of me!"},
+		{"say": "vex", "text": "Another little Clan spy. Put it with the others."},
+		{"set": {"rescue": "captured"}}
+	],
+	"then": {"area": "prisoner_den", "spawn": "nest", "message": "story.dragged_away", "lie": true, "wake": true}
+}

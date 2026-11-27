@@ -81,6 +81,20 @@ extends Control
 ## control, the camera follows the script, lines advance by tap / key /
 ## pad (_on_advance()); it sets rogue_camp_found.
 ##
+## Rescuing Wick, Part A: telling the deputy sets told_rook ("Rest in the
+## apprentices' den."); Fern's nest then offers "Sleep" (rest_in_nest()):
+## she lies down, a line shows on black and she wakes at night (flag night:
+## World.is_night, the view's night tint, in every area). At night the
+## rogue camp's log hides her again (a short look at Wick and Slate, sets
+## log_watched), then "Sneak to Wick" flips Story's coin (sneak()): the
+## lucky cutscene (she wakes Wick, both sneak home) or the caught one
+## (Slate drags her to the prisoner den). A cutscene's "then" is a fade
+## somewhere with a line on black (travel.scene()). Walking out of the
+## prisoner den is Part A's placeholder ("To be continued").
+##
+## Scene select (app.gd, scene_select.gd): jump_to() starts a new game and
+## sets up a story point from data/scene_select.json.
+##
 ## Time of day (scripts/core/day_cycle.gd): after the last of the three
 ## conversations, afternoon turns to dusk and night; the world view, the
 ## music and the ambience follow it. Sound (sound.gd) is created here, after
@@ -103,6 +117,7 @@ const Areas := preload("res://scripts/core/areas.gd")
 const Travel := preload("res://scripts/core/travel.gd")
 const NameEditor := preload("res://scripts/view/name_editor.gd")
 const Cutscene := preload("res://scripts/core/cutscene.gd")
+const ScenePresets := preload("res://scripts/core/scene_presets.gd")
 
 ## The Name Editor opened or closed (app.gd hides the corner buttons under it).
 signal naming_changed(open: bool)
@@ -129,6 +144,8 @@ var view_size := Vector2i(480, 270)
 ## The part of the world on screen (world pixels).
 var camera_rect := Rect2()
 var paused := false
+## The scene select menu is up (app.gd): the world waits.
+var held := false
 ## "touch" or "keys": the last kind of input used. Touch controls hide while
 ## the player uses a keyboard or gamepad.
 var last_input := ""
@@ -183,13 +200,7 @@ func _ready() -> void:
 	areas = Areas.new()
 	travel = Travel.new(tuning)
 	day = DayCycle.new(tuning.get("time_of_day", {}))
-	# A new game: fresh flags and bonds, nothing mid-conversation.
-	GameState.reset()
-	DialogueManager.stop()
-	Needs.reset()
-	Player.reset(areas.start_area(), "start")
-	Patrols.reset()
-	Story.reset()
+	_new_game_state()
 
 	viewport = SubViewport.new()
 	viewport.name = "WorldViewport"
@@ -303,6 +314,69 @@ func _ready() -> void:
 	fade_hint = _pixel_label("FadeHint", int(tuning.get("needs_hud", {}).get("message_font", 18)) - 4)
 	fade_hint.modulate = Color(1, 1, 1, 0.7)
 	fade.add_child(fade_hint)
+
+
+## A new game: fresh flags and bonds, nothing mid-conversation.
+func _new_game_state() -> void:
+	GameState.reset()
+	DialogueManager.stop()
+	Needs.reset()
+	Player.reset(areas.start_area(), "start")
+	Patrols.reset()
+	Story.reset()
+
+
+## Scene select: a new game set up at story point `id`
+## (data/scene_select.json). False if there is no such preset or area.
+func jump_to(id: String) -> bool:
+	var p: Dictionary = ScenePresets.new().resolved(id)
+	if p.is_empty() or not areas.has(str(p.get("area", ""))):
+		push_warning("game: no scene preset '%s'" % id)
+		return false
+	_new_game_state()
+	ScenePresets.apply_flags(p, GameState.state)
+	var nd: Dictionary = p.get("needs", {})
+	for which in ["hunger", "thirst"]:
+		if nd.has(which):
+			Needs.set_value(which, int(nd[which]))
+	if p.has("story"):
+		Story.load_save_data(p["story"])
+	Patrols.sync()
+	travel = Travel.new(tuning)
+	day = DayCycle.new(tuning.get("time_of_day", {}))
+	if p.has("time"):
+		day.set_t(float(p["time"]))
+	cutscene = null
+	_speaker = ""
+	_talk_npc = ""
+	_message_t = 0.0
+	if dialogue.is_open:
+		dialogue.close()
+	var area := str(p["area"])
+	var spawn := str(p.get("spawn", "start"))
+	load_area(area, spawn)
+	if p.get("pos") is Array:
+		world.player_pos = _vec(p["pos"])
+		world.player_vel = Vector2.ZERO
+		world.facing = 1 if int(p.get("facing", 1)) >= 0 else -1
+		world.reset_trail()
+		world._update_focus()
+	world_view.pose = ""
+	if p.has("wake"):
+		# Arrive as if just waking: from black, with the line on it.
+		travel.wake_from_black(GameState.format_text(GameStrings.text(str(p["wake"]))))
+		world_view.pose = "down"
+	touch.reset()
+	_cam_center = Vector2.INF
+	if metrics != null:
+		_update_camera(0.0)
+		world_view.camera_rect = camera_rect
+		world_view.sync()
+	_update_touch_visibility()
+	_update_fade()
+	_place_overlays()
+	GameState.changed.emit()
+	return true
 
 
 ## A centred Pixelify label in the paper colour (the "fi" ligature off, as
@@ -440,6 +514,7 @@ func load_area(id: String, spawn_name: String) -> bool:
 		spawn_name = "start"
 	w.hunt_tuning = Hunting.tuning
 	w.player_state = Player.state
+	w.is_night = Story.is_night()
 	w.place_at_spawn(spawn_name)
 	# Story beats: a missing cat is in no area (Story autoload).
 	for npc: Dictionary in w.npcs.duplicate():
@@ -455,6 +530,7 @@ func load_area(id: String, spawn_name: String) -> bool:
 	world_view.name = "WorldView"
 	viewport.add_child(world_view)
 	viewport.move_child(world_view, 0)
+	world_view.night_tint = Color(str(Story.rescue().get("tint", "#d4dcff")))
 	world_view.setup(world, tuning, day)
 	world_view.rustled.connect(_on_rustle)
 	var lim: Rect2 = world.camera_bounds()
@@ -467,8 +543,9 @@ func load_area(id: String, spawn_name: String) -> bool:
 	_cam_easing = false
 	Player.arrive(id, spawn_name)
 	# "Stay out of sight..." on arriving in the rogue camp (layout on_arrive).
-	if not w.arrive_message.is_empty() and w.is_open(w.arrive_message):
-		say(GameState.format_text(GameStrings.text(str(w.arrive_message.get("message", "")))))
+	var arrive: Dictionary = w.arrival()
+	if not arrive.is_empty():
+		say(GameState.format_text(GameStrings.text(str(arrive.get("message", "")))))
 	if metrics != null:
 		_update_camera(0.0)
 		world_view.camera_rect = camera_rect
@@ -609,7 +686,7 @@ static func _vec(a: Variant) -> Vector2:
 
 
 func _process(dt: float) -> void:
-	if paused or metrics == null:
+	if paused or held or metrics == null:
 		return
 	if naming():
 		return  # the world waits behind the Name Editor
@@ -662,6 +739,8 @@ func _on_exit(ev: Dictionary) -> void:
 	if not areas.has(ev["to"]):
 		push_warning("game: exit '%s' leads to unknown area '%s'" % [ev["id"], ev["to"]])
 		return
+	if world.id == Story.prison_area() and _prison_placeholder():
+		return
 	var cfg: Dictionary = Patrols.config()
 	if world.id == str(cfg.get("camp", "camp")) and ev["id"] == str(cfg.get("entrance_exit", "")):
 		Patrols.left_camp()
@@ -671,10 +750,50 @@ func _on_exit(ev: Dictionary) -> void:
 		_update_fade()
 
 
+## Part A's stand-in for escaping the prisoner den (Part D): walking out
+## shows "To be continued" on black and goes home; morning.
+func _prison_placeholder() -> bool:
+	var rs: Dictionary = Story.rescue()
+	var to: Array = rs.get("escape_to", ["camp", "start"])
+	if not travel.scene(str(to[0]), str(to[1]), GameState.format_text(GameStrings.text(str(rs.get("escape_message", "")))), false, false):
+		return false
+	Story.escape_placeholder()
+	_after_travel_start()
+	return true
+
+
+## Sleeping in her nest (told the deputy, not night yet): she lies down,
+## "You can't stop thinking about Wick..." on black, and wakes at night.
+func rest_in_nest() -> bool:
+	if not Story.can_rest() or travel.busy():
+		return false
+	var rs: Dictionary = Story.rescue()
+	if not travel.scene(str(rs.get("rest_area", "apprentices_den")), str(rs.get("rest_spawn", "nest")), GameState.format_text(GameStrings.text(str(rs.get("sleep_message", ""))))):
+		return false
+	Story.rest()
+	world.player_vel = Vector2.ZERO
+	world.running = false
+	world_view.pose = "down"
+	_after_travel_start()
+	return true
+
+
+## A fade started: no control, no touch controls, the overlay up.
+func _after_travel_start() -> void:
+	touch.reset()
+	_message_t = 0.0
+	_update_touch_visibility()
+	_update_fade()
+	_place_overlays()
+
+
 func _handle_travel(events: Array[Dictionary]) -> void:
 	for ev in events:
 		match ev["type"]:
 			"load":
+				# Lines from before the fade are gone; the new area's arrival
+				# line ("Stay out of sight...") stays.
+				_message_t = 0.0
 				if ev["collapsed"]:
 					# Carried home: rested, needs restored, nothing in her mouth.
 					Needs.needs.restore()
@@ -688,11 +807,12 @@ func _handle_travel(events: Array[Dictionary]) -> void:
 					_update_camera(0.0)
 				else:
 					load_area(ev["area"], ev["spawn"])
-				if ev["collapsed"]:
+				if ev["collapsed"] or (ev.get("kind", "") == "scene" and travel.wakes()):
 					world_view.pose = "down"
-				_message_t = 0.0
 			"wake":
 				world_view.pose = "wake"
+			"message_done":
+				world_view.pose = ""
 			"done":
 				_update_touch_visibility()
 		_place_overlays()
@@ -752,7 +872,7 @@ func _update_fade() -> void:
 	fade_message.visible = show_msg
 	fade_hint.visible = show_msg and travel.phase_time() >= travel.min_message_s
 	if show_msg and metrics != null:
-		fade_message.text = Player.collapse_message
+		fade_message.text = Player.collapse_message if travel.kind == "collapse" else travel.message
 		var touchy: bool = last_input == "touch" or (last_input == "" and ScreenMetrics.is_touch())
 		fade_hint.text = GameStrings.text("collapse.continue_touch" if touchy else "collapse.continue_keys")
 		var safe: Rect2 = metrics.safe_rect
@@ -775,7 +895,10 @@ func _update_sound() -> void:
 			# Stalking is quieter.
 			sound.footstep(world.surface(), -12.0 if world.crouching else 0.0)
 	sound.set_indoors(world.is_indoors())
-	sound.set_time(day.day_amount(), day.night_amount())
+	if world.is_night:
+		sound.set_time(0.0, 1.0)
+	else:
+		sound.set_time(day.day_amount(), day.night_amount())
 	var r := float(world.pond.get("lap_radius", 40)) if not world.pond.is_empty() else 1.0
 	sound.set_pond_near(1.0 - clampf(world.pond_distance() / r, 0.0, 1.0))
 
@@ -810,7 +933,7 @@ func _is_continue(event: InputEvent) -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if paused or travel.busy() or naming():
+	if paused or held or travel.busy() or naming():
 		return
 	if is_talking():
 		_dialogue_input(event)
@@ -910,6 +1033,8 @@ func _handle(events: Array[Dictionary]) -> void:
 				if sound != null:
 					sound.play("drink")
 			"message":
+				if str(ev.get("spot", "")) == _rest_spot() and rest_in_nest():
+					continue
 				say(GameState.format_text(GameStrings.text(ev["key"])))
 			"exit":
 				_on_exit(ev)
@@ -922,6 +1047,8 @@ func _handle(events: Array[Dictionary]) -> void:
 				world_view.remove_npc(ev["id"])
 			"hide":
 				hide_behind(ev)
+			"sneak":
+				sneak(ev)
 
 
 ## Quieter with distance from Fern; -80 dB (silent) past hunt.hear_px.
@@ -951,16 +1078,38 @@ func in_cutscene() -> bool:
 	return cutscene != null
 
 
+## Fern's nest spot in her den (sleeping there starts the night).
+func _rest_spot() -> String:
+	return str(Story.rescue().get("rest_spot", "my_nest"))
+
+
 ## Hiding behind the rogue camp's log (a spot with "event": "hide"): Fern
 ## crouches there and the overheard talk plays (Story.cutscene_path()).
 ## Only once; afterwards there's nothing more to hear.
 func hide_behind(ev: Dictionary) -> bool:
 	if in_cutscene() or travel.busy():
 		return false
-	if not Story.can_hide():
+	var path: String = Story.cutscene_path()
+	if Story.sneaking():
+		# Back at night: a look at Wick and his guard from cover.
+		path = Story.night_cutscene("watch")
+	elif not Story.can_hide():
 		say(GameStrings.text("story.hide_again"))
 		return false
-	var data: Dictionary = Cutscene.load_file(Story.cutscene_path())
+	return _play_from_cover(ev, path)
+
+
+## Leaving the log at night (Part A's coin flip, Story.fate()): the lucky
+## or the caught cutscene; each ends in a fade ("then").
+func sneak(ev: Dictionary) -> bool:
+	if in_cutscene() or travel.busy() or not Story.sneaking():
+		return false
+	return _play_from_cover(ev, Story.night_cutscene(Story.fate()))
+
+
+## Fern crouches at the cover spot's `at` and cutscene `path` plays.
+func _play_from_cover(ev: Dictionary, path: String) -> bool:
+	var data: Dictionary = Cutscene.load_file(path)
 	if data.is_empty():
 		return false
 	world.player_pos = ev.get("at", world.player_pos)
@@ -993,9 +1142,18 @@ func _cutscene_events(events: Array[Dictionary]) -> void:
 				_speaker = ""
 				if dialogue.is_open:
 					dialogue.close()
+				var then: Dictionary = cutscene.then
 				cutscene = null
 				world.hiding = false
 				GameState.changed.emit()
+				if not then.is_empty():
+					# Off somewhere through a fade (the prisoner den, home).
+					var text := GameState.format_text(GameStrings.text(str(then["message"]))) if then.has("message") else ""
+					if travel.scene(str(then.get("area", world.id)), str(then.get("spawn", "start")), text, bool(then.get("lie", false)), bool(then.get("wake", false))):
+						world.hiding = true
+						if bool(then.get("lie", false)):
+							world_view.pose = "down"
+						_after_travel_start()
 	if not events.is_empty():
 		_update_touch_visibility()
 		_place_overlays()
@@ -1138,6 +1296,8 @@ func _place_goal() -> void:
 func _place_prompt_label() -> void:
 	var sp: Dictionary = world.spot_by_id(world.focus_id)
 	var key: String = str(sp.get("label", ""))
+	if world.focus_id == _rest_spot() and world.id == str(Story.rescue().get("rest_area", "")) and Story.can_rest():
+		key = str(Story.rescue().get("rest_label", "story.sleep_label"))
 	var paw: Sprite2D = world_view.paw
 	prompt_label.visible = key != "" and paw.visible and _message_t <= 0.0 and not in_cutscene() and not (travel != null and travel.busy())
 	if not prompt_label.visible:

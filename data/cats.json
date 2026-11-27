@@ -51,6 +51,24 @@
 			"sit": {"file": "Sitting", "fps": 1},
 			"lick": {"file": "Licking 1", "fps": 6, "loops": 2},
 			"itch": {"file": "Itch", "fps": 8, "loops": 5}
+		}},
+		"sleeper_a": {"recolor": {"from": "sorrel", "map": {"#e6e6e6": "#a87850", "#d1d1d1": "#946640", "#adadad": "#7c5434", "#c3bab2": "#b08a66", "#8d8d8d": "#5e3e26", "#7d746c": "#6a4a32", "#7e7e7e": "#5a3c24", "#595959": "#3a2616"}}, "anims": {
+			"sleep": {"file": "Sleeping1", "fps": 1}
+		}},
+		"sleeper_b": {"recolor": {"from": "sorrel", "map": {"#e6e6e6": "#f0dcb4", "#d1d1d1": "#e0c89c", "#adadad": "#c8ac80", "#c3bab2": "#e6d0a8", "#8d8d8d": "#a88c64", "#7d746c": "#b0946c", "#7e7e7e": "#a08460", "#595959": "#6e583c"}}, "anims": {
+			"sleep": {"file": "Sleeping1", "fps": 1}
+		}},
+		"captive_a": {"recolor": {"from": "bram", "map": {"#1d2020": "#8a6a4a", "#2d3131": "#a4825c", "#3c4141": "#b89670", "#171919": "#4a3828", "#b5aa30": "#7ab040"}}, "fidget_after_s": 7.0, "fidgets": ["lick", "itch"], "anims": {
+			"sit": {"file": "Sitting", "fps": 1},
+			"lick": {"file": "Licking 1", "fps": 6, "loops": 2},
+			"itch": {"file": "Itch", "fps": 8, "loops": 5}
+		}},
+		"captive_b": {"recolor": {"from": "wick", "map": {"#d5d5d5": "#d8d0c4", "#c2c2c2": "#c4bab0", "#836d67": "#b0602c", "#716f6f": "#8c4a22", "#625956": "#6e3a1c", "#5d5b5b": "#7a4422", "#554c48": "#4a2814", "#267792": "#5a8a3a"}}, "anims": {
+			"idle": {"file": "Idle", "fps": 6}
+		}},
+		"captive_c": {"recolor": {"from": "sorrel", "map": {"#e6e6e6": "#7c746c", "#d1d1d1": "#6c645c", "#adadad": "#5c544c", "#c3bab2": "#867c72", "#8d8d8d": "#443e38", "#7d746c": "#4e4740", "#7e7e7e": "#48423c", "#595959": "#2a2622", "#1385c0": "#c09030", "#e2d656": "#c09030"}}, "anims": {
+			"sleep": {"file": "Sleeping1", "fps": 1},
+			"lie_down": {"file": "Laying", "fps": 8, "loops": 1}
 		}}
 	}
 }

@@ -1,0 +1,22 @@
+{
+	"id": "night_lucky",
+	"_note": "Rescuing Wick, Part A: the coin flip went well. Fern slips past the guards, wakes Wick, and both sneak out; then home (camp) through a fade. Parts B / C replace the coin flip with real stealth.",
+	"steps": [
+		{"say": "fern", "text": "Now, while Slate is looking the other way..."},
+		{"move": "fern", "to": [176, 188], "speed": 28},
+		{"move": "fern", "to": [260, 262], "speed": 28},
+		{"move": "fern", "to": [470, 262], "speed": 28},
+		{"move": "fern", "to": [540, 200], "speed": 28},
+		{"move": "fern", "to": [530, 98], "speed": 28},
+		{"face": "fern", "dir": -1},
+		{"say": "fern", "text": "{name_wick}! Wake up. It's me."},
+		{"pose": "wick", "rest": "idle", "behavior": "pace"},
+		{"face": "wick", "dir": 1},
+		{"say": "wick", "expression": "sad", "text": "{player_name}? You came for me?"},
+		{"say": "fern", "text": "Shh. Follow me, and stay low."},
+		{"move": "wick", "to": [536, 160], "speed": 28, "wait": false},
+		{"move": "fern", "to": [548, 192], "speed": 28},
+		{"set": {"rescue": "rescued", "wick_missing": false, "night": false}}
+	],
+	"then": {"area": "camp", "spawn": "from_hunting", "message": "story.home_with_wick"}
+}

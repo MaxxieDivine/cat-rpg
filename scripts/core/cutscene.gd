@@ -7,14 +7,20 @@ extends RefCounted
 ##   {"camera": [x, y] | "player", "s": seconds}  the camera glides there
 ##       (smoothstep) and the scene waits until it arrives; "player" glides
 ##       back to following Fern, and the scene's camera hold ends there.
-##   {"move": npc id, "to": [x, y], "speed": px/s, "wait": true}  the cat
-##       walks there (World.send_npc()); waits until it arrives unless
-##       "wait" is false.
+##   {"move": npc id or "fern", "to": [x, y], "speed": px/s, "wait": true}
+##       the cat walks there (World.send_npc(); Fern: World.walk_player(),
+##       straight through anything); waits until it arrives unless "wait"
+##       is false.
+##   {"pose": npc id, "rest": anim, "behavior": "stand"}  changes a cat's
+##       resting pose / behaviour (Wick getting up).
 ##   {"face": npc id or "fern", "dir": 1 | -1}  turns a cat.
 ##   {"say": speaker id, "text": "...", "expression": "neutral"}  a line in
 ##       the dialogue box; waits for advance() (a tap or Interact).
 ##   {"wait": seconds}  a pause.
 ##   {"set": {flag: value}}  writes GameState flags.
+## A file may also have "then": what game.gd does when the scene ends
+## ({"area", "spawn", "message" (strings.json key), "lie", "wake"}: a fade
+## there, scripts/core/travel.gd scene()).
 ## No skipping in v1: lines advance one by one; everything else runs by
 ## itself.
 ##
@@ -23,10 +29,12 @@ extends RefCounted
 ## (close the box: the next step isn't a line), {"type": "end"}.
 
 const JsonData := preload("res://scripts/core/json_data.gd")
-const STEP_KINDS := ["camera", "move", "face", "say", "wait", "set"]
+const STEP_KINDS := ["camera", "move", "face", "say", "wait", "set", "pose"]
 
 var id := ""
 var steps: Array = []
+## What happens after the last step (see above), or {}.
+var then: Dictionary = {}
 ## Index of the step running now (-1 before start, steps.size() when done).
 var index := -1
 var world
@@ -53,6 +61,7 @@ static func load_file(path: String) -> Dictionary:
 func _init(data: Dictionary = {}) -> void:
 	id = str(data.get("id", ""))
 	steps = data.get("steps", [])
+	then = data.get("then", {})
 
 
 func is_running() -> bool:
@@ -94,9 +103,13 @@ func step(dt: float, follow: Vector2) -> Array[Dictionary]:
 				_cam_now = Vector2.INF
 			ev.append_array(_next())
 	elif s.has("move"):
-		var npc: Dictionary = world.npc_by_id(_moving)
-		if npc.is_empty() or str(npc.get("mode", "")) != "goto":
-			ev.append_array(_next())
+		if _moving == "fern":
+			if not world.walking():
+				ev.append_array(_next())
+		else:
+			var npc: Dictionary = world.npc_by_id(_moving)
+			if npc.is_empty() or str(npc.get("mode", "")) != "goto":
+				ev.append_array(_next())
 	elif s.has("wait"):
 		_wait -= dt
 		if _wait <= 0.0:
@@ -160,10 +173,19 @@ func _next() -> Array[Dictionary]:
 			_cam_t = 0.0
 			_cam_now = _cam_from
 			return ev
+		elif s.has("pose"):
+			var who: Dictionary = world.npc_by_id(str(s["pose"]))
+			if not who.is_empty():
+				if s.has("rest"):
+					who["rest"] = str(s["rest"])
+				if s.has("behavior"):
+					who["behavior"] = str(s["behavior"])
 		elif s.has("move"):
 			_moving = str(s["move"])
 			var to := Vector2(float(s["to"][0]), float(s["to"][1]))
-			if not world.send_npc(_moving, to, false, float(s.get("speed", 30))):
+			if _moving == "fern":
+				world.walk_player(to, float(s.get("speed", 30)))
+			elif not world.send_npc(_moving, to, false, float(s.get("speed", 30))):
 				continue
 			if not bool(s.get("wait", true)):
 				continue
@@ -184,7 +206,8 @@ static func check(data: Dictionary, speakers: Dictionary, st) -> Array[String]:
 		return errs
 	for i in list.size():
 		var s: Dictionary = list[i]
-		var kinds: Array = STEP_KINDS.filter(func(k): return s.has(k))
+		# ("wait": false inside a move step is its option, not a step.)
+		var kinds: Array = STEP_KINDS.filter(func(k): return s.has(k) and not (k == "wait" and s.has("move")))
 		if kinds.size() != 1:
 			errs.append("step %d: needs exactly one of %s (has %s)" % [i, STEP_KINDS, kinds])
 			continue

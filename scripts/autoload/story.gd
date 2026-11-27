@@ -12,11 +12,70 @@ const StoryCore := preload("res://scripts/core/story.gd")
 const GameStrings := preload("res://scripts/core/game_strings.gd")
 
 var story := StoryCore.new()
+## Part A's coin flip: the odds that sneaking from the rogue camp's log goes
+## unseen (data/story.json rescue.lucky_chance; reset() copies it back).
+## Tune it live in the remote Inspector (root > Story).
+@export_range(0.0, 1.0, 0.05) var lucky_chance := 0.5:
+	set(v):
+		story.lucky_chance = clampf(v, 0.0, 1.0)
+	get:
+		return story.lucky_chance
 
 
 func reset() -> void:
 	story.reset()
 	changed.emit()
+
+
+## Rescuing Wick (Part A): see scripts/core/story.gd.
+func rescue_pending() -> bool:
+	return story.rescue_pending(GameState.state)
+
+
+func is_night() -> bool:
+	return story.is_night(GameState.state)
+
+
+func can_rest() -> bool:
+	return story.can_rest(GameState.state)
+
+
+func rest() -> void:
+	story.rest(GameState.state)
+	GameState.changed.emit()
+	changed.emit()
+
+
+func sneaking() -> bool:
+	return story.sneaking(GameState.state)
+
+
+func fate() -> String:
+	return story.fate()
+
+
+func finish_rescue() -> void:
+	story.finish_rescue(GameState.state)
+	GameState.changed.emit()
+	changed.emit()
+
+
+func escape_placeholder() -> void:
+	story.escape_placeholder(GameState.state)
+	GameState.changed.emit()
+	changed.emit()
+
+
+func rescue() -> Dictionary:
+	return story.rescue()
+
+
+func prison_area() -> String:
+	return story.prison_area()
+
+
+func night_cutscene(which: String) -> String:
+	return story.night_cutscene(which)
 
 
 func border_marked(mates: Array) -> bool:

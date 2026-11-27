@@ -1,0 +1,13 @@
+{
+	"id": "night_watch",
+	"_note": "Rescuing Wick, Part A: back at the rogue camp's log at night, Fern looks at Wick and his guard (sets log_watched; the log then offers 'Sneak to Wick').",
+	"steps": [
+		{"wait": 0.4},
+		{"camera": [470, 118], "s": 1.4},
+		{"say": "fern", "expression": "sad", "text": "There's {name_wick}, curled up in the far corner."},
+		{"say": "fern", "text": "And Slate is on guard right beside him."},
+		{"camera": "player", "s": 1.2},
+		{"say": "fern", "text": "If I'm quick and quiet, I can reach him."},
+		{"set": {"log_watched": true}}
+	]
+}

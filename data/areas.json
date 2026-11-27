@@ -6,6 +6,7 @@
 		"hunting_grounds": {"file": "res://data/hunting_grounds.json"},
 		"hunting_grounds_2": {"file": "res://data/hunting_grounds_2.json"},
 		"apprentices_den": {"file": "res://data/dens/apprentices_den.json"},
-		"rogue_camp": {"file": "res://data/rogue_camp.json"}
+		"rogue_camp": {"file": "res://data/rogue_camp.json"},
+		"prisoner_den": {"file": "res://data/dens/prisoner_den.json"}
 	}
 }
