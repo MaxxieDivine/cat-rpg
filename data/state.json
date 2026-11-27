@@ -16,7 +16,11 @@
 		"rogue_red": {"type": "bool"},
 		"rogue_camp_found": {"type": "bool"},
 		"rogue_warned": {"type": "bool"},
-		"carrying": {"type": "bool"}
+		"carrying": {"type": "bool"},
+		"told_rook": {"type": "bool"},
+		"night": {"type": "bool"},
+		"log_watched": {"type": "bool"},
+		"rescue": {"type": "string", "values": ["rescued", "captured", "escaped"]}
 	},
 	"text_vars": {"patrol_mates": "your clanmates"},
 	"bonds": ["bram", "sorrel", "wick"],

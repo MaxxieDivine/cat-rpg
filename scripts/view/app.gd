@@ -7,6 +7,9 @@ extends Control
 ## names the area and the spawn Fern arrived at and lists each mouse (spot,
 ## head up / down, alert %); debug buttons (keys H / T / M / N) set hunger /
 ## thirst to 5, put a mouse at the nearest prey spot or open the Name Editor.
+## Scene select (dev tool, scene_select.gd): while the debug overlay is on,
+## a button on the title screen, F1 or the "Scenes" debug button in the game
+## open it; a pick starts the game if needed and jumps there (game.jump_to()).
 
 const ScreenMetrics := preload("res://scripts/view/screen_metrics.gd")
 const GameStrings := preload("res://scripts/core/game_strings.gd")
@@ -16,6 +19,7 @@ const GameScreen := preload("res://scripts/view/game.gd")
 const RotateOverlay := preload("res://scripts/view/rotate_overlay.gd")
 const FullscreenButton := preload("res://scripts/view/fullscreen_button.gd")
 const VolumeButton := preload("res://scripts/view/volume_button.gd")
+const SceneSelect := preload("res://scripts/view/scene_select.gd")
 const BUILD_PATH := "res://data/build.json"
 
 ## Inspector hooks for trying values (0 = use Settings): camera zoom 1..3
@@ -30,6 +34,9 @@ var rotate: Control
 var hud: Label
 var fullscreen_button: Control
 var volume_button: Control
+var scene_select: Control
+## The title screen's "Scene select" button (debug overlay only).
+var scene_button: Button
 ## Debug overlay buttons: hunger -> 5, thirst -> 5.
 var debug_buttons: Array[Button] = []
 var build_text := ""
@@ -93,7 +100,14 @@ func _ready() -> void:
 	volume_button = VolumeButton.new()
 	add_child(volume_button)
 	volume_button.configure(JsonData.load_dict("res://data/tuning.json").get("audio", {}).get("volume_steps", []))
-	for which in ["hunger", "thirst", "mouse", "name"]:
+	scene_button = Button.new()
+	scene_button.name = "SceneSelectButton"
+	scene_button.text = GameStrings.text("scene_select.button")
+	scene_button.focus_mode = Control.FOCUS_NONE
+	scene_button.add_theme_font_size_override("font_size", 14)
+	scene_button.pressed.connect(open_scene_select)
+	add_child(scene_button)
+	for which in ["hunger", "thirst", "mouse", "name", "scenes"]:
 		var b := Button.new()
 		b.name = "Debug_" + which
 		b.text = GameStrings.text("debug." + which)
@@ -108,10 +122,20 @@ func _ready() -> void:
 			b.pressed.connect(func() -> void:
 				if game != null:
 					game.open_name_editor())
+		elif which == "scenes":
+			b.pressed.connect(open_scene_select)
 		else:
 			b.pressed.connect(func() -> void: debug_set_need(which))
 		add_child(b)
 		debug_buttons.append(b)
+	# Over everything but the rotate overlay.
+	scene_select = SceneSelect.new()
+	add_child(scene_select)
+	scene_select.picked.connect(_on_scene_picked)
+	scene_select.closed.connect(func() -> void:
+		if game != null:
+			game.held = false
+		_place_hud())
 	Player.area_changed.connect(func(_a: String, _s: String) -> void: _update_hud())
 	build_text = read_build_text()
 	_update_hud()
@@ -146,6 +170,25 @@ func start_game() -> void:
 	relayout()
 
 
+## Opens the scene select menu (the game waits behind it).
+func open_scene_select() -> void:
+	if scene_select.is_open or (game != null and game.naming()):
+		return
+	if game != null:
+		game.held = true
+	scene_select.open()
+	_place_hud()
+
+
+func _on_scene_picked(id: String) -> void:
+	# A tap / click / key press: browsers allow fullscreen here.
+	ScreenMetrics.request_fullscreen()
+	start_game()
+	game.held = false
+	game.jump_to(id)
+	_place_hud()
+
+
 func relayout() -> void:
 	if _laying_out:
 		return
@@ -159,6 +202,7 @@ func relayout() -> void:
 	if game != null:
 		game.layout(metrics)
 		game.set_paused(portrait)
+	scene_select.layout(metrics)
 	_place_hud()
 	_place_buttons()
 	_laying_out = false
@@ -170,6 +214,12 @@ func _input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key != null and key.pressed and not key.echo and key.keycode == KEY_F3:
 		Settings.debug_overlay = not Settings.debug_overlay
+		return
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_F1 and Settings.debug_overlay and not scene_select.is_open:
+		open_scene_select()
+		get_viewport().set_input_as_handled()
+		return
+	if scene_select.is_open:
 		return
 	if key != null and key.pressed and not key.echo and Settings.debug_overlay and game != null:
 		if key.keycode == KEY_H and not game.naming():
@@ -328,8 +378,13 @@ func _place_hud() -> void:
 	var room := metrics.safe_rect.end.x - 2.0 * tall - 24.0 - x
 	if room < debug_buttons.size() * (w + 8.0):
 		w = maxf(tall, room / debug_buttons.size() - 8.0)
+	scene_button.visible = game == null and Settings.debug_overlay and not scene_select.is_open
+	if scene_button.visible:
+		var inset := float(JsonData.load_dict("res://data/tuning.json").get("ui", {}).get("button_inset", 12))
+		scene_button.size = Vector2(maxf(tall * 2.5, scene_button.get_combined_minimum_size().x + 16.0), tall)
+		scene_button.position = metrics.snap(Vector2(metrics.safe_rect.position.x + inset, metrics.safe_rect.end.y - inset - tall))
 	for b in debug_buttons:
-		b.visible = show_debug and not (game.naming() if game != null else false)
+		b.visible = show_debug and not (game.naming() if game != null else false) and not scene_select.is_open
 		b.size = Vector2(w, tall)
 		b.position = metrics.snap(Vector2(x, metrics.safe_rect.position.y + 12.0))
 		x += w + 8.0

@@ -13,6 +13,9 @@ extends RefCounted
 ##   walls       wall material: art keys den.wall_<walls>_top / _side / _bottom
 ##   nests       how many nests
 ##   player_nest which nest is Fern's (0-based), or -1 for none
+##   nest_message (optional) her nest's line (strings.json key; default
+##               "den.your_nest"); feather (optional, default true): her nest
+##               shows the feather (the prisoner den's bedding doesn't)
 ## Layout (tuning.json "den"): walls `wall` {top, side, bottom} px thick
 ## round the floor; the doorway (`door_w` wide) in the middle of the bottom
 ## wall; nests along the back wall, then down the sides; corners rounded by
@@ -93,6 +96,7 @@ static func build(interior: Dictionary, t: Dictionary, door: Dictionary = {}) ->
 	var mine := int(s["player_nest"])
 	for i in nests.size():
 		nests[i]["mine"] = i == mine
+		nests[i]["feather"] = i == mine and bool(s.get("feather", true))
 		nests[i]["rect"] = Rect2(nests[i]["pos"] - Vector2(nest_size.x / 2.0, nest_size.y - 2.0), nest_size)
 
 	var inside := Vector2(size.x / 2.0 + float(t.get("spawn_offset_x", 14)), size.y - bottom - 10.0)
@@ -103,7 +107,7 @@ static func build(interior: Dictionary, t: Dictionary, door: Dictionary = {}) ->
 		var n: Dictionary = nests[mine]
 		spawns["nest"] = {"pos": n["pos"], "facing": 1}
 		spots.append({"id": PLAYER_NEST_SPOT, "rect": n["rect"], "talk_radius": float(t.get("nest_radius", 4)),
-			"prompt": n["pos"] - Vector2(0, nest_size.y + 2.0), "message": "den.your_nest"})
+			"prompt": n["pos"] - Vector2(0, nest_size.y + 2.0), "message": str(s.get("nest_message", "den.your_nest"))})
 		markers["PlayerNest"] = n["pos"]
 
 	# Decor slots: along the back wall and the side walls, and beside each

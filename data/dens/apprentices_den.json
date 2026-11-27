@@ -7,5 +7,10 @@
 	"forest_art": "den.outer",
 	"grade": {"afternoon": "#f2d6b4", "dusk": "#d8aa8e", "night": "#6a6488"},
 	"interior": {"size": "medium", "floor_color": "#c8ac94", "walls": "fern_moss", "nests": 4, "player_nest": 1},
-	"door": {"to": "camp", "spawn": "from_apprentices_den"}
+	"door": {"to": "camp", "spawn": "from_apprentices_den"},
+	"_npcs_note": "Clanmates asleep in their nests at night (Rescuing Wick: placeholder apprentices, recoloured cats; 'nest' = which nest).",
+	"npcs": [
+		{"id": "sleeper_a", "art": "cat.sleeper_a.sleep", "nest": 0, "footprint": [18, 5], "talk_radius": 22, "behavior": "lie", "facing": 1, "when": {"night": true}},
+		{"id": "sleeper_b", "art": "cat.sleeper_b.sleep", "nest": 3, "footprint": [18, 5], "talk_radius": 22, "behavior": "lie", "facing": -1, "when": {"night": true}}
+	]
 }

@@ -470,6 +470,82 @@ func den_wall_bottom(w: int, h: int, seed: int) -> Image:
 	return img
 
 
+## A den wall of woven brambles (the rogues' prisoner den): dark earth
+## behind a tangle of thorny stems, a few dull leaves, a rough lip along the
+## bottom edge. Tiles across (stems wrap round).
+func den_wall_bramble(w: int, h: int, seed: int) -> Image:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var bark := ramp("bark")
+	var leaf := ramp("leaf")
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	for y in h:
+		for x in w:
+			var d := float(y) / float(maxi(1, h - 1))
+			img.set_pixel(x, y, c("ink") if d < 0.3 and dither(x, y) > d * 2.6 else bark[0])
+	# Stems: gentle waves across the tile, thorns every few px.
+	var stems := maxi(3, h / 5)
+	for k in stems:
+		var y0 := rng.randf_range(2.0, h - 3.0)
+		var amp := rng.randf_range(1.0, 3.5)
+		var waves := float(rng.randi_range(1, 2))
+		var ph := rng.randf() * TAU
+		var shade := bark[1] if k % 2 == 0 else bark[2]
+		for x in w:
+			var y := int(roundf(y0 + amp * sin(TAU * waves * x / w + ph)))
+			if y < 0 or y >= h:
+				continue
+			img.set_pixel(x, y, shade)
+			if (x + k * 3) % 5 == 0 and y > 0:
+				img.set_pixel(x, y - 1, bark[2])
+			if (x + k * 2) % 9 == 0 and y + 1 < h:
+				img.set_pixel(x, y + 1, leaf[0] if rng.randf() < 0.6 else leaf[1])
+	# Rough lip of dead leaves along the bottom.
+	var a := rng.randf() * TAU
+	for x in w:
+		var lip := 2 + int(roundf(1.0 + 1.0 * sin(TAU * x / w * 3.0 + a)))
+		for y in range(h - lip, h):
+			img.set_pixel(x, y, bark[2] if y == h - lip and dither(x, y) < 0.5 else bark[1])
+	return img
+
+
+func den_wall_bramble_side(w: int, h: int, seed: int) -> Image:
+	var img := den_wall_bramble(h, w, seed)
+	img.rotate_90(COUNTERCLOCKWISE)
+	return img
+
+
+func den_wall_bramble_bottom(w: int, h: int, seed: int) -> Image:
+	var img := den_wall_bramble(w, h, seed)
+	img.flip_y()
+	return img
+
+
+## Ivy hanging over a doorway (the prisoner den): strands of different
+## lengths from the top edge, leaves every other row, thinner and shorter
+## in the middle so the way out shows through.
+func ivy(w: int, h: int, seed: int) -> Image:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var leaf := ramp("leaf")
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	for x in range(0, w, 2):
+		var mid := 1.0 - absf(float(x) - w / 2.0) / (w / 2.0)
+		var n := int(roundf(h * rng.randf_range(0.55, 1.0) * (1.0 - 0.5 * mid)))
+		if rng.randf() < 0.2 * mid:
+			n = mini(n, 4)
+		for y in n:
+			img.set_pixel(x, y, leaf[0] if y > 1 else c("ink"))
+			if y % 3 == 1:
+				var dx := 1 if (x / 2 + y) % 2 == 0 else -1
+				if x + dx >= 0 and x + dx < w:
+					var b := 1.0 - float(y) / float(h)
+					img.set_pixel(x + dx, y, leaf[clampi(1 + level(b, 3, x, y), 1, 4)])
+		if n >= 2:
+			img.set_pixel(x, n - 1, leaf[2])
+	return img
+
+
 ## A nest: a ring of moss round a soft hollow. `mine` adds a white feather,
 ## so Fern's nest is easy to find.
 func den_nest(w: int, h: int, mine: bool = false) -> Image:

@@ -1,7 +1,7 @@
 {
 	"id": "rogue_camp",
 	"name": "Rogue Camp",
-	"_note": "Rogue land, just past the territory's east border (joined to Hunting Grounds 2 by its story-only exit). A flattened clearing with torn bedding and old bones; Vex (the rogue leader) sits in the middle, Slate guards Wick, who lies in the far corner. Fern stays in the entrance pocket: a hedge of bushes with a barrier along it ('Too risky...'). The fallen log by the entrance is the hiding place (spot hide_log, event hide): hiding plays data/cutscenes/rogue_camp.json once.",
+	"_note": "Rogue land, just past the territory's east border (joined to Hunting Grounds 2 by its story-only exit). A flattened clearing with torn bedding and old bones; Vex (the rogue leader) sits in the middle, Slate guards Wick, who lies in the far corner. Fern stays in the entrance pocket: a hedge of bushes with a barrier along it ('Too risky...'). The fallen log by the entrance is the hiding place (spot hide_log, event hide): hiding plays data/cutscenes/rogue_camp.json once. At night (Rescuing Wick) it hides Fern again (hide_log_night: data/cutscenes/night_watch.json), then sneak_log flips the coin (Story.fate()).",
 	"size": [560, 320],
 	"edge_margin": 6,
 	"border": 72,
@@ -31,12 +31,17 @@
 		{"id": "wick", "art": "cat.wick.sleep", "rest": "sleep", "pos": [506, 92], "footprint": [18, 5], "talk_radius": 22, "behavior": "lie", "facing": -1, "when": {"wick_missing": true}}
 	],
 	"spots": [
-		{"id": "hide_log", "rect": [100, 199, 24, 3], "talk_radius": 12, "prompt": [112, 184], "label": "story.hide_label", "event": "hide", "at": [112, 201], "when": {"rogue_camp_found": false}}
+		{"id": "hide_log", "rect": [100, 199, 24, 3], "talk_radius": 12, "prompt": [112, 184], "label": "story.hide_label", "event": "hide", "at": [112, 201], "when": {"rogue_camp_found": false}},
+		{"id": "hide_log_night", "rect": [100, 199, 24, 3], "talk_radius": 12, "prompt": [112, 184], "label": "story.hide_label", "event": "hide", "at": [112, 201], "when": {"night": true, "rescue": null, "log_watched": false}},
+		{"id": "sneak_log", "rect": [100, 199, 24, 3], "talk_radius": 12, "prompt": [112, 184], "label": "story.sneak_label", "event": "sneak", "at": [112, 201], "when": {"night": true, "rescue": null, "log_watched": true}}
 	],
 	"barriers": [
 		{"rect": [150, 0, 16, 320], "message": "story.too_risky"}
 	],
-	"on_arrive": {"message": "story.stay_hidden", "when": {"rogue_camp_found": false}},
+	"on_arrive": [
+		{"message": "story.stay_hidden", "when": {"rogue_camp_found": false}},
+		{"message": "story.stay_hidden", "when": {"night": true, "rescue": null}}
+	],
 	"path": {
 		"width": 11,
 		"lines": [[[-8, 170], [50, 172], [100, 176], [140, 178]]]

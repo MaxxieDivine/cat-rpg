@@ -18,5 +18,25 @@
 		"camp_area": "rogue_camp",
 		"cutscene": "res://data/cutscenes/rogue_camp.json",
 		"goal_warn": "story.goal_warn"
+	},
+	"_rescue_note": "Rescuing Wick, Part A. After telling the deputy (told_rook) the goal is goal_rest; Fern sleeps at rest_spot in rest_area (her nest) and wakes at night (flag night: the night tint, tint, over every area; goal_rescue). In the rogue camp at night, hiding behind the log plays watch_cutscene (sets log_watched); sneaking from there flips a coin (lucky_chance, seeded by seed; the Story autoload exports it): lucky_cutscene (Wick sneaks out with Fern; then: home, rescue = rescued) or caught_cutscene (then: the prisoner den, rescue = captured). Part A's prisoner den is a placeholder: walking out of it shows escape_message and goes to escape_to (rescue = escaped). Parts B / C replace the coin flip with stealth, Part D the escape.",
+	"rescue": {
+		"goal_rest": "story.goal_rest",
+		"goal_rescue": "story.goal_rescue",
+		"rest_area": "apprentices_den",
+		"rest_spot": "my_nest",
+		"rest_spawn": "nest",
+		"rest_label": "story.sleep_label",
+		"sleep_message": "story.sleep_message",
+		"tint": "#d4dcff",
+		"watch_cutscene": "res://data/cutscenes/night_watch.json",
+		"lucky_cutscene": "res://data/cutscenes/night_lucky.json",
+		"caught_cutscene": "res://data/cutscenes/night_caught.json",
+		"sneak_label": "story.sneak_label",
+		"lucky_chance": 0.5,
+		"seed": 2711,
+		"prison_area": "prisoner_den",
+		"escape_to": ["camp", "from_hunting"],
+		"escape_message": "story.to_be_continued"
 	}
 }

@@ -16,6 +16,9 @@ extends RefCounted
 ##          message_s                         -> event "wake" (she stretches)
 ##   "in"   fade in over collapse.fade_s
 ##   "wake" wake_s more before control comes back -> event "done"
+## A story scene (scene(): sleeping in her nest, carried off by a rogue,
+## sneaking home): like passing out, but its own `message` (none = no
+## message phase), no needs restored, and "lie" / "wake" only if asked.
 ## Only one sequence runs at a time: go() and collapse() return false (and
 ## change nothing) while busy(), so a collapse can't fire twice.
 
@@ -28,8 +31,12 @@ var wake_s := 1.2
 
 ## "", "lie", "out", "message", "in", "wake".
 var phase := ""
-## "exit" or "collapse" while busy().
+## "exit", "collapse" or "scene" while busy().
 var kind := ""
+## A scene's line on black ("" = none; passing out uses Player's).
+var message := ""
+var _lie := true
+var _wake := true
 ## Where the "load" event sends Fern.
 var area := ""
 var spawn := ""
@@ -69,9 +76,49 @@ func collapse(to_area: String, to_spawn: String) -> bool:
 	kind = "collapse"
 	area = to_area
 	spawn = to_spawn
+	message = ""
+	_lie = true
+	_wake = true
 	_enter("lie")
 	return true
 
+
+## Starts a story scene to `to_area` / `to_spawn`: Fern lies down first if
+## `lie`, `text` shows on black (if any), she stretches awake if `wake`.
+func scene(to_area: String, to_spawn: String, text: String = "", lie: bool = true, wake: bool = true) -> bool:
+	if busy():
+		return false
+	kind = "scene"
+	area = to_area
+	spawn = to_spawn
+	message = text
+	_lie = lie
+	_wake = wake
+	_enter("lie" if lie else "out")
+	return true
+
+
+## Already black (the area is loaded): `text` shows (if any), then the
+## fade in and Fern stretches awake. Scene select's "just woken up".
+func wake_from_black(text: String) -> bool:
+	if busy():
+		return false
+	kind = "scene"
+	message = text
+	_lie = false
+	_wake = true
+	_enter("message" if text != "" else "in")
+	return true
+
+
+## Whether Fern stretches awake at the end (passing out, or a scene that asked).
+func wakes() -> bool:
+	return kind == "collapse" or (kind == "scene" and _wake)
+
+
+## Whether the screen shows a line on black now (passing out or a scene).
+func has_message() -> bool:
+	return phase == "message"
 
 ## A tap / key while the message shows: carry on (once it has shown for
 ## min_message_s, so a tap already on its way doesn't skip it unread).
@@ -115,7 +162,7 @@ func step(dt: float) -> Array[Dictionary]:
 
 
 func _fade() -> float:
-	return collapse_fade_s if kind == "collapse" else fade_s
+	return fade_s if kind == "exit" else collapse_fade_s
 
 
 func _enter(p: String) -> void:
@@ -132,15 +179,20 @@ func _advance() -> Array[Dictionary]:
 				return [{"type": "lie_done"}]
 		"out":
 			if _t >= _fade():
-				_carry("message" if kind == "collapse" else "in", _fade())
-				return [{"type": "load", "area": area, "spawn": spawn, "collapsed": kind == "collapse"}]
+				var says := kind == "collapse" or (kind == "scene" and message != "")
+				_carry("message" if says else "in", _fade())
+				var ev: Array[Dictionary] = [{"type": "load", "area": area, "spawn": spawn, "collapsed": kind == "collapse", "kind": kind}]
+				if not says and kind == "scene" and _wake:
+					ev.append({"type": "wake"})
+				return ev
 		"message":
 			if _t >= message_s:
 				_carry("in", message_s)
-				return [{"type": "wake"}]
+				var ev: Array[Dictionary] = [{"type": "wake" if wakes() else "message_done"}]
+				return ev
 		"in":
 			if _t >= _fade():
-				if kind == "collapse":
+				if kind == "collapse" or (kind == "scene" and _wake):
 					_carry("wake", _fade())
 					return [{"type": "faded_in"}]
 				return _finish()
@@ -161,5 +213,6 @@ func _finish() -> Array[Dictionary]:
 	var was := kind
 	phase = ""
 	kind = ""
+	message = ""
 	_t = 0.0
 	return [{"type": "done", "kind": was}]

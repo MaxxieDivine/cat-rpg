@@ -1,0 +1,30 @@
+{
+	"_note": "The rogues' prisoner den (Rescuing Wick, Part A: a bare version). A den area like the apprentices' den (scripts/core/den_layout.gd), but large and rough: bramble walls, a dull floor, torn bedding and bones (ground), ivy hanging over the doorway (prop ivy, not solid, drawn over Fern as she passes), captive loners standing about (placeholders: recoloured cats). Fern wakes on the bedding in the back corner (nest 4: no feather, its own line). Walking out is Part A's placeholder (game.gd: 'To be continued', home); Part D makes the real escape.",
+	"id": "prisoner_den",
+	"name": "Prisoner den",
+	"background": "#1e1a18",
+	"ground_art": "den.floor",
+	"forest_art": "den.outer",
+	"grade": {"afternoon": "#d4c0ac", "dusk": "#b89884", "night": "#8e88ac"},
+	"interior": {"size": "large", "floor_color": "#a08c78", "walls": "bramble", "nests": 5, "player_nest": 4, "feather": false, "nest_message": "story.prison_bedding"},
+	"door": {"to": "camp", "spawn": "from_hunting"},
+	"npc_spacing": [24, 16],
+	"npcs": [
+		{"id": "captive_a", "art": "cat.captive_a.sit", "pos": [96, 112], "footprint": [14, 5], "talk_radius": 22, "behavior": "sit", "facing": 1},
+		{"id": "captive_b", "art": "cat.captive_b.idle", "pos": [292, 128], "footprint": [16, 5], "talk_radius": 22, "behavior": "stand", "facing": -1},
+		{"id": "captive_c", "art": "cat.captive_c.sleep", "pos": [70, 176], "footprint": [18, 5], "talk_radius": 22, "behavior": "lie", "facing": 1}
+	],
+	"ground": [
+		{"art": "decor.rogue_bedding", "pos": [126, 60]},
+		{"art": "decor.rogue_bedding_b", "pos": [250, 58], "flip": true},
+		{"art": "decor.rogue_bedding", "pos": [344, 150], "flip": true},
+		{"art": "decor.rogue_bones", "pos": [160, 150]},
+		{"art": "decor.rogue_bones", "pos": [330, 190], "flip": true}
+	],
+	"prop_types": {
+		"ivy": {"art": "prop.ivy", "footprint": [36, 2], "solid": false}
+	},
+	"props": [
+		{"type": "ivy", "pos": [198, 222]}
+	]
+}

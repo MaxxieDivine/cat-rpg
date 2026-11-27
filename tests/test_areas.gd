@@ -71,7 +71,12 @@ func test_exits_lead_to_real_spawns() -> void:
 ## back gets her there again: no stuck spawns. Every exit is walked into from
 ## the spawn the matching exit on the other side sends her to.
 func test_round_trips_walk_into_every_exit() -> void:
+	# The prisoner den is reached only by being caught (a story fade), so
+	# its doorway has no exit leading back.
+	var one_way := str(JsonData.load_dict("res://data/story.json").get("rescue", {}).get("prison_area", ""))
 	for id in areas.ids():
+		if id == one_way:
+			continue
 		var w = _world(id)
 		for e: Dictionary in w.exits:
 			var there = _world(e["to"])

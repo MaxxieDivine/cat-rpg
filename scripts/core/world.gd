@@ -196,10 +196,18 @@ var barriers: Array[Dictionary] = []
 var barrier_every := 2.0
 var _barrier_t := 0.0
 var _barrier_hit := ""
-## Layout "on_arrive": {"message", "when"}: game.gd says it on arrival.
+## Layout "on_arrive": {"message", "when"} (or a list of them: the first
+## open one counts, arrival()): game.gd says it on arrival.
 var arrive_message: Dictionary = {}
+var arrive_messages: Array = []
 ## Fern is hiding (a cutscene watched from cover): crouched, no control.
 var hiding := false
+## The story's night (flag "night", set by game.gd): the view tints the
+## area dark blue. A stand-in until real day / night lighting.
+var is_night := false
+## A cutscene walks Fern here (INF = not walking): straight, no colliders.
+var walk_to := Vector2.INF
+var walk_speed_px := 30.0
 var way_mark := Vector2.INF
 var way_facing := 1
 ## False until Fern stands clear of every exit (set again on each exit).
@@ -317,6 +325,7 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 			"gift": str(n.get("gift", "")),
 			"perch": float(n.get("perch", 0)),
 			"rest": str(n.get("rest", "")),
+			"nest": int(n.get("nest", -1)),
 			"moving": false,
 			"distance": 0.0,
 		}
@@ -373,8 +382,10 @@ func _load(w: Dictionary, t: Dictionary) -> void:
 	for b: Dictionary in w.get("barriers", []):
 		var br: Array = b.get("rect", [0, 0, 0, 0])
 		barriers.append({"rect": Rect2(float(br[0]), float(br[1]), float(br[2]), float(br[3])),
-			"message": str(b.get("message", "")), "when": b.get("when", {})})
-	arrive_message = w.get("on_arrive", {})
+			"message": str(b.get("message", "")), "when": b.get("when", {}), "only_when": b.get("only_when", {})})
+	var oa: Variant = w.get("on_arrive", {})
+	arrive_messages = oa if oa is Array else ([oa] if not (oa as Dictionary).is_empty() else [])
+	arrive_message = arrive_messages[0] if not arrive_messages.is_empty() else {}
 	for ss: Dictionary in w.get("scent_spots", []):
 		var spos := _vec(ss.get("pos", [0, 0]))
 		scent_spots.append({"id": str(ss.get("id", "")), "pos": spos,
@@ -515,6 +526,9 @@ func apply_interior(settings: Dictionary) -> void:
 	_prop_solids = []
 	for r: Rect2 in interior["walls"]:
 		_prop_solids.append(r)
+	for pr: Dictionary in props:
+		if pr["solid"]:
+			_prop_solids.append(pr["rect"])
 	exits = [interior["exit"]]
 	spawns = interior["spawns"].duplicate(true)
 	spots = []
@@ -532,6 +546,13 @@ func apply_interior(settings: Dictionary) -> void:
 		pts.append(_vec(pt))
 	path_lines.append(pts)
 	path_width = interior["trail_width"]
+	# Den cats lying in their nests ("nest": index in the layout's npcs).
+	var nests: Array = interior["nests"]
+	for npc in npcs:
+		var ni := int(npc.get("nest", -1))
+		if ni >= 0 and ni < nests.size():
+			npc["pos"] = nests[ni]["pos"]
+			npc["rect"] = footprint_rect(npc["pos"], npc["footprint"])
 	_rebuild_solids()
 	var pr := player_rect()
 	if not bounds.encloses(pr) or solids.any(func(r: Rect2) -> bool: return r.intersects(pr)):
@@ -618,6 +639,50 @@ func place_at_spawn(name: String) -> bool:
 
 
 ## The exit Fern's footprint touches, or {}.
+## Whether barrier `b` stands now: its "when" matches (or there are no
+## conditions), and its "only_when" (if any) matches real conditions
+## (a barrier tools and plain tests never meet: "stay in camp").
+func barrier_up(b: Dictionary) -> bool:
+	var only: Dictionary = b.get("only_when", {})
+	if not only.is_empty() and (conditions == null or not conditions.matches(only)):
+		return false
+	return is_open(b)
+
+
+## The arrival line that counts now (the first open "on_arrive"), or {}.
+func arrival() -> Dictionary:
+	for a: Dictionary in arrive_messages:
+		if is_open(a):
+			return a
+	return {}
+
+
+## Walks Fern (a cutscene) straight to `to` at `speed` px/s, through
+## anything; walking() is true until she is there.
+func walk_player(to: Vector2, speed: float) -> void:
+	walk_to = to
+	walk_speed_px = maxf(1.0, speed)
+
+
+func walking() -> bool:
+	return walk_to != Vector2.INF
+
+
+func _step_walk(dt: float) -> void:
+	var next := player_pos.move_toward(walk_to, walk_speed_px * dt)
+	var d := next - player_pos
+	if absf(d.x) > 0.001:
+		facing = 1 if d.x > 0.0 else -1
+	player_vel = d / maxf(dt, 0.0001)
+	distance += d.length()
+	player_pos = next
+	_record_trail()
+	if player_pos.distance_to(walk_to) < 0.5:
+		player_pos = walk_to
+		walk_to = Vector2.INF
+		player_vel = Vector2.ZERO
+
+
 ## Whether an exit or spot with a "when" is there now (see `conditions`).
 func is_open(entry: Dictionary) -> bool:
 	var cond: Dictionary = entry.get("when", {})
@@ -786,6 +851,8 @@ func zones_apart(a: Rect2, b: Rect2) -> bool:
 func _space_npcs() -> void:
 	var taken: Array[Rect2] = [footprint_rect(player_pos, player_footprint)]
 	for npc in npcs:
+		if int(npc.get("nest", -1)) >= 0:
+			continue  # a den cat in its nest (placed by apply_interior)
 		var shift := Vector2.ZERO
 		var tries := 0
 		while tries < 40 and not taken.all(func(r: Rect2) -> bool: return zones_apart(_shifted_zone(npc, shift), r)):
@@ -877,6 +944,9 @@ func step(dt: float, move: Vector2, run: bool, crouch: bool = false) -> Array[Di
 	if is_leaping():
 		_step_leap(dt, events)
 		_step_hunt(dt, true, events)
+		return events
+	if walking():
+		_step_walk(dt)
 		return events
 	if move.length() > 1.0:
 		move = move.normalized()
@@ -1522,7 +1592,7 @@ func _move_axis(delta: Vector2) -> void:
 				player_vel.y = 0.0
 			return
 	for b in barriers:
-		if is_open(b) and (b["rect"] as Rect2).intersects(r) and not (b["rect"] as Rect2).intersects(player_rect()):
+		if barrier_up(b) and (b["rect"] as Rect2).intersects(r) and not (b["rect"] as Rect2).intersects(player_rect()):
 			if delta.x != 0.0:
 				player_vel.x = 0.0
 			else:

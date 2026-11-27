@@ -77,6 +77,10 @@ const PAINTED := {
 	"rogue_bedding_b": ["bedding_scraps", 20, 9, 172],
 	"rogue_bones": ["bones", 12, 8],
 	"rogue_clearing": ["worn_patch", 150, 56],
+	"den_wall_bramble_top": ["den_wall_bramble", 32, 26, 181],
+	"den_wall_bramble_side": ["den_wall_bramble_side", 14, 32, 182],
+	"den_wall_bramble_bottom": ["den_wall_bramble_bottom", 32, 12, 183],
+	"ivy": ["ivy", 40, 18, 184],
 }
 
 ## Each area's baked floor: art/<name>.png -> the area file it is painted

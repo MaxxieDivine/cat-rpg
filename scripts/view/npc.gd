@@ -89,6 +89,12 @@ func setup(npc: Dictionary, speaker: Dictionary, tuning: Dictionary) -> void:
 ## Copies the NPC's state onto the sprite. `near` = Fern is in talk range.
 func sync(npc: Dictionary, dt: float, near: bool, talking: bool) -> void:
 	_t += dt
+	# A cutscene may change the pose (Wick getting up: "pose" steps).
+	behavior = str(npc.get("behavior", behavior))
+	if cat != null:
+		var r := str(npc.get("rest", ""))
+		if r != "" and r != cat.rest:
+			cat.set_rest(r)
 	# A perched cat (the leader on the rock) is y-sorted at the ground
 	# below it and drawn perch px higher.
 	var perch := roundf(float(npc.get("perch", 0.0)))

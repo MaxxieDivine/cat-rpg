@@ -29,12 +29,15 @@
 		{"id": "sorrel", "art": "cat.sorrel.sleep", "pos": [172, 128], "footprint": [22, 5], "talk_radius": 22, "behavior": "lie", "facing": 1, "dialogue": "res://data/dialogue/sorrel.json", "gift": "hunt.sorrel_thanks"},
 		{"id": "wick", "art": "cat.wick.idle", "path": [[542, 224], [584, 224], [584, 236], [542, 236]], "speed": 18, "pause": 0.7, "footprint": [16, 5], "talk_radius": 22, "behavior": "pace", "dialogue": "res://data/dialogue/wick.json"},
 		{"id": "larch", "art": "cat.larch.idle", "pos": [448, 134], "perch": 37, "footprint": [16, 5], "talk_radius": 22, "behavior": "stand", "facing": -1},
-		{"id": "rook", "art": "cat.rook.sit", "pos": [502, 170], "footprint": [14, 5], "talk_radius": 22, "behavior": "sit", "facing": -1, "dialogue": "res://data/dialogue/rook.json"}
+		{"id": "rook", "art": "cat.rook.sit", "pos": [502, 170], "footprint": [14, 5], "talk_radius": 22, "behavior": "sit", "facing": -1, "dialogue": "res://data/dialogue/rook.json", "when": {"night": false}}
 	],
 	"spots": [
 		{"id": "leaders_den", "rect": [431, 169, 14, 1], "talk_radius": 8, "prompt": [438, 154], "message": "camp.leaders_den"},
 		{"id": "leaders_rock", "rect": [426, 158, 1, 12], "talk_radius": 10, "prompt": [430, 146], "message": "camp.leaders_rock"},
 		{"id": "apprentices_den_door", "rect": [586, 100, 28, 1], "talk_radius": 14, "prompt": [600, 76], "label": "den.apprentices.name", "enter": "to_apprentices_den"}
+	],
+	"barriers": [
+		{"rect": [694, 188, 8, 56], "message": "story.stay_in_camp", "only_when": {"told_rook": true, "night": false, "rescue": null}}
 	],
 	"markers": {"MeetingSpot": [448, 134], "DeputySpot": [502, 170], "PatrolMeet": [652, 212]},
 	"zones": {"GatherArea": [404, 184, 96, 40]},
