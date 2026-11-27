@@ -15,6 +15,7 @@ const SUITES := [
 	"res://tests/test_art.gd",
 	"res://tests/test_cats.gd",
 	"res://tests/test_audio.gd",
+	"res://tests/test_gait.gd",
 	"res://tests/test_dialogue.gd",
 	"res://tests/test_dialogue_files.gd",
 	"res://tests/test_typewriter.gd",
@@ -36,6 +37,7 @@ const SUITES := [
 	"res://tests/patrol_smoke.gd",
 	"res://tests/story_smoke.gd",
 	"res://tests/rescue_smoke.gd",
+	"res://tests/footsteps_smoke.gd",
 	"res://tests/perf_smoke.gd",
 ]
 

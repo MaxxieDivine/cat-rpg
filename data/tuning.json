@@ -156,6 +156,11 @@
 	"audio": {
 		"crossfade_s": 2.5,
 		"footstep_px": 14,
+		"gait": {
+			"_note": "Soft footsteps (audio.json footsteps): beats as [stride phase 0..1, paw]; a stride = the sprite's frames x stride_px (cats.json fern walk / run), so beats follow the drawn legs. offset shifts every beat.",
+			"walk": {"beats": [[0.0, "back_left"], [0.25, "front_left"], [0.5, "back_right"], [0.75, "front_right"]], "offset": 0.0},
+			"run": {"beats": [[0.0, "back_left"], [0.1, "back_right"], [0.45, "front_left"], [0.55, "front_right"]], "offset": 0.0}
+		},
 		"indoors_db": -14,
 		"lap_every": [
 			1.6,

@@ -11,6 +11,8 @@ extends Node
 ## - debug_overlay: the build / fps label. Off by default in release builds
 ##   (the Pages build), on in debug builds; F3 or a triple tap in the
 ##   top-left corner toggles it.
+## - footsteps: "" = audio.json footsteps.style, "soft" = the P2 paw steps,
+##   "classic" = the old ones (?steps=classic to compare on a phone).
 
 signal changed
 
@@ -29,6 +31,7 @@ var text_scale := 2:
 		if v != text_scale:
 			text_scale = v
 			changed.emit()
+var footsteps := ""
 var debug_overlay := OS.is_debug_build():
 	set(v):
 		if v != debug_overlay:
@@ -45,6 +48,7 @@ func _ready() -> void:
 func reset() -> void:
 	camera_zoom = 0
 	text_scale = 2
+	footsteps = ""
 	debug_overlay = OS.is_debug_build()
 
 
@@ -61,3 +65,5 @@ func _read_url() -> void:
 				text_scale = kv[1].to_int()
 			"debug":
 				debug_overlay = kv[1] == "1"
+			"steps":
+				footsteps = kv[1] if kv[1] in ["soft", "classic"] else ""

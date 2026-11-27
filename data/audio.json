@@ -22,6 +22,21 @@
 		"drop": {"files": ["res://audio/sfx/rustle.wav"], "volume_db": -18, "pitch_jitter": 0.2},
 		"bird": {"files": ["res://audio/sfx/bird_1.wav", "res://audio/sfx/bird_2.wav", "res://audio/sfx/bird_3.wav"], "volume_db": -24, "pitch_jitter": 0.08, "bus": "Ambience"}
 	},
+	"footsteps": {
+		"_note": "P2 soft paw steps on the Footsteps bus (sound.gd paw_step(), rhythm from tuning.json audio.gait). style 'soft' = these, 'classic' = the old sfx step_grass / step_path every audio.footstep_px (kept until the new ones are approved; ?steps=classic on the web). Bus low-pass only applies off the web (web plays samples), so the files are already low-passed below ~2 kHz.",
+		"style": "soft",
+		"bus": "Footsteps",
+		"lowpass_hz": 2000,
+		"grass": {"files": ["res://audio/sfx/paw_grass_1.wav", "res://audio/sfx/paw_grass_2.wav", "res://audio/sfx/paw_grass_3.wav", "res://audio/sfx/paw_grass_4.wav", "res://audio/sfx/paw_grass_5.wav"], "volume_db": -21},
+		"path": {"files": ["res://audio/sfx/paw_path_1.wav", "res://audio/sfx/paw_path_2.wav", "res://audio/sfx/paw_path_3.wav", "res://audio/sfx/paw_path_4.wav", "res://audio/sfx/paw_path_5.wav"], "volume_db": -20},
+		"pitch": 0.85,
+		"pitch_random": 0.05,
+		"volume_random_db": 2.0,
+		"walk_db": -6.0,
+		"run_db": -1.0,
+		"back": {"pitch": 0.93, "db": 1.5},
+		"front": {"pitch": 1.0, "db": 0.0}
+	},
 	"ui": {
 		"open": {"files": ["res://audio/ui/open.wav"], "volume_db": -18},
 		"move": {"files": ["res://audio/ui/move.wav"], "volume_db": -20},

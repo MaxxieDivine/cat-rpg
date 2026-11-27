@@ -1,6 +1,6 @@
 extends "res://tests/test_base.gd"
 ## Audio: every file has a CREDITS.md line with a license, data/audio.json
-## points at real files, the five buses exist, and the sound node
+## points at real files, the six buses exist (Footsteps low-passed), and the sound node
 ## crossfades music and follows the time of day.
 
 const JsonData := preload("res://scripts/core/json_data.gd")
@@ -95,3 +95,96 @@ func test_music_crossfades_with_the_time_of_day() -> void:
 	s.play("no_such_sound")
 	check_eq(int(s.played.get("step_grass", 0)), 1, "one-shot played")
 	s.free()
+
+
+func test_footsteps_bus_is_low_passed() -> void:
+	var i := AudioServer.get_bus_index(Sound.STEPS_BUS)
+	if not check(i >= 0, "a Footsteps bus"):
+		return
+	var lp: AudioEffectLowPassFilter = null
+	for e in AudioServer.get_bus_effect_count(i):
+		if AudioServer.get_bus_effect(i, e) is AudioEffectLowPassFilter:
+			lp = AudioServer.get_bus_effect(i, e)
+	if check(lp != null, "a low-pass filter on it"):
+		var data := JsonData.load_dict("res://data/audio.json")
+		var s: Node = Sound.new()
+		tree.root.add_child(s)
+		check_near(lp.cutoff_hz, float(data["footsteps"]["lowpass_hz"]), 0.1, "cutoff from audio.json")
+		s.free()
+
+
+## The new paw steps are dark (almost nothing above 2 kHz, unlike the old
+## grass step) and fade in over a few ms instead of clicking.
+func test_paw_steps_are_soft() -> void:
+	var data := JsonData.load_dict("res://data/audio.json")
+	for surface in ["grass", "path"]:
+		var files: Array = data["footsteps"][surface]["files"]
+		check(files.size() >= 4 and files.size() <= 6, "%s: 4-6 variations" % surface)
+		for f: String in files:
+			var w: AudioStreamWAV = load(f)
+			if not check(w != null and w.format == AudioStreamWAV.FORMAT_16_BITS, f):
+				continue
+			var a := _samples(w)
+			check(absf(a[0]) < 0.01 and absf(a[int(w.mix_rate * 0.001)]) < 0.15, "%s fades in (no click)" % f)
+			check(_zero_crossings_per_s(a, w.mix_rate) < 900.0, "%s is low (%.0f crossings/s)" % [f, _zero_crossings_per_s(a, w.mix_rate)])
+	var old := _samples(load("res://audio/sfx/step_grass_1.wav"))
+	check(_zero_crossings_per_s(old, 22050) > 2000.0, "(the old grass step was bright: the test can tell)")
+
+
+func test_paw_step_variation_and_weight() -> void:
+	var data := JsonData.load_dict("res://data/audio.json")
+	var spec: Dictionary = data["footsteps"]
+	var s: Node = Sound.new()
+	tree.root.add_child(s)
+	check_eq(s._step_pool[0].bus, "Footsteps", "paw steps go to the Footsteps bus")
+	var back_pitch := 0.0
+	var front_pitch := 0.0
+	var back_db := 0.0
+	var front_db := 0.0
+	var repeats := 0
+	var last := -1
+	for i in 200:
+		var paw := "back_left" if i % 2 == 0 else "front_right"
+		s.paw_step("grass", paw, false)
+		var st: Dictionary = s.last_step
+		if st["file"] == last:
+			repeats += 1
+		last = st["file"]
+		if paw == "back_left":
+			back_pitch += st["pitch"] / 100.0
+			back_db += st["volume_db"] / 100.0
+		else:
+			front_pitch += st["pitch"] / 100.0
+			front_db += st["volume_db"] / 100.0
+		var base := float(spec["pitch"]) * float(spec["back" if paw == "back_left" else "front"]["pitch"])
+		check(absf(st["pitch"] / base - 1.0) <= float(spec["pitch_random"]) + 0.0001, "pitch within +-5%")
+	check_eq(repeats, 0, "never the same variation twice in a row")
+	check(front_pitch < 0.9 and back_pitch < front_pitch, "lower than before, back paws lower (%.2f / %.2f)" % [back_pitch, front_pitch])
+	check(back_db > front_db, "back paws a little heavier")
+	s.paw_step("grass", "front_left", false)
+	var walk_db: float = s.last_step["volume_db"]
+	s.paw_step("grass", "front_left", true)
+	check(s.last_step["volume_db"] > walk_db - float(spec["volume_random_db"]) * 2.0 + (float(spec["run_db"]) - float(spec["walk_db"])) - 0.01, "running is louder than walking")
+	check_eq(int(s.played.get("paw", 0)), 202, "counted")
+	Settings.footsteps = "classic"
+	check_eq(s.footstep_style(), "classic", "?steps=classic brings the old ones back")
+	Settings.footsteps = ""
+	check_eq(s.footstep_style(), str(spec["style"]), "default from audio.json")
+	s.free()
+
+
+func _samples(w: AudioStreamWAV) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	var d := w.data
+	var step := 4 if w.stereo else 2
+	for i in range(0, d.size() - 1, step):
+		out.append(d.decode_s16(i) / 32768.0)
+	return out
+
+
+func _zero_crossings_per_s(a: PackedFloat32Array, rate: float) -> float:
+	var n := 0
+	for i in range(1, a.size()):
+		if (a[i - 1] < 0.0) != (a[i] < 0.0):
+			n += 1
+	return n / (a.size() / rate)
