@@ -12,6 +12,10 @@ const MAIN_SCENE := "res://scenes/app.tscn"
 const PHONE := ["phone", Vector2i(923, 411), 2.625, [0.0, 0.0, 0.0, 30.0], true]
 const DESKTOP := ["desktop", Vector2i(1280, 720), 1.0, [0.0, 0.0, 0.0, 0.0], false]
 
+## The most Fern moved in one frame while recording: steps are only seen once
+## a frame, so measured gaps are off by up to this (slow xvfb frames: ~5 px).
+var _frame_px := 0.0
+
 
 func after_each() -> void:
 	ScreenMetrics.override_dpr = 0.0
@@ -106,14 +110,15 @@ func _check_walk(steps: Array, how: String) -> void:
 		var a: Dictionary = steps[i - 1]
 		var b: Dictionary = steps[i]
 		ok_order = ok_order and order[(order.find(a["paw"]) + 1) % 4] == b["paw"]
-		ok_even = ok_even and absf(b["d"] - a["d"] - g_stride / 4.0) < 3.0
+		ok_even = ok_even and absf(b["d"] - a["d"] - g_stride / 4.0) <= _frame_px + 0.5
 		ok_order = ok_order and not b["running"]
 	check(ok_order, "%s: walk paws in order %s" % [how, steps.map(func(s): return s["paw"])])
 	check(ok_even, "%s: evenly spaced %s" % [how, _gaps(steps)])
 	check(steps.all(func(s): return s["pitch"] < 0.95), "%s: low pitch" % how)
 
 
-## Run: back pair close, front pair close, a gap between pairs.
+## Run: back pair close, front pair close, a gap between pairs (the tuned
+## gaps are 0.1 and 0.35 / 0.45 of a 56 px stride; split halfway between).
 func _check_run(steps: Array, how: String) -> void:
 	if not check(steps.size() >= 6, "%s: trotting plays steps (%d)" % [how, steps.size()]):
 		return
@@ -126,11 +131,12 @@ func _check_run(steps: Array, how: String) -> void:
 		var second := paw == "back_right" or paw == "front_right"
 		if second:
 			shorts += 1
-			ok = ok and gap < 9.0
+			ok = ok and gap <= 5.6 + _frame_px + 0.5
 		else:
 			longs += 1
-			ok = ok and gap > 15.0
-	check(ok and shorts >= 2 and longs >= 2, "%s: paired run rhythm %s" % [how, _gaps(steps)])
+			ok = ok and gap >= 19.6 - _frame_px - 0.5
+	check(_frame_px < 7.0, "%s: frames fine enough to hear the pairs (%.1f px)" % [how, _frame_px])
+	check(ok and shorts >= 2 and longs >= 2, "%s: paired run rhythm %s (frame %.1f px)" % [how, _gaps(steps), _frame_px])
 	check(steps.all(func(s): return s["running"]), "%s: run steps" % how)
 
 
@@ -152,8 +158,13 @@ func _record(g: Control, press: Callable, seconds: float) -> Array:
 	var out: Array = []
 	var seen: int = g.sound.step_log.size()
 	var t := 0.0
+	_frame_px = 0.0
+	var was: float = g.world.distance
 	while t < seconds:
 		await tree.process_frame
+		if t > 0.25:
+			_frame_px = maxf(_frame_px, g.world.distance - was)
+		was = g.world.distance
 		t += tree.root.get_process_delta_time() if tree.root.get_process_delta_time() > 0.0 else 1.0 / 60.0
 		var log: Array = g.sound.step_log
 		var n := log.size()
