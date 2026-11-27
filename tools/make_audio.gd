@@ -11,6 +11,10 @@ extends SceneTree
 
 const RATE := 22050
 const OUT := "res://audio/"
+## Variations per surface of the soft paw steps (sound.gd picks among them).
+const PAW_VARIANTS := 5
+## Fade-in on every paw step (s): no click at the start.
+const PAW_ATTACK_S := 0.005
 
 var _rng := RandomNumberGenerator.new()
 
@@ -32,6 +36,10 @@ func _initialize() -> void:
 		ok = _save("sfx/step_grass_%d" % (i + 1), _step_grass(i)) and ok
 		ok = _save("sfx/step_path_%d" % (i + 1), _step_path(i)) and ok
 		ok = _save("sfx/pond_lap_%d" % (i + 1), _lap(i)) and ok
+	# P2: soft, low paw pads (the step_* files above stay until approved).
+	for i in PAW_VARIANTS:
+		ok = _save("sfx/paw_grass_%d" % (i + 1), _paw(i, false)) and ok
+		ok = _save("sfx/paw_path_%d" % (i + 1), _paw(i, true)) and ok
 	ok = _save("sfx/rustle", _rustle()) and ok
 	for i in 2:
 		ok = _save("sfx/squeak_%d" % (i + 1), _squeak(i)) and ok
@@ -296,6 +304,39 @@ func _step_path(variant: int) -> PackedFloat32Array:
 		var u := float(i) / b.size()
 		b[i] = (b[i] * pow(1.0 - u, 3.0) * 1.6 + sin(TAU * (110.0 - u * 40.0) * u * 0.08) * pow(1.0 - u, 4.0) * 0.6) * minf(1.0, u * 25.0)
 	return _normalize(b, 0.55)
+
+
+## A soft paw pad (P2): a low, quickly falling thump under a little dark
+## brush (grass) or grit (path), all below ~2 kHz, with a few ms of
+## fade-in so it never clicks. Variants differ in pitch, length and noise.
+func _paw(variant: int, path: bool) -> PackedFloat32Array:
+	_rng.seed = (900 if path else 950) + variant
+	var dur := _rng.randf_range(0.10, 0.13)
+	var b := _noise(dur)
+	# Band-limit the brush: drop the rumble (it is the thump's job) and the hiss.
+	var lo := b.duplicate()
+	_lowpass(lo, 180.0)
+	for i in b.size():
+		b[i] -= lo[i]
+	var cut := 650.0 if path else 1300.0
+	_lowpass(b, cut)
+	_lowpass(b, cut)
+	var hz := _rng.randf_range(70.0, 84.0) * (0.92 if path else 1.0)
+	var phase := 0.0
+	var brush := 0.55 if path else 0.85
+	var thump := 1.0 if path else 0.8
+	for i in b.size():
+		var t := float(i) / RATE
+		var u := float(i) / b.size()
+		# The pad's pitch sags as the weight settles.
+		phase += TAU * hz * (1.0 - 0.35 * minf(1.0, t / 0.05)) / RATE
+		var body := sin(phase) * exp(-t / 0.028) * thump
+		b[i] = b[i] * brush * pow(1.0 - u, 2.2) + body
+	_lowpass(b, 1900.0)
+	var attack := int(PAW_ATTACK_S * RATE)
+	for i in mini(attack, b.size()):
+		b[i] *= 0.5 - 0.5 * cos(PI * float(i) / attack)
+	return _normalize(b, 0.6)
 
 
 func _rustle() -> PackedFloat32Array:

@@ -11,13 +11,20 @@ extends Node
 ##   chirps by day at random intervals.
 ## - SFX: footsteps (grass / path), rustle, pond laps. UI: box open, cursor
 ##   move, choice confirm, line advance.
+## - Footsteps (polish P2): soft, low paw pads on their own "Footsteps" bus
+##   (a low-pass on it, audio.json footsteps.lowpass_hz), one per paw
+##   landing (paw_step(), rhythm from core/gait.gd): lower pitch, back paws
+##   heavier than front, walk quieter than run, a different variation each
+##   time with random pitch / volume. The old footstep() stays as the
+##   "classic" style until the new one is approved (footstep_style()).
 ## A missing file warns once and stays silent; it never crashes.
 ## The game screen creates this node after tap-to-start, so nothing plays
 ## before the browser allows audio. Cosmetic randomness: own RNG.
 
 const JsonData := preload("res://scripts/core/json_data.gd")
 const AUDIO_PATH := "res://data/audio.json"
-const BUSES := ["Music", "Ambience", "SFX", "Voice", "UI"]
+const BUSES := ["Music", "Ambience", "SFX", "Voice", "UI", "Footsteps"]
+const STEPS_BUS := "Footsteps"
 const SILENT_DB := -60.0
 
 var data: Dictionary = {}
@@ -45,6 +52,15 @@ var _lap_every: Array = [1.6, 3.2]
 var _day := 1.0
 var _night := 0.0
 var _pond_near := 0.0
+## Soft footsteps: audio.json "footsteps" and a small pool of players.
+var steps: Dictionary = {}
+var _step_pool: Array[AudioStreamPlayer] = []
+var _step_next := 0
+var _step_last: Dictionary = {}
+## The last paw step (tests, catRpgStats): paw, surface, pitch, volume_db.
+var last_step: Dictionary = {}
+## The last few paw steps, oldest first (tests): last_step entries.
+var step_log: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -81,6 +97,14 @@ func _ready() -> void:
 				add_child(p)
 				pool.append(p)
 			_oneshots[kind] = {"spec": spec, "pool": pool, "next": 0}
+	steps = data.get("footsteps", {})
+	for i in 4:
+		var p := AudioStreamPlayer.new()
+		p.name = "Paw%d" % i
+		p.bus = str(steps.get("bus", STEPS_BUS))
+		add_child(p)
+		_step_pool.append(p)
+	set_steps_lowpass(float(steps.get("lowpass_hz", 2000.0)))
 	_update_ambience_targets()
 
 
@@ -100,6 +124,20 @@ static func ensure_buses() -> void:
 			var i := AudioServer.bus_count - 1
 			AudioServer.set_bus_name(i, b)
 			AudioServer.set_bus_send(i, "Master")
+			if b == STEPS_BUS:
+				AudioServer.add_bus_effect(i, AudioEffectLowPassFilter.new())
+
+
+## The Footsteps bus's low-pass cutoff (Hz). Desktop only in effect: web
+## builds play samples, which skip bus effects (the files are dark already).
+static func set_steps_lowpass(hz: float) -> void:
+	var i := AudioServer.get_bus_index(STEPS_BUS)
+	if i < 0:
+		return
+	for e in AudioServer.get_bus_effect_count(i):
+		var fx := AudioServer.get_bus_effect(i, e)
+		if fx is AudioEffectLowPassFilter:
+			(fx as AudioEffectLowPassFilter).cutoff_hz = hz
 
 
 ## Crossfades to music track `n` (a data/audio.json "music" key). Does
@@ -211,8 +249,53 @@ func play(kind: String, db_offset: float = 0.0) -> void:
 	played[kind] = int(played.get(kind, 0)) + 1
 
 
+## The classic footsteps (one tap every audio.footstep_px).
 func footstep(surface: String, db_offset: float = 0.0) -> void:
 	play("step_path" if surface == "path" else "step_grass", db_offset)
+
+
+## "soft" (P2, paw_step()) or "classic" (footstep()): Settings.footsteps
+## (?steps= on the web) if set, else audio.json footsteps.style.
+func footstep_style() -> String:
+	var s := str(Settings.footsteps) if Settings.footsteps != "" else str(steps.get("style", "soft"))
+	return "classic" if s == "classic" or steps.is_empty() else "soft"
+
+
+## One paw landing (gait.gd paw names: back_left, front_right...) on
+## `surface` ("path" / "grass"), walking or running, `db_offset` on top
+## (stalking is quieter). Picks a variation other than the last one, with
+## random pitch and volume, the way an AudioStreamRandomizer would (done here
+## because web builds play plain samples).
+func paw_step(surface: String, paw: String, running: bool, db_offset: float = 0.0) -> void:
+	var key := "path" if surface == "path" else "grass"
+	var spec: Dictionary = steps.get(key, {})
+	var files: Array = spec.get("files", [])
+	if files.is_empty() or _step_pool.is_empty():
+		return
+	var pick := _rng.randi_range(0, files.size() - 1)
+	if files.size() > 1 and pick == int(_step_last.get(key, -1)):
+		pick = (pick + 1 + _rng.randi_range(0, files.size() - 2)) % files.size()
+	_step_last[key] = pick
+	var stream := _load(str(files[pick]), false)
+	if stream == null:
+		return
+	var foot: Dictionary = steps.get("back" if paw.begins_with("back") else "front", {})
+	var pr := float(steps.get("pitch_random", 0.05))
+	var vr := float(steps.get("volume_random_db", 2.0))
+	var pitch := float(steps.get("pitch", 0.85)) * float(foot.get("pitch", 1.0)) * (1.0 + _rng.randf_range(-pr, pr))
+	var db := float(spec.get("volume_db", -21.0)) + float(steps.get("run_db" if running else "walk_db", 0.0)) \
+		+ float(foot.get("db", 0.0)) + _rng.randf_range(-vr, vr) + db_offset
+	var p := _step_pool[_step_next]
+	_step_next = (_step_next + 1) % _step_pool.size()
+	p.stream = stream
+	p.pitch_scale = pitch
+	p.volume_db = db
+	p.play()
+	played["paw"] = int(played.get("paw", 0)) + 1
+	last_step = {"paw": paw, "surface": key, "running": running, "pitch": pitch, "volume_db": db, "file": pick}
+	step_log.append(last_step)
+	if step_log.size() > 64:
+		step_log.pop_front()
 
 
 func _load(path: String, loop: bool) -> AudioStream:

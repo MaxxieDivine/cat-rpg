@@ -95,6 +95,7 @@ const TouchControls := preload("res://scripts/view/touch_controls.gd")
 const DialogueBox := preload("res://scripts/view/dialogue_box.gd")
 const Voice := preload("res://scripts/view/voice.gd")
 const Sound := preload("res://scripts/view/sound.gd")
+const Gait := preload("res://scripts/core/gait.gd")
 const DayCycle := preload("res://scripts/core/day_cycle.gd")
 const NeedsHud := preload("res://scripts/view/needs_hud.gd")
 const GameStrings := preload("res://scripts/core/game_strings.gd")
@@ -162,6 +163,8 @@ var cutscene = null
 var _message_t := 0.0
 ## Distance walked when the last footstep played (world px).
 var _step_at := 0.0
+## Soft footsteps: which paws land when (core/gait.gd, synced to the sheets).
+var gait := Gait.new()
 ## Who spoke the last line shown (a new speaker meows).
 var _speaker := ""
 ## Where the camera centres (world px) while easing to / from a conversation.
@@ -463,6 +466,7 @@ func load_area(id: String, spawn_name: String) -> bool:
 	camera.limit_right = int(lim.end.x)
 	camera.limit_bottom = int(lim.end.y)
 	_step_at = world.distance
+	_setup_gait()
 	_cam_center = Vector2.INF
 	_cam_easing = false
 	Player.arrive(id, spawn_name)
@@ -768,16 +772,37 @@ func _update_fade() -> void:
 func _update_sound() -> void:
 	if sound == null:
 		return
-	var every := float(tuning.get("audio", {}).get("footstep_px", 14))
-	if world.distance - _step_at >= every and not world.is_busy():
-		_step_at = world.distance
-		if world.speed() >= world_view.idle_speed:
-			# Stalking is quieter.
-			sound.footstep(world.surface(), -12.0 if world.crouching else 0.0)
+	# Stalking is quieter.
+	var hush := -12.0 if world.crouching else 0.0
+	var moving: bool = world.speed() >= world_view.idle_speed and not world.is_busy()
+	if sound.footstep_style() == "soft":
+		# One soft pad per paw, when the drawn paw lands.
+		var paws := gait.step(world.distance, world.running)
+		if moving:
+			for paw in paws:
+				sound.paw_step(world.surface(), paw, world.running, hush)
+	else:
+		var every := float(tuning.get("audio", {}).get("footstep_px", 14))
+		if world.distance - _step_at >= every and not world.is_busy():
+			_step_at = world.distance
+			if moving:
+				sound.footstep(world.surface(), hush)
 	sound.set_indoors(world.is_indoors())
 	sound.set_time(day.day_amount(), day.night_amount())
 	var r := float(world.pond.get("lap_radius", 40)) if not world.pond.is_empty() else 1.0
 	sound.set_pond_near(1.0 - clampf(world.pond_distance() / r, 0.0, 1.0))
+
+
+## The stride lengths come from Fern's walk / run sheets (frames x
+## stride_px), so the paws land with the drawn legs.
+func _setup_gait() -> void:
+	var anims: Dictionary = world_view.player.anims if world_view.player != null else {}
+	var w: Dictionary = anims.get("walk", {})
+	var r: Dictionary = anims.get("run", {})
+	gait.configure(tuning.get("audio", {}).get("gait", {}),
+		float(w.get("frames", 8)) * float(w.get("stride_px", 4.5)),
+		float(r.get("frames", 8)) * float(r.get("stride_px", 7.0)))
+	gait.reset(world.distance)
 
 
 func _on_rustle(_kind: String) -> void:
