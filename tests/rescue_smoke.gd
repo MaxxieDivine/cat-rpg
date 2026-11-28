@@ -1,7 +1,7 @@
 extends "res://tests/test_base.gd"
 ## Rescuing Wick, Part A, in the real game:
-## - scene select: hidden without the debug overlay; with it, a button on
-##   the title screen opens the menu and a tap jumps to "Rest for the
+## - scene select: a button on the title screen (always, even without the
+##   debug overlay) opens the menu and a tap jumps to "Rest for the
 ##   night" (phone, touch); F1 in the game opens it, arrows + Enter pick
 ##   "After the rogue camp", Esc closes it (keyboard); every preset loads;
 ## - keyboard: the entrance is closed ("stay in camp"), sleeping in the
@@ -56,17 +56,23 @@ func _text(key: String) -> String:
 # --- Scene select
 
 
-func test_scene_select_hidden_without_the_debug_overlay() -> void:
-	var app: Control = await _app(DESKTOP, false)
-	check(not app.scene_button.visible, "no title button")
-	_key(KEY_F1)
+func test_scene_select_without_the_debug_overlay() -> void:
+	# The title button is always there (phones have no F1); in the game the
+	# menu stays behind the debug overlay.
+	var app: Control = await _app(TARGET_PHONE, false)
+	check(app.scene_button.visible, "the title has a Scene select button")
+	var r := Rect2(app.scene_button.position, app.scene_button.size)
+	await _tap_button(app, r.get_center())
+	check(app.scene_select.is_open and app.game == null, "a tap opens the menu, the game doesn't start")
+	app.scene_select.close()
 	await _frames(2)
-	check(not app.scene_select.is_open, "F1 does nothing")
+	check(app.scene_button.visible and not app.scene_select.is_open, "closed again, button back")
 	app.start_game()
 	await _frames(2)
+	check(not app.scene_button.visible, "no title button in the game")
 	_key(KEY_F1)
 	await _frames(2)
-	check(not app.scene_select.is_open, "nor in the game")
+	check(not app.scene_select.is_open, "F1 does nothing without the overlay")
 	_close(app)
 
 
