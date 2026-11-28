@@ -7,8 +7,8 @@ extends Control
 ## names the area and the spawn Fern arrived at and lists each mouse (spot,
 ## head up / down, alert %); debug buttons (keys H / T / M / N) set hunger /
 ## thirst to 5, put a mouse at the nearest prey spot or open the Name Editor.
-## Scene select (dev tool, scene_select.gd): while the debug overlay is on,
-## a button on the title screen, F1 or the "Scenes" debug button in the game
+## Scene select (dev tool, scene_select.gd): a button on the title screen
+## (always), F1 or the "Scenes" debug button in the game (debug overlay on)
 ## open it; a pick starts the game if needed and jumps there (game.jump_to()).
 
 const ScreenMetrics := preload("res://scripts/view/screen_metrics.gd")
@@ -378,7 +378,9 @@ func _place_hud() -> void:
 	var room := metrics.safe_rect.end.x - 2.0 * tall - 24.0 - x
 	if room < debug_buttons.size() * (w + 8.0):
 		w = maxf(tall, room / debug_buttons.size() - 8.0)
-	scene_button.visible = game == null and Settings.debug_overlay and not scene_select.is_open
+	# Always on the title screen (phones have no F1); in the game only F1 /
+	# the "Scenes" debug button, while the debug overlay is on.
+	scene_button.visible = game == null and not scene_select.is_open
 	if scene_button.visible:
 		var inset := float(JsonData.load_dict("res://data/tuning.json").get("ui", {}).get("button_inset", 12))
 		scene_button.size = Vector2(maxf(tall * 2.5, scene_button.get_combined_minimum_size().x + 16.0), tall)
